@@ -31,6 +31,20 @@
         <td align="right"><span id="b-unconfirmed" class="unconfirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance.unconfirmed|number_format:"6"}</span></td>
       </tr>
     </table>
+    <table class="tablesorter" cellspacing="0">
+      <thead>
+        <tr><th colspan="2"><b>{$GLOBAL.config.currency_mm} Account Balance</b></th></tr>
+      </thead>
+      <tr>
+        <td align="left" style="font-weight: bold;">Confirmed</td>
+        <td align="right"><span id="b-confirmed" class="confirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance.confirmed|number_format:"6"}</span></td>
+      </tr>
+      <tr>
+        <td align="left" style="font-weight: bold;">Unconfirmed</td>
+        <td align="right"><span id="b-unconfirmed" class="unconfirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance.unconfirmed|number_format:"6"}</span></td>
+      </tr>
+    </table>
+
     {if !$DISABLED_DASHBOARD and !$DISABLED_DASHBOARD_API}
     <table class="tablesorter" cellspacing="0">
      <thead>

@@ -106,6 +106,7 @@ $config['accounts']['invitations']['count'] = 5;
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-currency
  */
 $config['currency'] = 'FSC';
+$config['currency_mm'] = 'LTC';
 
 /**
  * Coin Target
