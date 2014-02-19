@@ -105,7 +105,7 @@ $config['accounts']['invitations']['count'] = 5;
  *  Shorthand name for the currency
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-currency
  */
-$config['currency'] = 'LTC';
+$config['currency'] = 'FSC';
 
 /**
  * Coin Target
@@ -192,7 +192,7 @@ $config['difficulty'] = 1;
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-reward-settings
  **/
 $config['reward_type'] = 'block';
-$config['reward'] = 50;
+$config['reward'] = 1000;
 
 /**
  * Confirmations
@@ -207,7 +207,7 @@ $config['network_confirmations'] = 120;
  *  Pay Per Share configuration details
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-pps-settings
  **/
-$config['pps']['reward']['default'] = 50;
+$config['pps']['reward']['default'] = 1000;
 $config['pps']['reward']['type'] = 'blockavg';
 $config['pps']['blockavg']['blockcount'] = 10;
 
