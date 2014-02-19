@@ -64,9 +64,9 @@ $config['coldwallet']['threshold'] = 5;
  *  Shown to users in the 'Getting Started' section
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-getting-started
  **/
-$config['gettingstarted']['coinname'] = 'Litecoin';
-$config['gettingstarted']['coinurl'] = 'http://www.litecoin.org';
-$config['gettingstarted']['stratumurl'] = '127.0.0.1';
+$config['gettingstarted']['coinname'] = 'Fusioncoin';
+$config['gettingstarted']['coinurl'] = 'http://pool.fusioncoin.org';
+$config['gettingstarted']['stratumurl'] = '54.193.86.209';
 $config['gettingstarted']['stratumport'] = '3333';
 
 /**
