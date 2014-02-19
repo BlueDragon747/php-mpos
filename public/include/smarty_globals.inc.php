@@ -85,6 +85,7 @@ $aGlobal = array(
     'price' => array( 'currency' => $config['price']['currency'] ),
     'targetdiff' => $config['difficulty'],
     'currency' => $config['currency'],
+    'currency_mm' => $config['currency_mm'],
     'txfee_manual' => $config['txfee_manual'],
     'txfee_auto' => $config['txfee_auto'],
     'payout_system' => $config['payout_system'],
