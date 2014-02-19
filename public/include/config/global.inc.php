@@ -46,7 +46,7 @@ $config['db']['name'] = 'pooldb';
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-local-wallet-rpc
  **/
 $config['wallet']['type'] = 'http';
-$config['wallet']['host'] = 'localhost:8080';
+$config['wallet']['host'] = 'localhost:8088';
 $config['wallet']['username'] = 'naituida';
 $config['wallet']['password'] = '123';
 
