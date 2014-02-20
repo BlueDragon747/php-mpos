@@ -29,7 +29,7 @@
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress|default:$GLOBAL.userdata.coin_address|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress_mm|default:$GLOBAL.userdata.coin_address_mm|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>Donation Percentage</label>
@@ -103,11 +103,11 @@
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance.confirmed|escape}" {$GLOBAL.config.currency} disabled />{/nocache}
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance.confirmed|escape}" {$GLOBAL.config.currency_mm} disabled />{/nocache}
       </fieldset>
       <fieldset>
         <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address|escape}" disabled />{/nocache}
+        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm|escape}" disabled />{/nocache}
       </fieldset>
       <fieldset>
         <label>4 digit PIN</label>
