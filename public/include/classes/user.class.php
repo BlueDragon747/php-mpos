@@ -493,7 +493,7 @@ class User extends Base {
       return true;
     }
     // Catchall
-    $this->setErrorMessage('Failed to update your account');
+    $this->setErrorMessage('Failed to update your account:'. $this->mysqli->error);
     $this->debug->append('Account update failed: ' . $this->mysqli->error);
     return false;
   }
