@@ -24,8 +24,12 @@
         {nocache}<input type="text" name="email" value="{$GLOBAL.userdata.email|escape}" size="20" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
-        <label>Payment Address</label>
+        <label>{$GLOBAL.config.currency} Payment Address</label>
         {nocache}<input type="text" name="paymentAddress" value="{$smarty.request.paymentAddress|default:$GLOBAL.userdata.coin_address|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm} Payment Address</label>
+        {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress|default:$GLOBAL.userdata.coin_address|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>Donation Percentage</label>
@@ -90,7 +94,15 @@
         Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
       </p>
       <fieldset>
-        <label>Account Balance</label>
+        <label>{$GLOBAL.config.currency} Account Balance</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance.confirmed|escape}" {$GLOBAL.config.currency} disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>Payout to</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address|escape}" disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm} Account Balance</label>
         {nocache}<input type="text" value="{$GLOBAL.userdata.balance.confirmed|escape}" {$GLOBAL.config.currency} disabled />{/nocache}
       </fieldset>
       <fieldset>
