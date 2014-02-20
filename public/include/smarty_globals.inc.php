@@ -180,6 +180,7 @@ $aCronMessage[] = 'We are investingating issues in the backend. Your shares and 
 foreach ($aMonitorCrons as $strCron) {
   if ($monitoring->isDisabled($strCron) == 1) {
     $bMessage = true;
+    $aCronMessage[] = $strCron.'<li> disabled</li>;
     switch ($strCron) {
     case 'payouts':
       $aCronMessage[] = '<li> Payouts disabled, you will not receive any coins to your offline wallet for the time being</li>';
