@@ -488,7 +488,7 @@ class User extends Base {
     
     // We passed all validation checks so update the account
     $stmt = $this->mysqli->prepare("UPDATE $this->table SET coin_address = ?, coin_address_mm = ?, ap_threshold = ?, donate_percent = ?, email = ?, is_anonymous = ? WHERE id = ?");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('sddsii', $address, $address_mm, $threshold, $donate, $email, $is_anonymous, $userID) && $stmt->execute()) {
+    if ($this->checkStmt($stmt) && $stmt->bind_param('ssddsii', $address, $address_mm, $threshold, $donate, $email, $is_anonymous, $userID) && $stmt->execute()) {
       $this->log->log("info", $this->getUserName($userID)." updated their account details");
       return true;
     }
