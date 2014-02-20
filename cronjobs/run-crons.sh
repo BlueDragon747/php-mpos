@@ -21,7 +21,7 @@ BASEPATH="/tmp"
 # Subfolder for PIDFILE, so it's path will be unique in a multipool server.
 # Path relative to BASEPATH.
 # Eg. SUBFOLDER="LTC"
-SUBFOLDER=""
+SUBFOLDER="FSC_LTC"
 
 ################################################################
 #                                                              #
