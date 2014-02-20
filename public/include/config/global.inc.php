@@ -27,7 +27,7 @@ $config['SALTY'] = 'THISSHOULDALSOBERRAANNDDOOMTHISSHOULDALSOBERRAANNDDOOMTHISSH
   *  Algorithm used by this coin, sha256d or scrypt
   *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-algorithm
   **/
-$config['algorithm'] = 'sha256d';
+$config['algorithm'] = 'scrypt';
 
 /**
  * Database configuration

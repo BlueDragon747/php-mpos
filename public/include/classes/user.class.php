@@ -417,7 +417,7 @@ class User extends Base {
    * @param strToken string Token for confirmation
    * @return bool
    **/
-  public function updateAccount($userID, $address, $threshold, $donate, $email, $is_anonymous, $strToken, $address_mm = NULL) {
+  public function updateAccount($userID, $address, $threshold, $donate, $email, $is_anonymous, $strToken, $address_mm) {
     $this->debug->append("STA " . __METHOD__, 4);
     $bUser = false;
     $donate = round($donate, 2);
@@ -493,7 +493,7 @@ class User extends Base {
       return true;
     }
     // Catchall
-    $this->setErrorMessage('Failed to update your account:'. $this->mysqli->error);
+    $this->setErrorMessage('Failed to update your account:'.$address.' | '.$address_mm.' | '. $this->mysqli->error);
     $this->debug->append('Account update failed: ' . $this->mysqli->error);
     return false;
   }
