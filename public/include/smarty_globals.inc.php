@@ -199,6 +199,21 @@ foreach ($aMonitorCrons as $strCron) {
     case 'pps_payout':
       $aCronMessage[] = '<li> PPS payout disabled, share credit transactions are delayed</li>';
       break;
+    case 'statistics':
+      $aCronMessage[] = '<li> statistics disabled</li>';
+      break;
+    case 'token_cleanup':
+      $aCronMessage[] = '<li> token_cleanup disabled</li>';
+      break;
+    case 'notifications':
+      $aCronMessage[] = '<li> notifications disabled</li>';
+      break;
+    case 'tickerupdate':
+      $aCronMessage[] = '<li> tickerupdate disabled</li>';
+      break;
+    case 'liquid_payout':
+      $aCronMessage[] = '<li> liquid_payout disabled</li>';
+      break;
     }
   }
 }
