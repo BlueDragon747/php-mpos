@@ -142,8 +142,9 @@ $config['block_bonus'] = 0;
  * Payout System
  *  Payout system chosen
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-payout-system
+ *  prop  pplns
  **/
-$config['payout_system'] = 'prop';
+$config['payout_system'] = 'pplns';
 
 /**
  * Round Purging
