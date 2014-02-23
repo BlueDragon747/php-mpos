@@ -3,6 +3,7 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class Payout Extends Base {
   protected $table = 'payouts';
+  protected $table_mm = 'payouts_mm';
 
   /**
    * Check if the user has an active payout request already
@@ -16,6 +17,12 @@ class Payout Extends Base {
     return $this->sqlError('E0048');
   }
 
+  public function isPayoutActive_mm($account_id) {
+    $stmt = $this->mysqli->prepare("SELECT id FROM $this->table_mm WHERE completed = 0 AND account_id = ? LIMIT 1");
+    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute( )&& $stmt->store_result() && $stmt->num_rows > 0)
+      return true;
+    return $this->sqlError('E0048');
+  }
   /**
    * Insert a new payout request
    * @param account_id int Account ID
@@ -48,6 +55,32 @@ class Payout Extends Base {
     return $this->sqlError('E0049');
   }
 
+  public function createPayout_mm($account_id=NULL, $strToken) {
+    $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm (account_id) VALUES (?)");
+    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+      // twofactor - consume the token if it is enabled and valid
+      if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
+        $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
+        if ($tValid) {
+          $delete = $this->token->deleteToken($strToken);
+          if ($delete) {
+            return true;
+          } else {
+            $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
+            $this->setErrorMessage('Unable to delete token');
+            return false;
+          }
+        } else {
+          $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
+          $this->setErrorMessage('Invalid token');
+          return false;
+        }
+      }
+      return $stmt->insert_id;
+    }
+    return $this->sqlError('E0049');
+  }
+  
   /**
    * Mark a payout as processed
    * @param id int Payout ID
