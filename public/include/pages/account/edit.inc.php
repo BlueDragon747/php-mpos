@@ -146,7 +146,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
         	  }
         	}
         	break;
