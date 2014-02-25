@@ -10,7 +10,7 @@
 PHP_BIN=$( which php )
 
 # List of cruns to execute
-CRONS="findblock.php proportional_payout.php pplns_payout.php pps_payout.php blockupdate.php payouts.php tickerupdate.php notifications.php statistics.php token_cleanup.php archive_cleanup.php liquid_payout.php"
+CRONS="findblock.php findblock_mm.php pplns_payout.php pplns_payout_mm.php blockupdate.php blockupdate_mm.php payouts.php payouts_mm.php notifications.php statistics.php token_cleanup.php archive_cleanup.php archive_cleanup_mm.php liquid_payout.php"
 
 # Output additional runtime information
 VERBOSE="0"

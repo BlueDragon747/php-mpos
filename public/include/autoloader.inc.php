@@ -52,6 +52,7 @@ require_once(CLASS_DIR . '/tokentype.class.php');
 require_once(CLASS_DIR . '/token.class.php');
 require_once(CLASS_DIR . '/payout.class.php');
 require_once(CLASS_DIR . '/block.class.php');
+require_once(CLASS_DIR . '/block_mm.class.php');
 
 // We require the block class to properly grab the round ID
 require_once(CLASS_DIR . '/statscache.class.php');
@@ -67,6 +68,7 @@ require_once(CLASS_DIR . '/share.class.php');
 require_once(CLASS_DIR . '/worker.class.php');
 require_once(CLASS_DIR . '/statistics.class.php');
 require_once(CLASS_DIR . '/transaction.class.php');
+require_once(CLASS_DIR . '/transaction_mm.class.php');
 require_once(CLASS_DIR . '/roundstats.class.php');
 require_once(CLASS_DIR . '/news.class.php');
 require_once(CLASS_DIR . '/api.class.php');

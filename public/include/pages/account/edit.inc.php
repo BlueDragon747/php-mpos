@@ -128,7 +128,7 @@ if ($user->isAuthenticated()) {
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
             $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
         	} else {
-        	  $aBalance = $transaction->getBalance($_SESSION['USERDATA']['id']);
+        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
         	  $user->log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
         	  if ($dBalance > $config['txfee_manual']) {

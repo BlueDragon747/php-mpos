@@ -92,6 +92,13 @@ class Payout Extends Base {
       return true;
     return $this->sqlError('E0051');
   }
+  
+  public function setProcessed_mm($id) {
+    $stmt = $this->mysqli->prepare("UPDATE $this->table_mm SET completed = 1 WHERE id = ? LIMIT 1");
+    if ($stmt && $stmt->bind_param('i', $id) && $stmt->execute())
+      return true;
+    return $this->sqlError('E0051');
+  }
 }
 
 $oPayout = new Payout();

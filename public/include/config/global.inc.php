@@ -50,6 +50,11 @@ $config['wallet']['host'] = 'localhost:8088';
 $config['wallet']['username'] = 'naituida';
 $config['wallet']['password'] = '123';
 
+$config['wallet_mm']['type'] = 'http';
+$config['wallet_mm']['host'] = 'localhost:8066';
+$config['wallet_mm']['username'] = 'naituida';
+$config['wallet_mm']['password'] = '123';
+
 /**
  * Cold Wallet / Liquid Assets
  *  Automatically send liquid assets to a cold wallet
@@ -127,8 +132,8 @@ $config['coindiffchangetarget'] = 2016;
  *  Fees applied to transactions
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-tx-fees
  **/
-$config['txfee_auto'] = 0.1;
-$config['txfee_manual'] = 0.1;
+$config['txfee_auto'] = 0.01;
+$config['txfee_manual'] = 0.01;
 
 /**
  * Block Bonus

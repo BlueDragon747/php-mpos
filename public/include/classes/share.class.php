@@ -9,6 +9,11 @@ class Share Extends Base {
   // This defines each share
   public $rem_host, $username, $our_result, $upstream_result, $reason, $solution, $time, $difficulty;
 
+  public function setShareTable($name, $name_archive) {
+      $table = $name;
+      $tableArchive = $name_archive;
+  }
+  
   /**
    * Fetch archive tables name for this class
    * @param none
@@ -407,3 +412,13 @@ $share->setConfig($config);
 $share->setUser($user);
 $share->setBlock($block);
 $share->setErrorCodes($aErrorCodes);
+
+$share_mm = new Share();
+$share_mm->setShareTable('shares_mm', 'shares_archive_mm');
+$share_mm->setDebug($debug);
+$share_mm->setMysql($mysqli);
+$share_mm->setConfig($config);
+$share_mm->setUser($user);
+$share_mm->setBlock($block_mm);
+$share_mm->setErrorCodes($aErrorCodes);
+
