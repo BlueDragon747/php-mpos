@@ -145,7 +145,7 @@
       </p>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance.confirmed|escape}" {$GLOBAL.config.currency_mm} disabled />{/nocache}
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm.confirmed|escape}" {$GLOBAL.config.currency_mm} disabled />{/nocache}
       </fieldset>
       <fieldset>
         <label>Payout to</label>

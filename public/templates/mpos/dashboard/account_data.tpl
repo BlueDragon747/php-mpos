@@ -37,11 +37,11 @@
       </thead>
       <tr>
         <td align="left" style="font-weight: bold;">Confirmed</td>
-        <td align="right"><span id="b-confirmed" class="confirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance.confirmed|number_format:"6"}</span></td>
+        <td align="right"><span id="b-confirmed" class="confirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance_mm.confirmed|number_format:"6"}</span></td>
       </tr>
       <tr>
         <td align="left" style="font-weight: bold;">Unconfirmed</td>
-        <td align="right"><span id="b-unconfirmed" class="unconfirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance.unconfirmed|number_format:"6"}</span></td>
+        <td align="right"><span id="b-unconfirmed" class="unconfirmed" style="width: calc(140px); font-size: 12px;">{$GLOBAL.userdata.balance_mm.unconfirmed|number_format:"6"}</span></td>
       </tr>
     </table>
 

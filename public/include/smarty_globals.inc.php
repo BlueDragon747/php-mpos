@@ -126,6 +126,7 @@ $aGlobal['acl']['uptime']['statistics'] = $setting->getValue('acl_uptime_statist
 if (@$_SESSION['USERDATA']['id']) {
   $aGlobal['userdata'] = $_SESSION['USERDATA']['id'] ? $user->getUserData($_SESSION['USERDATA']['id']) : array();
   $aGlobal['userdata']['balance'] = $transaction->getBalance($_SESSION['USERDATA']['id']);
+  $aGlobal['userdata']['balance_mm'] = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
 
   // Other userdata that we can cache savely
   $aGlobal['userdata']['shares'] = $statistics->getUserShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
