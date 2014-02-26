@@ -75,7 +75,7 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
     $iRoundShares = $share_mm->getRoundShares($iPreviousShareId, $aBlock['share_id']);
     $iNewRoundShares = 0;
     $config['reward_type'] == 'block' ? $dReward = $aBlock['amount'] : $dReward = $config['reward'];
-    $aRoundAccountShares = $share->getSharesForAccounts($iPreviousShareId, $aBlock['share_id']);
+    $aRoundAccountShares = $share_mm->getSharesForAccounts($iPreviousShareId, $aBlock['share_id']);
 
     $log->logInfo('Target: ' . $pplns_target . '; Shares: ' . $iRoundShares . '; Height: ' . $aBlock['height'] . '; Amount: ' . $aBlock['amount'] . '; Found by ID: ' . $aBlock['account_id']);
 
