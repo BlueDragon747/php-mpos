@@ -1,9 +1,9 @@
 <?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
-class Share Extends Base {
-  protected $table = 'shares';
-  protected $tableArchive = 'shares_archive';
+class Share_mm Extends Base {
+  protected $table = 'shares_mm';
+  protected $tableArchive = 'shares_archive_mm';
   private $oUpstream;
   private $iLastUpstreamId;
   // This defines each share
@@ -405,11 +405,11 @@ class Share Extends Base {
   }
 }
 
-$share = new Share();
-$share->setDebug($debug);
-$share->setMysql($mysqli);
-$share->setConfig($config);
-$share->setUser($user);
-$share->setBlock($block);
-$share->setErrorCodes($aErrorCodes);
+$share_mm = new Share_mm();
+$share_mm->setDebug($debug);
+$share_mm->setMysql($mysqli);
+$share_mm->setConfig($config);
+$share_mm->setUser($user);
+$share_mm->setBlock($block_mm);
+$share_mm->setErrorCodes($aErrorCodes);
 

@@ -65,6 +65,7 @@ require_once(CLASS_DIR . '/user.class.php');
 require_once(CLASS_DIR . '/csrftoken.class.php');
 require_once(CLASS_DIR . '/invitation.class.php');
 require_once(CLASS_DIR . '/share.class.php');
+require_once(CLASS_DIR . '/share_mm.class.php');
 require_once(CLASS_DIR . '/worker.class.php');
 require_once(CLASS_DIR . '/statistics.class.php');
 require_once(CLASS_DIR . '/transaction.class.php');
