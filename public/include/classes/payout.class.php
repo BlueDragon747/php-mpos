@@ -5,6 +5,10 @@ class Payout Extends Base {
   protected $table = 'payouts';
   protected $table_mm = 'payouts_mm';
 
+  public function getTableNameMM() {
+    return $this->table_mm;
+  }
+
   /**
    * Check if the user has an active payout request already
    * @param account_id int Account ID

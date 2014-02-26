@@ -392,7 +392,7 @@ class Transaction_mm extends Base {
           ), 8
         ), 0
       ) AS confirmed
-      FROM " . $this->payout->getTableName() . " AS p
+      FROM " . $this->payout->getTableNameMM() . " AS p
       JOIN " . $this->user->getTableName() . " AS a
       ON p.account_id = a.id
       JOIN " . $this->getTableName() . " AS t
