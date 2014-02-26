@@ -92,6 +92,9 @@ $aGlobal = array(
     'ap_threshold' => array(
       'min' => $config['ap_threshold']['min'],
       'max' => $config['ap_threshold']['max']
+    'ap_threshold_mm' => array(
+      'min' => $config['ap_threshold_mm']['min'],
+      'max' => $config['ap_threshold_mm']['max']
     )
   )
 );

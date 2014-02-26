@@ -53,21 +53,21 @@ if ($setting->getValue('disable_manual_payouts') != 1 && $aManualPayouts = $tran
   foreach ($aManualPayouts as $aUserData) {
     $transaction_id = NULL;
     $rpc_txid = NULL;
-    $log->logInfo(sprintf($mask, $aUserData['id'], $aUserData['username'], $aUserData['confirmed'], $aUserData['coin_address'], $aUserData['payout_id']));
+    $log->logInfo(sprintf($mask, $aUserData['id'], $aUserData['username'], $aUserData['confirmed'], $aUserData['coin_address_mm'], $aUserData['payout_id']));
     if (!$oPayout->setProcessed_mm($aUserData['payout_id'])) {
       $log->logFatal('    unable to mark transactions [MM] ' . $aData['id'] . ' as processed. ERROR: ' . $oPayout->getCronError());
       $monitoring->endCronjob($cron_name, 'E0010', 1, true);
     }
-    if ($bitcoin_mm->validateaddress($aUserData['coin_address'])) {
-      if (!$transaction_id = $transaction_mm->createDebitAPRecord($aUserData['id'], $aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual'])) {
+    if ($bitcoin_mm->validateaddress($aUserData['coin_address_mm'])) {
+      if (!$transaction_id = $transaction_mm->createDebitAPRecord($aUserData['id'], $aUserData['coin_address_mm'], $aUserData['confirmed'] - $config['txfee_manual'])) {
         $log->logFatal('    failed to fullt debit user [MM] ' . $aUserData['username'] . ': ' . $transaction_mm->getCronError());
         $monitoring->endCronjob($cron_name, 'E0064', 1, true);
       } else {
         // Run the payouts from RPC now that the user is fully debited
         try {
-          $rpc_txid = $bitcoin_mm->sendtoaddress($aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual']);
+          $rpc_txid = $bitcoin_mm->sendtoaddress($aUserData['coin_address_mm'], $aUserData['confirmed'] - $config['txfee_manual']);
         } catch (Exception $e) {
-          $log->logError('E0078: RPC method did not return 200 OK [MM]: Address: ' . $aUserData['coin_address'] . ' ERROR: ' . $e->getMessage());
+          $log->logError('E0078: RPC method did not return 200 OK [MM]: Address: ' . $aUserData['coin_address_mm'] . ' ERROR: ' . $e->getMessage());
           // Remove this line below if RPC calls are failing but transactions are still added to it
           // Don't blame MPOS if you run into issues after commenting this out!
           $monitoring->endCronjob($cron_name, 'E0078', 1, true);
@@ -101,17 +101,17 @@ if ($setting->getValue('disable_auto_payouts') != 1 && $aAutoPayouts = $transact
   foreach ($aAutoPayouts as $aUserData) {
     $transaction_id = NULL;
     $rpc_txid = NULL;
-    $log->logInfo(sprintf($mask, $aUserData['id'], $aUserData['username'], $aUserData['confirmed'], $aUserData['coin_address'], $aUserData['ap_threshold']));
-    if ($bitcoin_mm->validateaddress($aUserData['coin_address'])) {
-      if (!$transaction_id = $transaction_mm->createDebitAPRecord($aUserData['id'], $aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual'])) {
+    $log->logInfo(sprintf($mask, $aUserData['id'], $aUserData['username'], $aUserData['confirmed'], $aUserData['coin_address_mm'], $aUserData['ap_threshold_mm']));
+    if ($bitcoin_mm->validateaddress($aUserData['coin_address_mm'])) {
+      if (!$transaction_id = $transaction_mm->createDebitAPRecord($aUserData['id'], $aUserData['coin_address_mm'], $aUserData['confirmed'] - $config['txfee_manual'])) {
         $log->logFatal('    failed to fully debit user [MM] ' . $aUserData['username'] . ': ' . $transaction_mm->getCronError());
         $monitoring->endCronjob($cron_name, 'E0064', 1, true);
       } else {
         // Run the payouts from RPC now that the user is fully debited
         try {
-          $rpc_txid = $bitcoin_mm->sendtoaddress($aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual']);
+          $rpc_txid = $bitcoin_mm->sendtoaddress($aUserData['coin_address_mm'], $aUserData['confirmed'] - $config['txfee_manual']);
         } catch (Exception $e) {
-          $log->logError('E0078: RPC method did not return 200 OK [MM]: Address: ' . $aUserData['coin_address'] . ' ERROR: ' . $e->getMessage());
+          $log->logError('E0078: RPC method did not return 200 OK [MM]: Address: ' . $aUserData['coin_address_mm'] . ' ERROR: ' . $e->getMessage());
           // Remove this line below if RPC calls are failing but transactions are still added to it
           // Don't blame MPOS if you run into issues after commenting this out!
           $monitoring->endCronjob($cron_name, 'E0078', 1, true);

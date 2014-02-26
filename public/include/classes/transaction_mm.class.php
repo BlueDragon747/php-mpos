@@ -294,8 +294,8 @@ class Transaction_mm extends Base {
       SELECT
         a.id,
         a.username,
-        a.ap_threshold,
-        a.coin_address,
+        a.ap_threshold_mm,
+        a.coin_address_mm,
         IFNULL(
           ROUND(
             (
@@ -310,9 +310,9 @@ class Transaction_mm extends Base {
       ON t.block_id = b.id
       LEFT JOIN accounts AS a
       ON t.account_id = a.id
-      WHERE t.archived = 0 AND a.ap_threshold > 0 AND a.coin_address IS NOT NULL AND a.coin_address != ''
+      WHERE t.archived = 0 AND a.ap_threshold_mm > 0 AND a.coin_address_mm IS NOT NULL AND a.coin_address_mm != ''
       GROUP BY t.account_id
-      HAVING confirmed > a.ap_threshold AND confirmed > " . $this->config['txfee_auto']);
+      HAVING confirmed > a.ap_threshold_mm AND confirmed > " . $this->config['txfee_auto']);
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_all(MYSQLI_ASSOC);
     return $this->sqlError();
@@ -380,8 +380,8 @@ class Transaction_mm extends Base {
       SELECT
       a.id,
       a.username,
-      a.ap_threshold,
-      a.coin_address,
+      a.ap_threshold_mm,
+      a.coin_address_mm,
       p.id AS payout_id,
       IFNULL(
         ROUND(
@@ -399,7 +399,7 @@ class Transaction_mm extends Base {
       ON t.account_id = p.account_id
       LEFT JOIN " . $this->block->getTableName() . " AS b
       ON t.block_id = b.id
-      WHERE p.completed = 0 AND t.archived = 0 AND a.coin_address IS NOT NULL AND a.coin_address != ''
+      WHERE p.completed = 0 AND t.archived = 0 AND a.coin_address_mm IS NOT NULL AND a.coin_address_mm != ''
       GROUP BY t.account_id
       HAVING confirmed > " . $this->config['txfee_manual']);
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())

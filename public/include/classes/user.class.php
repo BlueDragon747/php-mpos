@@ -417,7 +417,7 @@ class User extends Base {
    * @param strToken string Token for confirmation
    * @return bool
    **/
-  public function updateAccount($userID, $address, $threshold, $donate, $email, $is_anonymous, $strToken, $address_mm) {
+  public function updateAccount($userID, $address, $threshold, $donate, $email, $is_anonymous, $strToken, $address_mm, $threshold_mm) {
     $this->debug->append("STA " . __METHOD__, 4);
     $bUser = false;
     $donate = round($donate, 2);
@@ -430,6 +430,12 @@ class User extends Base {
       return false;
     } else if ($threshold > $this->config['ap_threshold']['max']) {
       $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold']['max']);
+      return false;
+    } else if ($threshold_mm < $this->config['ap_threshold_mm']['min'] && $threshold_mm != 0) {
+      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold_mm']['min']);
+      return false;
+    } else if ($threshold_mm > $this->config['ap_threshold_mm']['max']) {
+      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm']['max']);
       return false;
     }
     if (!is_numeric($donate)) {
@@ -466,6 +472,7 @@ class User extends Base {
 
     // Number sanitizer, just in case we fall through above
     $threshold = min($this->config['ap_threshold']['max'], max(0, floatval($threshold)));
+    $threshold_mm = min($this->config['ap_threshold_mm']['max'], max(0, floatval($threshold_mm)));
     $donate = min(100, max(0, floatval($donate)));
 
     // twofactor - consume the token if it is enabled and valid
@@ -487,8 +494,8 @@ class User extends Base {
     }
     
     // We passed all validation checks so update the account
-    $stmt = $this->mysqli->prepare("UPDATE $this->table SET coin_address = ?, coin_address_mm = ?, ap_threshold = ?, donate_percent = ?, email = ?, is_anonymous = ? WHERE id = ?");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('ssddsii', $address, $address_mm, $threshold, $donate, $email, $is_anonymous, $userID) && $stmt->execute()) {
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET coin_address = ?, coin_address_mm = ?, ap_threshold = ?, ap_threshold_mm = ?, donate_percent = ?, email = ?, is_anonymous = ? WHERE id = ?");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('ssdddsii', $address, $address_mm, $threshold, $threshold_mm, $donate, $email, $is_anonymous, $userID) && $stmt->execute()) {
       $this->log->log("info", $this->getUserName($userID)." updated their account details");
       return true;
     }
@@ -634,7 +641,7 @@ class User extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
       id, username, pin, api_key, is_admin, is_anonymous, email, no_fees,
-      IFNULL(donate_percent, '0') as donate_percent, coin_address, coin_address_mm, ap_threshold
+      IFNULL(donate_percent, '0') as donate_percent, coin_address, coin_address_mm, ap_threshold, ap_threshold_mm
       FROM $this->table
       WHERE id = ? LIMIT 0,1");
     if ($this->checkStmt($stmt)) {

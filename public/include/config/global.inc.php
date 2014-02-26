@@ -91,6 +91,8 @@ $config['price']['currency'] = 'USD';
 $config['ap_threshold']['min'] = 1;
 $config['ap_threshold']['max'] = 250;
 
+$config['ap_threshold_mm']['min'] = 0.1;
+$config['ap_threshold_mm']['max'] = 25;
 /**
  * Donation thresholds
  *  Minimum donation amount in percent
@@ -132,8 +134,8 @@ $config['coindiffchangetarget'] = 2016;
  *  Fees applied to transactions
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-tx-fees
  **/
-$config['txfee_auto'] = 0.01;
-$config['txfee_manual'] = 0.01;
+$config['txfee_auto'] = 0.0001;
+$config['txfee_manual'] = 0.0001;
 
 /**
  * Block Bonus
