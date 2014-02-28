@@ -175,7 +175,7 @@ $config['archive']['maxage'] = 60 * 24;
  *  Fees applied to users
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-pool-fees
  */
-$config['fees'] = 0;
+$config['fees'] = 1;
 
 /**
  * PPLNS
