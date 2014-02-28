@@ -82,7 +82,7 @@ $aGlobal = array(
     'monitoring_uptimerobot_api_keys' => $setting->getValue('monitoring_uptimerobot_api_keys'),
     'statistics_ajax_refresh_interval' => $statistics_ajax_refresh_interval,
     'statistics_ajax_long_refresh_interval' => $statistics_ajax_long_refresh_interval,
-    'price' => array( 'currency' => $config['price']['currency'] ),
+    //'price' => array( 'currency' => $config['price']['currency'] ),
     'targetdiff' => $config['difficulty'],
     'currency' => $config['currency'],
     'currency_mm' => $config['currency_mm'],
