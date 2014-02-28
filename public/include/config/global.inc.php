@@ -81,9 +81,7 @@ $config['gettingstarted']['stratumport'] = '3333';
  **/
 $config['price']['url'] = 'https://btc-e.com';
 $config['price']['target'] = '/api/2/ltc_usd/ticker';
-/**
-$config['price']['currency'] = 'USD';
- **/
+$config['price']['currency'] = 'BTC';
 
 /**
  * Automatic Payout Thresholds
