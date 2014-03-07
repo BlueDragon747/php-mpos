@@ -36,7 +36,16 @@ $aAllBlocks = $block_mm->getAllUnconfirmed(max($config['network_confirmations'],
 $header = false;
 foreach ($aAllBlocks as $iIndex => $aBlock) {
   !$header ? $log->logInfo("ID\tHeight\tBlockhash\tConfirmations") : $header = true;
-  $aBlockInfo = $bitcoin_mm->getblock($aBlock['blockhash']);
+  try
+  {
+      $aBlockInfo = $bitcoin_mm->getblock($aBlock['blockhash']);
+  }
+  catch(Exception $e)
+  {
+  	$log->logInfo("  can not find  Block , maybe orphan, skip [MM]");
+  	continue;
+  }
+
   // Fetch this blocks transaction details to find orphan blocks
   $aTxDetails = $bitcoin_mm->gettransaction($aBlockInfo['tx'][0]);
   $log->logInfo($aBlock['id'] . "\t" . $aBlock['height'] .  "\t" . $aBlock['blockhash'] . "\t" . $aBlock['confirmations'] . " -> " . $aBlockInfo['confirmations']);
