@@ -306,7 +306,7 @@ class Transaction_mm extends Base {
           ), 0
         ) AS confirmed
       FROM $this->table AS t
-      LEFT JOIN blocks AS b
+      LEFT JOIN blocks_mm AS b
       ON t.block_id = b.id
       LEFT JOIN accounts AS a
       ON t.account_id = a.id
