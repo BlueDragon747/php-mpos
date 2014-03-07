@@ -42,7 +42,7 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
   }
   catch(Exception $e)
   {
-  	$log->logInfo("  can not find  Block , maybe orphan, skip [MM]");
+  	$log->logInfo("  can not find  Block , maybe orphan, skip [MM] ". $aBlock['blockhash']);
   	continue;
   }
 
