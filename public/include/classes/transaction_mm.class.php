@@ -70,7 +70,7 @@ class Transaction_mm extends Base {
     $sql = "
       SELECT
         SUM(t.amount) AS total, t.type AS type
-      FROM transactions AS t
+      FROM transactions_mm AS t
       LEFT OUTER JOIN blocks AS b
       ON b.id = t.block_id
       WHERE ( b.confirmations > 0 OR b.id IS NULL )";
