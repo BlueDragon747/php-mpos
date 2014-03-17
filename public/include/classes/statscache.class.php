@@ -116,3 +116,14 @@ if ($aTmpBlock = $block->getLast()) {
   $iRoundId = 0;
 }
 $memcache->setRound($iRoundId);
+
+$memcache_mm = new StatsCache($config, $debug);
+$memcache_mm->addServer($config['memcache']['host'], $config['memcache']['port']);
+// Now we can set our additional key prefix
+if ($aTmpBlock_mm = $block_mm->getLast()) {
+  $iRoundId_mm = $aTmpBlock_mm['id'];
+} else {
+  $iRoundId_mm = 0;
+}
+$memcache_mm->setRound($iRoundId_mm);
+
