@@ -470,6 +470,10 @@ class User extends Base {
       $address = NULL;
     }
 
+    if (empty($address_mm)) {
+    	$address_mm = NULL;
+    }
+
     // Number sanitizer, just in case we fall through above
     $threshold = min($this->config['ap_threshold']['max'], max(0, floatval($threshold)));
     $threshold_mm = min($this->config['ap_threshold_mm']['max'], max(0, floatval($threshold_mm)));
