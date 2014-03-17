@@ -3,7 +3,7 @@
          </tr>
          <tr>
            <td><b>Est. Shares</b></td>
-           <td id="b-target" class="right">{$ESTIMATES.shares|number_format} (done: {$ESTIMATES.percent}%)</td>
+           <td id="b-target" class="right">{$ESTIMATES_MM.shares|number_format} (done: {$ESTIMATES_MM.percent}%)</td>
          </tr>
          <tr>
            <td><b>Pool Valid</b></td>

@@ -8,7 +8,7 @@ if ($user->isAuthenticated()) {
   $aTransactionTypes = $transaction_mm->getTypes();
   if (!$aTransactions) $_SESSION['POPUP'][] = array('CONTENT' => 'Could not find any transaction', 'TYPE' => 'errormsg');
   if (!$setting->getValue('disable_transactionsummary')) {
-    $aTransactionSummary_mm = $transaction_mm->getTransactionSummary($_SESSION['USERDATA']['id']);
+    $aTransactionSummary_mm = $transaction_mm->getTransactionSummary_mm($_SESSION['USERDATA']['id']);
     $smarty->assign('SUMMARY_MM', $aTransactionSummary_mm);
   }
   $smarty->assign('LIMIT', $iLimit);

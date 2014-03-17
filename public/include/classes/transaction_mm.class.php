@@ -65,7 +65,7 @@ class Transaction_mm extends Base {
    * @param account_id int Account ID, NULL for all
    * @return data array type and total
    **/
-  public function getTransactionSummary($account_id=NULL) {
+  public function getTransactionSummary_mm($account_id=NULL) {
     if ($data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
     $sql = "
       SELECT
