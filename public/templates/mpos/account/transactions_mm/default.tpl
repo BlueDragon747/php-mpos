@@ -4,14 +4,14 @@
   <table class="tablesorter" cellspacing="0">
     <thead>
       <tr>
-    {foreach $SUMMARY as $type=>$total}
+    {foreach $SUMMARY_MM as $type=>$total}
         <th>{$type}</th>
     {/foreach}
       </tr>
     </thead>
     <tbody>
       <tr>
-    {foreach $SUMMARY as $type=>$total}
+    {foreach $SUMMARY_MM as $type=>$total}
         <td class="right">{$total|number_format:"8"}</td>
     {/foreach}
       </tr>
