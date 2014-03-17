@@ -910,7 +910,7 @@ class Statistics_mm extends Base {
       $dDifficulty = 1;
     }
 
-    return $this->memcache->setCache(__FUNCTION__, round($dDifficulty * $this->config['cointarget'] / $this->getNetworkExpectedTimePerBlock_mm(), 8));
+    return $this->memcache->setCache(__FUNCTION__, round($dDifficulty * $this->config['cointarget_mm'] / $this->getNetworkExpectedTimePerBlock_mm(), 8));
   }
 
   /**
