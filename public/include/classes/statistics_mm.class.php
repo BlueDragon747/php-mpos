@@ -351,7 +351,7 @@ class Statistics_mm extends Base {
    * @param account_id int account id
    * @return data array invalid and valid share counts
    **/
-  public function getUserShares($username, $account_id=NULL) {
+  public function getUserShares_mm($username, $account_id=NULL) {
     $this->debug->append("STA " . __METHOD__, 4);
     // Dual-caching, try statistics cron first, then fallback to local, then fallbock to SQL
     if ($data = $this->memcache->get(STATISTICS_ALL_USER_SHARES_MM)) {
