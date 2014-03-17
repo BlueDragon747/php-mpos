@@ -151,6 +151,12 @@ if (@$_SESSION['USERDATA']['id']) {
         $aGlobal['pplns']['target'] = $iAvgBlockShares;
       }
     }
+    $aGlobal['pplns']['target_mm'] = $config['pplns']['shares']['default'];
+    if ($aLastBlock_mm = $block_mm->getLast()) {
+      if ($iAvgBlockShares_mm = round($block_mm->getAvgBlockShares($aLastBlock_mm['height'], $config['pplns']['blockavg']['blockcount']))) {
+        $aGlobal['pplns']['targe_mmt'] = $iAvgBlockShares_mm;
+      }
+    }
     $aEstimates = $statistics->getUserEstimates($aRoundShares, $aGlobal['userdata']['shares'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
     $aGlobal['userdata']['estimates'] = $aEstimates;
     break;

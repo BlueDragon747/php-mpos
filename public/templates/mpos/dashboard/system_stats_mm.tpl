@@ -6,7 +6,7 @@
 {if $GLOBAL.config.payout_system == 'pplns'}
          <tr>
            <td><b>PPLNS Target</b></td>
-           <td id="b-pplns" class="right">{$GLOBAL.pplns.target}</td>
+           <td id="b-pplns" class="right">{$GLOBAL.pplns.target_mm}</td>
          </tr>
 {elseif $GLOBAL.config.payout_system == 'pps'}
         <tr>
@@ -27,11 +27,11 @@
         </tr>
 {/if}
          <tr><td colspan="2">&nbsp;</td></tr>
-         {include file="dashboard/round_shares.tpl"}
+         {include file="dashboard/round_shares_mm.tpl"}
          <tr><td colspan="2">&nbsp;</td></tr>
-         {include file="dashboard/payout_estimates.tpl"}
+         {include file="dashboard/payout_estimates_mm.tpl"}
          <tr><td colspan="2">&nbsp;</td></tr>
-         {include file="dashboard/network_info.tpl"}
+         {include file="dashboard/network_info_mm.tpl"}
          <tr><td colspan="2">&nbsp;</td></tr>
        </tbody>
       </table>
