@@ -5,19 +5,19 @@
 {if $GLOBAL.config.payout_system != 'pps'}
          <tr>
            <td><b>Block</b></td>
-           <td id="b-block" class="right">{$GLOBAL.userdata.estimates.block|number_format:"8"}</td>
+           <td id="b-block" class="right">{$GLOBAL.userdata.estimates_mm.block|number_format:"8"}</td>
          </tr>
          <tr>
            <td><b>Fees</b></td>
-           <td id="b-fee" class="right">{$GLOBAL.userdata.estimates.fee|number_format:"8"}</td>
+           <td id="b-fee" class="right">{$GLOBAL.userdata.estimates_mm.fee|number_format:"8"}</td>
          </tr>
          <tr>
            <td><b>Donation</b></td>
-           <td id="b-donation" class="right">{$GLOBAL.userdata.estimates.donation|number_format:"8"}</td>
+           <td id="b-donation" class="right">{$GLOBAL.userdata.estimates_mm.donation|number_format:"8"}</td>
          </tr>
          <tr>
            <td><b>Payout</b></td>
-           <td id="b-payout" class="right">{$GLOBAL.userdata.estimates.payout|number_format:"8"}</td>
+           <td id="b-payout" class="right">{$GLOBAL.userdata.estimates_mm.payout|number_format:"8"}</td>
          </tr>
 {else}
         <tr>
