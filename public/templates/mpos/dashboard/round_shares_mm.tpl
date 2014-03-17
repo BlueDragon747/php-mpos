@@ -11,13 +11,13 @@
          </tr>
          <tr>
            <td><b>Your Valid<b></td>
-           <td id="b-yvalid" class="right">{$GLOBAL.userdata.shares.valid|number_format}</td>
+           <td id="b-yvalid" class="right">{$GLOBAL.userdata.shares_mm.valid|number_format}</td>
          </tr>
          <tr>
            <td><b>Pool Invalid</b></td>
-           <td id="b-pivalid" class="right">{$GLOBAL.roundshares_mm.invalid|number_format} {if $GLOBAL.roundshares.valid > 0}({($GLOBAL.roundshares.invalid / ($GLOBAL.roundshares.valid + $GLOBAL.roundshares.invalid) * 100)|number_format:"2"}%){else}(0.00%){/if}</td></td>
+           <td id="b-pivalid" class="right">{$GLOBAL.roundshares_mm.invalid|number_format} {if $GLOBAL.roundshares_mm.valid > 0}({($GLOBAL.roundshares_mm.invalid / ($GLOBAL.roundshares_mm.valid + $GLOBAL.roundshares_mm.invalid) * 100)|number_format:"2"}%){else}(0.00%){/if}</td></td>
          </tr>
          <tr>
            <td><b>Your Invalid</b></td>
-           <td id="b-yivalid" class="right">{$GLOBAL.userdata.shares.invalid|number_format} {if $GLOBAL.userdata.shares.valid > 0}({($GLOBAL.userdata.shares.invalid / ($GLOBAL.userdata.shares.valid + $GLOBAL.userdata.shares.invalid) * 100)|number_format:"2"}%){else}(0.00%){/if}</td>
+           <td id="b-yivalid" class="right">{$GLOBAL.userdata.shares_mm.invalid|number_format} {if $GLOBAL.userdata.shares_mm.valid > 0}({($GLOBAL.userdata.shares_mm.invalid / ($GLOBAL.userdata.shares_mm.valid + $GLOBAL.userdata.shares_mm.invalid) * 100)|number_format:"2"}%){else}(0.00%){/if}</td>
          </tr>
