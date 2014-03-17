@@ -13,6 +13,10 @@ if (!$aRoundShares = $statistics->getRoundShares()) {
   $aRoundShares = array('valid' => 0, 'invalid' => 0);
 }
 
+if (!$aRoundShares_mm = $statistics_mm->getRoundShares()) {
+  $aRoundShares_mm = array('valid' => 0, 'invalid' => 0);
+}
+
 if ($bitcoin->can_connect() === true) {
   $dDifficulty = $bitcoin->getdifficulty();
   $dNetworkHashrate = $bitcoin->getnetworkhashps();
@@ -58,6 +62,7 @@ $aGlobal = array(
   'sharerate' => $iCurrentPoolShareRate,
   'workers' => $iCurrentActiveWorkers,
   'roundshares' => $aRoundShares,
+  'roundshares_mm' => $aRoundShares_mm,
   'fees' => $config['fees'],
   'confirmations' => $config['confirmations'],
   'reward' => $config['reward_type'] == 'fixed' ? $config['reward'] : $block->getAverageAmount(),
