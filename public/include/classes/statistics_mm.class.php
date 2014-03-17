@@ -891,7 +891,7 @@ class Statistics_mm extends Base {
       $dDifficulty = 1;
     }
     if($dNetworkHashrate <= 0){
-      return $this->memcache->setCache(__FUNCTION__, $this->config['cointarget']);
+      return $this->memcache->setCache(__FUNCTION__, $this->config['cointarget_mm']);
     }
 
     return $this->memcache->setCache(__FUNCTION__, pow(2, 32) * $dDifficulty / $dNetworkHashrate);
