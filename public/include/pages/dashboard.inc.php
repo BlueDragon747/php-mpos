@@ -39,7 +39,7 @@ if ($user->isAuthenticated()) {
   } else {
     $dEstPercent = 0;
   }
-  $iEstShares_mm = $statistics_mm->getEstimatedShares($dDifficulty);
+  $iEstShares_mm = $statistics_mm->getEstimatedShares($dDifficulty_mm);
   if ($iEstShares_mm > 0 && $aRoundShares_mm['valid'] > 0) {
     $dEstPercent_mm = round(100 / $iEstShares_mm * $aRoundShares_mm['valid'], 2);
   } else {
