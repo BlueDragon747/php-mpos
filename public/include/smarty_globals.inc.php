@@ -165,7 +165,7 @@ if (@$_SESSION['USERDATA']['id']) {
     }
     $aEstimates = $statistics->getUserEstimates($aRoundShares, $aGlobal['userdata']['shares'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
     $aGlobal['userdata']['estimates'] = $aEstimates;
-    $aEstimates_mm = $statistics_mm->getUserEstimates($aRoundShares, $aGlobal['userdata']['shares'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
+    $aEstimates_mm = $statistics_mm->getUserEstimates($aRoundShares_mm, $aGlobal['userdata']['shares_mm'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
     $aGlobal['userdata']['estimates_mm'] = $aEstimates_mm;
     break;
   case 'pps':
