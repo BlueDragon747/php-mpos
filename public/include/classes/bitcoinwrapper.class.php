@@ -80,4 +80,4 @@ class BitcoinWrapper extends BitcoinClient {
 // Load this wrapper
 $bitcoin = new BitcoinWrapper($config['wallet']['type'], $config['wallet']['username'], $config['wallet']['password'], $config['wallet']['host'], $config['DEBUG'], $debug, $memcache);
 $bitcoin_mm = new BitcoinWrapper($config['wallet_mm']['type'], $config['wallet_mm']['username'], $config['wallet_mm']['password'], $config['wallet_mm']['host'], $config['DEBUG'], $debug, $memcache_mm);
-
+ 
