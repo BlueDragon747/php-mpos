@@ -38,8 +38,8 @@ class StatsCache {
     if (! $this->config['memcache']['enabled']) return $value;
     if (empty($expiration))
       $expiration = $this->config['memcache']['expiration'] + rand( -$this->config['memcache']['splay'], $this->config['memcache']['splay']);
-    $this->debug->append("Storing " . $this->getRound() . '_' . $this->$flag . $this->config['memcache']['keyprefix'] . "$key with expiration $expiration", 3);
-    return $this->cache->set($this->getRound() . '_' . $this->$flag . $this->config['memcache']['keyprefix'] . $key, $value, $expiration);
+    $this->debug->append("Storing " . $this->getRound() . '_' . $this->flag . $this->config['memcache']['keyprefix'] . "$key with expiration $expiration", 3);
+    return $this->cache->set($this->getRound() . '_' . $this->flag . $this->config['memcache']['keyprefix'] . $key, $value, $expiration);
   }
 
   /**
@@ -62,8 +62,8 @@ class StatsCache {
    **/
   public function get($key, $cache_cb = NULL, &$cas_token = NULL) {
     if (! $this->config['memcache']['enabled']) return false;
-    $this->debug->append("Trying to fetch key " . $this->getRound() . '_' . $this->$flag . $this->config['memcache']['keyprefix'] . "$key from cache", 3);
-    if ($data = $this->cache->get($this->getRound() . '_' . $this->$flag . $this->config['memcache']['keyprefix'].$key)) {
+    $this->debug->append("Trying to fetch key " . $this->getRound() . '_' . $this->flag . $this->config['memcache']['keyprefix'] . "$key from cache", 3);
+    if ($data = $this->cache->get($this->getRound() . '_' . $this->flag . $this->config['memcache']['keyprefix'].$key)) {
       $this->debug->append("Found key in cache", 3);
       return $data;
     } else {
@@ -117,7 +117,7 @@ if ($aTmpBlock = $block->getLast()) {
   $iRoundId = 0;
 }
 $memcache->setRound($iRoundId);
-$memcache->$flag = 0;
+$memcache->flag = 0;
 
 $memcache_mm = new StatsCache($config, $debug);
 $memcache_mm->addServer($config['memcache']['host'], $config['memcache']['port']);
@@ -128,4 +128,5 @@ if ($aTmpBlock_mm = $block_mm->getLast()) {
   $iRoundId_mm = 0;
 }
 $memcache_mm->setRound($iRoundId_mm);
-$memcache_mm->$flag = 1;
+$memcache_mm->flag = 1;
+
