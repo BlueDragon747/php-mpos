@@ -210,7 +210,7 @@ class Share_mm Extends Base {
    * @return bool
    **/
   public function moveArchive($current_upstream, $block_id, $previous_upstream=0) {
-    if ($this->config['payout_system'] != 'pplns') {
+    if ($this->config['payout_system_mm'] != 'pplns') {
       // We don't need archived shares that much, so only archive as much as configured
       $sql = "
         INSERT INTO $this->tableArchive (share_id, username, our_result, upstream_result, block_id, time, difficulty)
@@ -358,6 +358,39 @@ class Share_mm Extends Base {
         return true;
     }
     $this->setErrorMessage($this->getErrorMsg('E0052', $aBlock['height']));
+    return false;
+  }
+
+  public function findUpstreamShareStrict($aBlock, $last=0) {
+    // Many use stratum, so we create our stratum check first
+    $version = pack("I*", sprintf('%08d', $aBlock['version']));
+    $previousblockhash = pack("H*", swapEndian($aBlock['previousblockhash']));
+    $merkleroot = pack("H*", swapEndian($aBlock['merkleroot']) );
+    $time = pack("I*", $aBlock['time']);
+    $bits = pack("H*", swapEndian($aBlock['bits']));
+    $nonce = pack("I*", $aBlock['nonce']);
+    $header_bin = $version .  $previousblockhash . $merkleroot . $time .  $bits . $nonce;
+    $header_hex = implode(unpack("H*", $header_bin));
+
+    // Stratum supported blockhash solution entry
+    $stmt = $this->mysqli->prepare("SELECT SUBSTRING_INDEX( `username` , '.', 1 ) AS account, username as worker, id FROM $this->table WHERE solution = ? LIMIT 1");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('s', $aBlock['hash']) && $stmt->execute() && $result = $stmt->get_result()) {
+      $this->oUpstream = $result->fetch_object();
+      $this->share_type = 'stratum_blockhash';
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+        return true;
+    }
+
+    // Stratum scrypt hash check
+    $scrypt_hash = swapEndian(bin2hex(Scrypt::calc($header_bin, $header_bin, 1024, 1, 1, 32)));
+    $stmt = $this->mysqli->prepare("SELECT SUBSTRING_INDEX( `username` , '.', 1 ) AS account, username as worker, id FROM $this->table WHERE solution = ? LIMIT 1");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('s', $scrypt_hash) && $stmt->execute() && $result = $stmt->get_result()) {
+      $this->oUpstream = $result->fetch_object();
+      $this->share_type = 'stratum_solution';
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+        return true;
+    }
+
     return false;
   }
 

@@ -808,7 +808,7 @@ class Statistics_mm extends Base {
    **/
   public function getUserEstimates($value1, $value2, $dDonate, $bNoFees, $ppsvalue=0) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($this->config['payout_system'] != 'pps') {
+    if ($this->config['payout_system_mm'] != 'pps') {
       if (@$value1['valid'] > 0  && @$value2['valid'] > 0) {
         $this->config['reward_type'] == 'fixed' ? $reward = $this->config['reward_mm'] : $reward = $this->block->getAverageAmount();
         $aEstimates['block'] = round(( (int)$value2['valid'] / (int)$value1['valid'] ) * (float)$reward, 8);
@@ -949,10 +949,10 @@ class Statistics_mm extends Base {
         if ($aLastBlock = $this->block->getLast()) {
           $pps_reward = $aLastBlock['amount'];
         } else {
-          $pps_reward = $this->config['pps']['reward']['default'];
+          $pps_reward = $this->config['pps']['reward']['default_mm'];
         }
       } else {
-        $pps_reward = $this->config['pps']['reward']['default'];
+        $pps_reward = $this->config['pps']['reward']['default_mm'];
       }
     }
     return round($pps_reward / (pow(2, $this->config['target_bits']) * $dDifficulty), 12);
