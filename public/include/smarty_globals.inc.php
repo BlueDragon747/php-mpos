@@ -64,6 +64,7 @@ $aGlobal = array(
   'roundshares' => $aRoundShares,
   'roundshares_mm' => $aRoundShares_mm,
   'fees' => $config['fees'],
+  'fees_mm' => $config['fees_mm'],
   'confirmations' => $config['confirmations'],
   'reward' => $config['reward_type'] == 'fixed' ? $config['reward'] : $block->getAverageAmount(),
   'price' => $setting->getValue('price'),
@@ -94,6 +95,7 @@ $aGlobal = array(
     'txfee_manual' => $config['txfee_manual'],
     'txfee_auto' => $config['txfee_auto'],
     'payout_system' => $config['payout_system'],
+    'payout_system_mm' => $config['payout_system_mm'],
     'ap_threshold' => array(
       'min' => $config['ap_threshold']['min'],
       'max' => $config['ap_threshold']['max']
