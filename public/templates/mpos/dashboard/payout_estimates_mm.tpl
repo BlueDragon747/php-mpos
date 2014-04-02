@@ -2,7 +2,7 @@
          <tr>
            <td colspan="2"><b><u>{$GLOBAL.config.currency_mm} Estimates</u></b></td>
          </tr>
-{if $GLOBAL.config.payout_system != 'pps'}
+{if $GLOBAL.config.payout_system_mm != 'pps'}
          <tr>
            <td><b>Block</b></td>
            <td id="b-block" class="right">{$GLOBAL.userdata.estimates_mm.block|number_format:"8"}</td>
