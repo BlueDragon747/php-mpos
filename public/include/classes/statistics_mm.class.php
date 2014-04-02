@@ -825,7 +825,6 @@ class Statistics_mm extends Base {
       // Hack so we can use this method for PPS estimates too
       // value1 = shares/s
       // value2 = avg share difficulty
-
       if (@$value1 > 0 && @$value2 > 0) {
         $hour = 60 * 60;
         $pps = $value1 * $value2 * $ppsvalue;
