@@ -157,16 +157,8 @@ if (@$_SESSION['USERDATA']['id']) {
         $aGlobal['pplns']['target'] = $iAvgBlockShares;
       }
     }
-    $aGlobal['pplns']['target_mm'] = $config['pplns']['shares']['default'];
-    if ($aLastBlock_mm = $block_mm->getLast()) {
-      if ($iAvgBlockShares_mm = round($block_mm->getAvgBlockShares($aLastBlock_mm['height'], $config['pplns']['blockavg']['blockcount']))) {
-        $aGlobal['pplns']['target_mm'] = $iAvgBlockShares_mm;
-      }
-    }
     $aEstimates = $statistics->getUserEstimates($aRoundShares, $aGlobal['userdata']['shares'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
     $aGlobal['userdata']['estimates'] = $aEstimates;
-    $aEstimates_mm = $statistics_mm->getUserEstimates($aRoundShares_mm, $aGlobal['userdata']['shares_mm'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
-    $aGlobal['userdata']['estimates_mm'] = $aEstimates_mm;
     break;
   case 'pps':
     $aGlobal['userdata']['pps']['unpaidshares'] = $statistics->getUserUnpaidPPSShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id'));
@@ -178,12 +170,22 @@ if (@$_SESSION['USERDATA']['id']) {
   }
 
   switch ($config['payout_system_mm']) {
+  case 'pplns':
+    $aGlobal['pplns']['target_mm'] = $config['pplns']['shares']['default'];
+    if ($aLastBlock_mm = $block_mm->getLast()) {
+      if ($iAvgBlockShares_mm = round($block_mm->getAvgBlockShares($aLastBlock_mm['height'], $config['pplns']['blockavg']['blockcount']))) {
+        $aGlobal['pplns']['target_mm'] = $iAvgBlockShares_mm;
+      }
+    }
+    $aEstimates_mm = $statistics_mm->getUserEstimates($aRoundShares_mm, $aGlobal['userdata']['shares_mm'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees']);
+    $aGlobal['userdata']['estimates_mm'] = $aEstimates_mm;
+    break;
   case 'pps':
     $aGlobal['userdata']['pps_mm']['unpaidshares'] = $statistics_mm->getUserUnpaidPPSShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id'));
     $aGlobal['ppsvalue_mm'] = number_format($statistics_mm->getPPSValue(), 12);
     $aGlobal['poolppsvalue_mm'] = $aGlobal['ppsvalue_mm'] * pow(2, $config['difficulty'] - 16);
     $aGlobal['userdata']['sharedifficulty_mm'] = $statistics_mm->getUserShareDifficulty($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
-    //$aGlobal['userdata']['estimates_mm'] = $statistics_mm->getUserEstimates($aGlobal['userdata']['sharerate'], $aGlobal['userdata']['sharedifficulty_mm'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees'], $statistics_mm->getPPSValue());
+    $aGlobal['userdata']['estimates_mm'] = $statistics_mm->getUserEstimates($aGlobal['userdata']['sharerate'], $aGlobal['userdata']['sharedifficulty_mm'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees'], $aGlobal['ppsvalue_mm']);
     break;
   }
 
