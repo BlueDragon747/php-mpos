@@ -7,14 +7,25 @@ $aMonitorCrons = array('statistics','payouts', 'payouts_mm','token_cleanup','arc
 switch ($config['payout_system']) {
 case 'pplns':
     $aMonitorCrons[] = $config['payout_system'] . '_payout';
-    $aMonitorCrons[] = $config['payout_system'] . '_payout_mm';
       break;
 case 'pps':
     $aMonitorCrons[] = $config['payout_system'] . '_payout';
-    $aMonitorCrons[] = $config['payout_system'] . '_payout_mm';
       break;
 case 'prop':
     $aMonitorCrons[] = 'proportional_payout';
+      break;
+}
+
+switch ($config['payout_system_mm']) {
+case 'pplns':
+    $aMonitorCrons[] = $config['payout_system_mm'] . '_payout_mm';
+      break;
+case 'pps':
+    $aMonitorCrons[] = 'findblock_mm_multi';
+    $aMonitorCrons[] = $config['payout_system_mm'] . '_payout_mm_multi';
+      break;
+case 'prop':
     $aMonitorCrons[] = 'proportional_payout_mm';
       break;
 }
+
