@@ -183,8 +183,8 @@ if (@$_SESSION['USERDATA']['id']) {
     $aGlobal['userdata']['estimates_mm'] = $aEstimates_mm;
     break;
   case 'pps':
-    $aGlobal['userdata']['pps_mm']['unpaidshares'] = $statistics_mm->getUserUnpaidPPSShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id'));
-    $aGlobal['ppsvalue_mm'] = number_format($statistics_mm->getPPSValue(), 12);
+    $aGlobal['userdata']['pps_mm']['unpaidshares'] = $statistics_mm->getUserUnpaidPPSShares($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id'], $setting->getValue('pps_last_share_id_mm'));
+    $aGlobal['ppsvalue_mm'] = number_format($statistics_mm->getPPSValueExt(), 12);
     $aGlobal['poolppsvalue_mm'] = $aGlobal['ppsvalue_mm'] * pow(2, $config['difficulty'] - 16);
     $aGlobal['userdata']['sharedifficulty_mm'] = $statistics_mm->getUserShareDifficulty($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
     $aGlobal['userdata']['estimates_mm'] = $statistics_mm->getUserEstimates($aGlobal['userdata']['sharerate'], $aGlobal['userdata']['sharedifficulty_mm'], $aGlobal['userdata']['donate_percent'], $aGlobal['userdata']['no_fees'], $aGlobal['ppsvalue_mm']);

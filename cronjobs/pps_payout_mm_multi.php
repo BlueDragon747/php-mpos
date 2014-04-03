@@ -70,7 +70,7 @@ $log->logInfo("\tPPS value: " . $pps_value);
 
 // Find our last share accounted and last inserted share for PPS calculations
 
-if (!$iPreviousShareId = $setting->getValue('pps_last_share_id')) {
+if (!$iPreviousShareId = $setting->getValue('pps_last_share_id_mm')) {
   $log->logError("Failed to fetch Previous Share ID. ERROR: " . $setting->getCronError());
 }
 $log->logInfo("\tPPS Last Share ID: " . $iPreviousShareId); 
@@ -140,7 +140,7 @@ foreach ($aAccountShares as $aData) {
 
 // Store our last inserted ID for the next run
 $log->logInfo("\tFetching Last Share ID...");
-if (!$setting->setValue('pps_last_share_id', $iLastShareId)) {
+if (!$setting->setValue('pps_last_share_id_mm', $iLastShareId)) {
   $log->logError("Failed to fetch Last Share ID. ERROR: " . $setting->getCronError());
 }
 

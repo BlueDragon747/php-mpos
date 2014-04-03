@@ -958,6 +958,30 @@ class Statistics_mm extends Base {
     return round($pps_reward / (pow(2, $this->config['target_bits']) * $dDifficulty), 12);
   }
 
+  public function getPPSValueExt() {
+    // Fetch RPC difficulty
+    if ($this->bitcoin->can_connect() === true) {
+      $dDifficulty = $this->bitcoin->getdifficulty();
+    } else {
+      $dDifficulty = 1;
+    }
+
+    if ($this->config['pps']['reward']['type'] == 'blockavg' && $this->block->getBlockCount() > 0) {
+      $pps_reward = round($this->block->getAvgBlockReward($this->config['pps']['blockavg']['blockcount']));
+    } else {
+      if ($this->config['pps']['reward']['type'] == 'block') {
+        if ($aLastBlock = $this->block->getLast()) {
+          $pps_reward = $aLastBlock['amount'];
+        } else {
+          $pps_reward = $this->config['pps']['reward']['default_mm'];
+        }
+      } else {
+        $pps_reward = $this->config['pps']['reward']['default_mm'];
+      }
+    }
+    return round($pps_reward / (pow(2, 32 - $this->config['target_bits']) * $dDifficulty), 12);
+  }
+
   /**
    * Get all currently active users in the past 2 minutes
    * @param interval int Time in seconds to fetch shares from
