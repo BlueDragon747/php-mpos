@@ -10,7 +10,8 @@
 PHP_BIN=$( which php )
 
 # List of cruns to execute
-CRONS="findblock.php findblock_mm.php pplns_payout.php pplns_payout_mm.php blockupdate.php blockupdate_mm.php payouts.php payouts_mm.php notifications.php statistics.php token_cleanup.php archive_cleanup.php archive_cleanup_mm.php liquid_payout.php"
+# findblock_mm_strict.php for pps, findblock_mm.php for pplns
+CRONS="findblock.php findblock_mm_strict.php pplns_payout.php pps_payout_mm.php blockupdate.php blockupdate_mm.php payouts.php payouts_mm.php notifications.php statistics.php token_cleanup.php archive_cleanup.php archive_cleanup_mm.php liquid_payout.php"
 
 # Output additional runtime information
 VERBOSE="0"
@@ -21,7 +22,7 @@ BASEPATH="/tmp"
 # Subfolder for PIDFILE, so it's path will be unique in a multipool server.
 # Path relative to BASEPATH.
 # Eg. SUBFOLDER="LTC"
-SUBFOLDER="FSC_LTC"
+SUBFOLDER="FSC_DOGE"
 
 ################################################################
 #                                                              #

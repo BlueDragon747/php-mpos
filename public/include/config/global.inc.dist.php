@@ -50,6 +50,11 @@ $config['wallet']['host'] = 'localhost:19334';
 $config['wallet']['username'] = 'testnet';
 $config['wallet']['password'] = 'testnet';
 
+$config['wallet_mm']['type'] = 'http';
+$config['wallet_mm']['host'] = 'localhost:8066';
+$config['wallet_mm']['username'] = 'testnet_mm';
+$config['wallet_mm']['password'] = 'testnet_mm';
+
 /**
  * Cold Wallet / Liquid Assets
  *  Automatically send liquid assets to a cold wallet
@@ -64,8 +69,8 @@ $config['coldwallet']['threshold'] = 5;
  *  Shown to users in the 'Getting Started' section
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-getting-started
  **/
-$config['gettingstarted']['coinname'] = 'Litecoin';
-$config['gettingstarted']['coinurl'] = 'http://www.litecoin.org';
+$config['gettingstarted']['coinname'] = 'Fusioncoin';
+$config['gettingstarted']['coinurl'] = 'http://pool.fusioncoin.org';
 $config['gettingstarted']['stratumurl'] = '';
 $config['gettingstarted']['stratumport'] = '3333';
 
@@ -76,7 +81,7 @@ $config['gettingstarted']['stratumport'] = '3333';
  **/
 $config['price']['url'] = 'https://btc-e.com';
 $config['price']['target'] = '/api/2/ltc_usd/ticker';
-$config['price']['currency'] = 'USD';
+$config['price']['currency'] = null;
 
 /**
  * Automatic Payout Thresholds
@@ -86,6 +91,8 @@ $config['price']['currency'] = 'USD';
 $config['ap_threshold']['min'] = 1;
 $config['ap_threshold']['max'] = 250;
 
+$config['ap_threshold_mm']['min'] = 1;
+$config['ap_threshold_mm']['max'] = 250;
 /**
  * Donation thresholds
  *  Minimum donation amount in percent
@@ -105,15 +112,16 @@ $config['accounts']['invitations']['count'] = 5;
  *  Shorthand name for the currency
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-currency
  */
-$config['currency'] = 'LTC';
+$config['currency'] = 'DOGE';
+$config['currency_mm'] = 'FSC';
 
 /**
  * Coin Target
  *  Target time for coins to be generated
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-coin-target
  **/
-$config['cointarget'] = '150';
-
+$config['cointarget'] = '60';
+$config['cointarget_mm'] = '240';
 /**
  * Coin Diff Change
  *  Amount of blocks between difficulty changes
@@ -126,8 +134,8 @@ $config['coindiffchangetarget'] = 2016;
  *  Fees applied to transactions
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-tx-fees
  **/
-$config['txfee_auto'] = 0.1;
-$config['txfee_manual'] = 0.1;
+$config['txfee_auto'] = 0.001;
+$config['txfee_manual'] = 0.001;
 
 /**
  * Block Bonus
@@ -141,8 +149,10 @@ $config['block_bonus'] = 0;
  * Payout System
  *  Payout system chosen
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-payout-system
+ *  prop  pplns
  **/
-$config['payout_system'] = 'prop';
+$config['payout_system'] = 'pplns';
+$config['payout_system_mm'] = 'pps';
 
 /**
  * Round Purging
@@ -166,7 +176,8 @@ $config['archive']['maxage'] = 60 * 24;
  *  Fees applied to users
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-pool-fees
  */
-$config['fees'] = 0;
+$config['fees'] = 1;
+$config['fees_mm'] = 4;
 
 /**
  * PPLNS
@@ -180,7 +191,7 @@ $config['pplns']['reverse_payout'] = false;
 $config['pplns']['dynamic']['percent'] = 30;
 
 /**
- * Difficulty
+ * Difficulty  sha256d: 16  scrypt: 20
  *  Difficulty setting for stratum/pushpool
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-pool-target-difficulty
  */
@@ -192,7 +203,8 @@ $config['difficulty'] = 20;
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-reward-settings
  **/
 $config['reward_type'] = 'block';
-$config['reward'] = 50;
+$config['reward'] = 1000;
+$config['reward_mm'] = 1000;
 
 /**
  * Confirmations
@@ -207,7 +219,8 @@ $config['network_confirmations'] = 120;
  *  Pay Per Share configuration details
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-pps-settings
  **/
-$config['pps']['reward']['default'] = 50;
+$config['pps']['reward']['default'] = 1000;
+$config['pps']['reward']['default_mm'] = 1000;
 $config['pps']['reward']['type'] = 'blockavg';
 $config['pps']['blockavg']['blockcount'] = 10;
 

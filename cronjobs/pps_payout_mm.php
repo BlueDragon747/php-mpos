@@ -104,7 +104,6 @@ foreach ($aAccountShares as $aData) {
   // MPOS uses a base difficulty setting to avoid showing weightened shares
   // Since we need weightened shares here, we go back to the proper value for payouts
   $aData['payout'] = round($aData['valid'] * pow(2, ($config['difficulty'] - 16)) * $pps_value, 8);
-  $aData['payout'] = round($aData['payout'] * 99.1 / 100, 8);
 
   // Defaults
   $aData['fee' ] = 0;

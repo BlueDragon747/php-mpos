@@ -21,8 +21,8 @@ case 'pplns':
     $aMonitorCrons[] = $config['payout_system_mm'] . '_payout_mm';
       break;
 case 'pps':
-    $aMonitorCrons[] = 'findblock_mm_multi';
-    $aMonitorCrons[] = $config['payout_system_mm'] . '_payout_mm_multi';
+    $aMonitorCrons[] = 'findblock_mm_strict';
+    $aMonitorCrons[] = $config['payout_system_mm'] . '_payout_mm';
       break;
 case 'prop':
     $aMonitorCrons[] = 'proportional_payout_mm';
