@@ -13,12 +13,6 @@ if you wish to run your pool with it. Testing pools are much appreciated though!
 Donations
 =========
 
-Donations to this project are going directly to [TheSerapher](https://github.com/TheSerapher), the original author of this project:
-
-* LTC address: `Lge95QR2frp9y1wJufjUPCycVsg5gLJPW8`
-* BTC address: `1HuYK6WPU8o3yWCrAaADDZPRpL5QiXitfv`
-* DOGE Address: `D6YtvxFGBmaD8Yq3i8LZsBQVPvCbZwCDzF`
-* Cryptsy Trade Key: `6ff7292142463b7b80cbbbdfc52334ba89727b11`
 
 Website Footer
 ==============
@@ -70,8 +64,9 @@ for full information.
 * MySQL Server
  * mysql-server
 * memcached
-* stratum-mining
-* litecoind
+* eloipool_Blakecoin
+* Blakecoind
+* + Aux coins
 
 Features
 ========
