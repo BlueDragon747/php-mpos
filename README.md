@@ -8,6 +8,8 @@ MPOS is a web based Mining Portal for various crypto currencies. It was created 
 I do not recommend using this for a live setup as of yet. Wait for the later Release Candidate
 if you wish to run your pool with it. Testing pools are much appreciated though!
 
+**NOTE**: This is a merge mine branch for the Blake merge mine pools by BlueDragon747
+
 Donations
 =========
 
