@@ -24,17 +24,6 @@ Donors
 
 These people have supported this project with a donation:
 
-* [obigal](https://github.com/obigal)
-* [vias](https://github.com/vias79)
-* [WKNiGHT](https://github.com/WKNiGHT-)
-* [ZC](https://github.com/zccopwrx)
-* Nutnut
-* Caberhagen (http://litecoin-pool.ch)
-* Mining4All (https://www.mining4all.eu/)
-* [xisi](https://github.com/xisi)
-* [PCFiL](https://github.com/PCFiL)
-* [rog1121](https://github.com/rog1121)(https://rapidhash.net)
-* [Wow, Much Pool](http://http://www.wowmuchpool.com/)
 
 Pools running MPOS
 ==================
@@ -44,8 +33,8 @@ You can find a list of active pools [here](https://github.com/TheSerapher/php-mp
 Requirements
 ============
 
-This setup has been tested on Ubuntu 12.04, Ubuntu 13.04 and CentOS.
-It should also work on any related distribution (RHEL, Debian).
+This setup has been tested on Ubuntu 12.04, It should also work on any related distribution 
+(Ubuntu 13.04, CentOS, RHEL, Debian).
 
 Be aware that `MPOS` is **only** for pooled mining. Solo Mining is not
 supported. They will never match an upstream share, solo miners do not create
@@ -114,6 +103,7 @@ The following feature have been implemented so far:
 * Support for various coins via config
  * All scrypt coins
  * All sha256d coins
+ * All Blake-256 coins *8 round variant
 
 Installation
 ============
@@ -180,6 +170,7 @@ Developers:
 * [iAmShorty](https://github.com/iAmShorty)
 * [rog1121](https://github.com/rog1121)
 * [neozonz](https://github.com/neozonz)
+* [BlueDragon747](https://github.com/BlueDragon747)
 
 License and Author
 ==================
