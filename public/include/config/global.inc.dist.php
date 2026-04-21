@@ -172,6 +172,26 @@ $config['currency_mm6'] = 'unused2';
 
 
 /**
+ * Address formats (SegWit / bech32 + legacy base58 version bytes)
+ *
+ * Used by Bitcoin::checkAddress() as a local fallback. MPOS's primary
+ * address validation still goes through BitcoinClient::validateaddress()
+ * (the coin daemon's RPC), but this config keeps the fallback path
+ * bech32-aware so offline validation works for Blakecoin.
+ *
+ * Blakecoin 0.15.21 networks:
+ *   - mainnet HRP  'blc'   P2PKH 25/26  P2SH 22
+ *   - testnet HRP  'tblc'  P2PKH 142    P2SH 170
+ *   - regtest HRP  'rblc'  P2PKH 26     P2SH 7
+ *   - devnet  HRP  'dblk'  P2PKH 65     P2SH 120
+ * Default ships mainnet + testnet only; add others as needed.
+ */
+$config['segwit_hrps']         = array('blc', 'tblc');
+$config['address_versions']    = array(25, 26, 142);
+$config['address_versions_p2sh'] = array(22, 170);
+
+
+/**
  * Coin Target
  *  Target time for coins to be generated
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-coin-target

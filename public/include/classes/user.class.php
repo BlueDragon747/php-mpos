@@ -1,6 +1,8 @@
 <?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
+require_once(INCLUDE_DIR . "/lib/bech32.php");
+
 class User extends Base {
   protected $table = 'accounts';
   private $userID = false;
@@ -476,6 +478,21 @@ class User extends Base {
       if ($address != $this->getCoinAddress($userID) && $this->existsCoinAddress($address)) {
         $this->setErrorMessage('Address is already in use');
         return false;
+      }
+      // Defence-in-depth: if the string *looks* like bech32 for one of our
+      // configured HRPs, validate it locally via BIP173 before hitting the
+      // daemon. Non-bech32 strings (legacy base58) fall through to the
+      // daemon's validateaddress, which handles the Blake-256 checksum that
+      // PHP can't compute natively.
+      $hrps = isset($this->config['segwit_hrps']) && is_array($this->config['segwit_hrps'])
+        ? $this->config['segwit_hrps']
+        : array('blc', 'tblc');
+      if (strtolower($address) === $address && ($onepos = strrpos($address, '1')) !== false && $onepos > 0) {
+        $hrp = substr($address, 0, $onepos);
+        if (in_array($hrp, $hrps, true) && !Bech32::isValid($hrps, $address)) {
+          $this->setErrorMessage('Invalid coin address');
+          return false;
+        }
       }
       if ($this->bitcoin->can_connect() === true) {
         if (!$this->bitcoin->validateaddress($address)) {

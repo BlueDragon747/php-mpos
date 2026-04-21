@@ -25,28 +25,28 @@
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress" value="{$smarty.request.paymentAddress|default:$GLOBAL.userdata.coin_address|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress" value="{$smarty.request.paymentAddress|default:$GLOBAL.userdata.coin_address|escape}" size="70" maxlength="90" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress_mm|default:$GLOBAL.userdata.coin_address_mm|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress_mm|default:$GLOBAL.userdata.coin_address_mm|escape}" size="70" maxlength="90" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm1} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm1" value="{$smarty.request.paymentAddress_mm1|default:$GLOBAL.userdata.coin_address_mm1|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress_mm1" value="{$smarty.request.paymentAddress_mm1|default:$GLOBAL.userdata.coin_address_mm1|escape}" size="70" maxlength="90" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm3} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm3" value="{$smarty.request.paymentAddress_mm3|default:$GLOBAL.userdata.coin_address_mm3|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress_mm3" value="{$smarty.request.paymentAddress_mm3|default:$GLOBAL.userdata.coin_address_mm3|escape}" size="70" maxlength="90" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm4} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm4" value="{$smarty.request.paymentAddress_mm4|default:$GLOBAL.userdata.coin_address_mm4|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress_mm4" value="{$smarty.request.paymentAddress_mm4|default:$GLOBAL.userdata.coin_address_mm4|escape}" size="70" maxlength="90" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
         <label>{$GLOBAL.config.currency_mm5} Payment Address</label>
       <font size="2">Unused payment address no need to change!</font>
-        {nocache}<input type="text" name="paymentAddress_mm5" value="unused1" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+        {nocache}<input type="text" name="paymentAddress_mm5" value="unused1" size="70" maxlength="90" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
       <fieldset>
