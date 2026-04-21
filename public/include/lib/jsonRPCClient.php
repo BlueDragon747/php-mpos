@@ -102,19 +102,37 @@ class jsonRPCClient {
     // performs the HTTP POST
     // extract information from URL for proper authentication
     $url = parse_url($this->url);
+    
+    // Validate URL components
+    if (!$url || !isset($url['scheme']) || !isset($url['host']) || !isset($url['port'])) {
+      throw new Exception('Invalid RPC URL configuration');
+    }
+    
     $ch = curl_init($url['scheme'].'://'.$url['host'].':'.$url['port'].$url['path']);
+    if (!$ch) {
+      throw new Exception('Failed to initialize curl');
+    }
+    
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-type: application/json'));
     curl_setopt($ch, CURLOPT_USERPWD, $url['user'] . ":" . $url['pass']);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
+    // Set aggressive timeouts to prevent hanging
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1); // 1 second connection timeout
+    curl_setopt($ch, CURLOPT_TIMEOUT, 2); // 2 second total timeout
+    curl_setopt($ch, CURLOPT_NOSIGNAL, 1); // Prevent issues with signals
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); // Don't follow redirects
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification for speed
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    
     $response = curl_exec($ch);
     if ($this->debug) $this->debug_output[] = 'Response: ' . $response;
     $response = json_decode($response, true);
     $resultStatus = curl_getinfo($ch);
     if ($resultStatus['http_code'] != '200') {
       if ($resultStatus['http_code'] == '401') throw new Exception('RPC call did not return 200: Authentication failed');
-      throw new Exception('RPC call did not return 200: HTTP error: ' . $resultStatus['http_code']);
+      throw new Exception('RPC call did not return 200: HTTP error: ' . $resultStatus['http_code'] . ' - JSON Response: [' . @$response['error']['code'] . '] ' . @$response['error']['message']);
     }
     if (curl_errno($ch)) throw new Exception('RPC call failed: ' . curl_error($ch));
     curl_close($ch);

@@ -212,13 +212,12 @@ function _recaptcha_aes_pad($val) {
 /* Mailhide related code */
 
 function _recaptcha_aes_encrypt($val,$ky) {
-	if (! function_exists ("mcrypt_encrypt")) {
-		die ("To use reCAPTCHA Mailhide, you need to have the mcrypt php module installed.");
+	if (! function_exists ("openssl_encrypt")) {
+		die ("To use reCAPTCHA Mailhide, you need to have the openssl php module installed.");
 	}
-	$mode=MCRYPT_MODE_CBC;   
-	$enc=MCRYPT_RIJNDAEL_128;
 	$val=_recaptcha_aes_pad($val);
-	return mcrypt_encrypt($enc, $ky, $val, $mode, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0");
+	$iv = str_repeat("\0", 16);
+	return openssl_encrypt($val, 'AES-128-CBC', $ky, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $iv);
 }
 
 

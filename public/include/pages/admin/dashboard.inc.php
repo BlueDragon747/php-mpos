@@ -26,7 +26,7 @@ $cron_errors = 0;
 $cron_disabled = 0;
 foreach ($aMonitorCrons as $strCron) {
   $status = $monitoring->getStatus($strCron . '_status');
-  if ($status['value'] != 0)
+  if (isset($status['value']) && $status['value'] != 0)
     $cron_errors++;
   if ($monitoring->isDisabled($strCron) == 1)
     $cron_disabled++;
@@ -65,7 +65,7 @@ if (!$setting->getValue('disable_invitations')) {
 }
 
 // Wallet status
-$smarty->assign('WALLET_ERROR', $aGetInfo['errors']);
+$smarty->assign('WALLET_ERROR', isset($aGetInfo['errors']) ? $aGetInfo['errors'] : 'None');
 
 // Tempalte specifics
 $smarty->assign('VERSION', $version);

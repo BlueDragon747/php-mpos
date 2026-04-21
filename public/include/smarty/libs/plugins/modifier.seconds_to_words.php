@@ -7,7 +7,8 @@
  */
 
 function smarty_modifier_seconds_to_words($seconds) {
-  if ($seconds < 0) throw new Exception("Can't do negative numbers!");
+  // Handle negative numbers (e.g., during blockchain sync)
+  if ($seconds < 0) return "syncing...";
   if ($seconds == 0) return "zero seconds";
   if ($seconds < 1) return "less than a second";
 

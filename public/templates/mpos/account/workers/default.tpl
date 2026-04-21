@@ -45,7 +45,7 @@
       </thead>
       <tbody>
         {nocache}
-          {section worker $WORKERS}
+          {section name=worker loop=$WORKERS}
           {assign var="username" value="."|escape|explode:$WORKERS[worker].username:2} 
         <tr>
           <td align="left"{if $WORKERS[worker].hashrate > 0} style="color: orange"{/if}>{$username.0|escape}.<input name="data[{$WORKERS[worker].id}][username]" value="{$username.1|escape}" size="10" required/></td>

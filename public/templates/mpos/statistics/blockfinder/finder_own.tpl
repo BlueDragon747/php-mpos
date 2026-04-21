@@ -12,7 +12,7 @@
     </thead>
     <tbody>
 {assign var=rank value=1}
-{section block $BLOCKSSOLVEDBYWORKER}
+{section name=block loop=$BLOCKSSOLVEDBYWORKER}
       <tr class="{cycle values="odd,even"}">
         <td align="center">{$rank++}</td>
         <td>{$BLOCKSSOLVEDBYWORKER[block].finder|default:"unknown/deleted"|escape}</td>

@@ -130,3 +130,48 @@ if ($aTmpBlock_mm = $block_mm->getLast()) {
 $memcache_mm->setRound($iRoundId_mm);
 $memcache_mm->flag = 1;
 
+$memcache_mm1 = new StatsCache($config, $debug);
+$memcache_mm1->addServer($config['memcache']['host'], $config['memcache']['port']);
+// Now we can set our additional key prefix
+if ($aTmpBlock_mm1 = $block_mm1->getLast()) {
+  $iRoundId_mm1 = $aTmpBlock_mm1['id'];
+} else {
+  $iRoundId_mm1 = 0;
+}
+$memcache_mm1->setRound($iRoundId_mm1);
+$memcache_mm1->flag = 1;
+
+$memcache_mm3 = new StatsCache($config, $debug);
+$memcache_mm3->addServer($config['memcache']['host'], $config['memcache']['port']);
+// Now we can set our additional key prefix
+if ($aTmpBlock_mm3 = $block_mm3->getLast()) {
+  $iRoundId_mm3 = $aTmpBlock_mm3['id'];
+} else {
+  $iRoundId_mm3 = 0;
+}
+$memcache_mm3->setRound($iRoundId_mm3);
+$memcache_mm3->flag = 1;
+
+$memcache_mm4 = new StatsCache($config, $debug);
+$memcache_mm4->addServer($config['memcache']['host'], $config['memcache']['port']);
+// Now we can set our additional key prefix
+if ($aTmpBlock_mm4 = $block_mm4->getLast()) {
+  $iRoundId_mm4 = $aTmpBlock_mm4['id'];
+} else {
+  $iRoundId_mm4 = 0;
+}
+$memcache_mm4->setRound($iRoundId_mm4);
+$memcache_mm4->flag = 1;
+
+$memcache_mm5 = new StatsCache($config, $debug);
+$memcache_mm5->addServer($config['memcache']['host'], $config['memcache']['port']);
+// Now we can set our additional key prefix
+if ($aTmpBlock_mm5 = $block_mm5->getLast()) {
+  $iRoundId_mm5 = $aTmpBlock_mm5['id'];
+} else {
+  $iRoundId_mm5 = 0;
+}
+$memcache_mm5->setRound($iRoundId_mm5);
+$memcache_mm5->flag = 1;
+
+

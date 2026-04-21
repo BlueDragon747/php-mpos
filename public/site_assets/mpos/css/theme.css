@@ -1,0 +1,296 @@
+/* Theme CSS Variables - Light/Dark Mode Support */
+
+/* Default Light Theme */
+:root {
+  /* Background Colors */
+  --bg-primary: #F8F8F8;
+  --bg-secondary: #F1F1F4;
+  --bg-tertiary: #E0E0E3;
+  --bg-card: #ffffff;
+  --bg-header: #222222;
+  --bg-fieldset: #F6F6F6;
+  --bg-input: #ffffff;
+  --bg-module-header: #F1F1F4;
+  --bg-module-footer: #F1F1F4;
+  --bg-table-header: #F1F1F4;
+  --bg-table-row-alt: #f9f9f9;
+  --bg-success: #e6efc2;
+  --bg-error: #ff9473;
+  --bg-warning: #ffce9c;
+  --bg-info: #92CCA6;
+  
+  /* Text Colors */
+  --text-primary: #666666;
+  --text-secondary: #44474F;
+  --text-heading: #1F1F20;
+  --text-light: #ffffff;
+  --text-link: #6ba7b9;
+  --text-link-hover: #77BACE;
+  --text-muted: #999999;
+  --text-breadcrumb: #44474F;
+  --text-breadcrumb-current: #9E9E9E;
+  
+  /* Border Colors */
+  --border-primary: #9BA0AF;
+  --border-secondary: #ccc;
+  --border-input: #BBBBBB;
+  --border-success: #c6d880;
+  --border-error: #ff6342;
+  --border-warning: #ffb573;
+  
+  /* Accent Colors */
+  --accent-primary: #6ba7b9;
+  --accent-secondary: #77BACE;
+  --accent-focus: #ADDCE6;
+  --accent-success: #264409;
+  --accent-up: #92CCA6;
+  --accent-down: #FF7878;
+  --accent-unchecked: #7EA7D8;
+  --accent-paused: #FFF79A;
+  
+  /* Shadow Colors */
+  --shadow-text-light: #fff;
+  --shadow-text-dark: #000;
+  
+  /* Chart Colors */
+  --chart-primary: #5296c4;
+  --chart-secondary: #2d6590;
+  
+  /* Transition for smooth theme switching */
+  --transition-duration: 0.3s;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+  /* Background Colors */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #252525;
+  --bg-card: #2a2a2a;
+  --bg-header: #0d0d0d;
+  --bg-fieldset: #333333;
+  --bg-input: #3a3a3a;
+  --bg-module-header: #2d2d2d;
+  --bg-module-footer: #2d2d2d;
+  --bg-table-header: #2d2d2d;
+  --bg-table-row-alt: #333333;
+  --bg-success: #2d4a1e;
+  --bg-error: #5c2a2a;
+  --bg-warning: #5c3d1f;
+  --bg-info: #1e4a3a;
+  
+  /* Text Colors */
+  --text-primary: #d0d0d0;
+  --text-secondary: #b0b0b0;
+  --text-heading: #f0f0f0;
+  --text-light: #ffffff;
+  --text-link: #6ba7b9;
+  --text-link-hover: #8cc8d9;
+  --text-muted: #808080;
+  --text-breadcrumb: #b0b0b0;
+  --text-breadcrumb-current: #808080;
+  
+  /* Border Colors */
+  --border-primary: #404040;
+  --border-secondary: #505050;
+  --border-input: #505050;
+  --border-success: #3d5c2a;
+  --border-error: #8c3a3a;
+  --border-warning: #8c5a2f;
+  
+  /* Accent Colors */
+  --accent-primary: #6ba7b9;
+  --accent-secondary: #8cc8d9;
+  --accent-focus: #4a8ca0;
+  --accent-success: #8cb966;
+  --accent-up: #4a9a6a;
+  --accent-down: #cc5a5a;
+  --accent-unchecked: #5a8acc;
+  --accent-paused: #ccbf5a;
+  
+  /* Shadow Colors */
+  --shadow-text-light: #000;
+  --shadow-text-dark: #000;
+  
+  /* Chart Colors */
+  --chart-primary: #6ba7b9;
+  --chart-secondary: #4a8ca0;
+}
+
+/* Apply transitions to all color properties for smooth theme switching */
+html {
+  transition: background-color var(--transition-duration), color var(--transition-duration);
+}
+
+body {
+  transition: background-color var(--transition-duration), color var(--transition-duration);
+}
+
+*, *::before, *::after {
+  transition: background-color var(--transition-duration), 
+              color var(--transition-duration), 
+              border-color var(--transition-duration), 
+              box-shadow var(--transition-duration);
+}
+
+/* Status indicators - use CSS variables */
+span.ur-status-up {
+  background: var(--accent-up);
+  color: var(--accent-success);
+  border-color: var(--border-success);
+}
+
+span.ur-status-down {
+  background: var(--accent-down);
+  color: var(--accent-success);
+  border-color: var(--border-error);
+}
+
+span.ur-status-unchecked {
+  background: var(--accent-unchecked);
+  color: var(--accent-success);
+  border-color: var(--border-primary);
+}
+
+span.ur-status-paused {
+  background: var(--accent-paused);
+  color: var(--accent-success);
+  border-color: var(--border-secondary);
+}
+
+span.confirmed {
+  background: var(--bg-success);
+  color: var(--accent-success);
+  border-color: var(--border-success);
+}
+
+span.orphan {
+  background: var(--bg-error);
+  color: var(--accent-success);
+  border-color: var(--border-error);
+}
+
+span.unconfirmed {
+  background: var(--bg-warning);
+  color: var(--accent-success);
+  border-color: var(--border-warning);
+}
+
+/* Theme Toggle Sidebar Item - Match other sidebar items exactly */
+#sidebar li.theme-toggle-item {
+  list-style: none;
+  margin: 0 0 0 12%;
+  padding: 0;
+}
+
+#sidebar li.theme-toggle-item a {
+  color: var(--text-primary);
+  padding-left: 0;
+  text-decoration: none;
+  display: inline-block;
+  height: 17px;
+  line-height: 17px;
+  text-shadow: 0 1px 0 var(--shadow-text-light);
+  margin: 2px 0;
+}
+
+/* Emoji icon via ::before - Match Fontello icon spacing exactly */
+#sidebar li.theme-toggle-item a::before {
+  content: '🌙';
+  display: inline-block;
+  width: 1em;
+  margin-right: 1.4em;
+  margin-left: 0;
+  text-align: center;
+  font-style: normal;
+  font-weight: normal;
+  text-decoration: inherit;
+  line-height: 1em;
+  speak: none;
+}
+
+/* Light mode icon */
+[data-theme="dark"] #sidebar li.theme-toggle-item a::before {
+  content: '☀️';
+}
+
+/* Horizontal Rule Styling */
+hr {
+  border: none;
+  border-top: 1px solid var(--border-secondary);
+  margin: 10px 0;
+}
+
+#sidebar hr {
+  background: none;
+  border-top: 1px solid var(--border-secondary);
+  height: 1px;
+}
+
+/* jqplot Canvas Dark Mode Support - DEFAULT BEHAVIOR */
+.jqplot-target {
+  background-color: transparent !important;
+}
+
+.jqplot-event-canvas {
+  background-color: transparent !important;
+}
+
+[data-theme="dark"] .jqplot-axis,
+[data-theme="dark"] .jqplot-axis-tick,
+[data-theme="dark"] .jqplot-xaxis-tick,
+[data-theme="dark"] .jqplot-yaxis-tick {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .jqplot-xaxis-label,
+[data-theme="dark"] .jqplot-yaxis-label {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] table.jqplot-table-legend,
+[data-theme="dark"] table.jqplot-cursor-legend {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-primary);
+}
+
+/* Input Fields - Dark Mode Styling for Better Readability */
+[data-theme="dark"] input[type=text],
+[data-theme="dark"] input[type=email],
+[data-theme="dark"] input[type=password],
+[data-theme="dark"] input[type=number],
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: #2a2a2a;
+  color: #f0f0f0;
+  border-color: #505050;
+}
+
+/* Disabled/Read-only inputs - darker background */
+[data-theme="dark"] input[type=text]:disabled,
+[data-theme="dark"] input[type=text][readonly],
+[data-theme="dark"] input[type=email]:disabled,
+[data-theme="dark"] input[type=email][readonly],
+[data-theme="dark"] input[type=password]:disabled,
+[data-theme="dark"] input[type=password][readonly],
+[data-theme="dark"] input[type=number]:disabled,
+[data-theme="dark"] input[type=number][readonly],
+[data-theme="dark"] select:disabled,
+[data-theme="dark"] textarea:disabled {
+  background-color: #1f1f1f;
+  color: #e0e0e0;
+  border-color: #404040;
+}
+
+/* Focus states */
+[data-theme="dark"] input[type=text]:focus,
+[data-theme="dark"] input[type=email]:focus,
+[data-theme="dark"] input[type=password]:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  background-color: #333333;
+  color: #ffffff;
+  border-color: var(--accent-secondary);
+}
+

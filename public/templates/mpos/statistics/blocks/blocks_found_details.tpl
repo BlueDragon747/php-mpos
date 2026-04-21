@@ -20,7 +20,7 @@
 {assign var=totalexpectedshares value=0}
 {assign var=totalshares value=0}
 {assign var=pplnsshares value=0}
-{section block $BLOCKSFOUND}
+{section name=block loop=$BLOCKSFOUND}
       {assign var="totalshares" value=$totalshares+$BLOCKSFOUND[block].shares}
       {assign var="count" value=$count+1}
       {if $GLOBAL.config.payout_system == 'pplns'}{assign var="pplnsshares" value=$pplnsshares+$BLOCKSFOUND[block].pplns_shares}{/if}

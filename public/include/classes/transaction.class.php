@@ -218,7 +218,7 @@ class Transaction extends Base {
         ( t.type = 'Donation' AND b.confirmations >= " . $this->config['confirmations'] . " ) OR
         t.type = 'Donation_PPS'
       )
-      GROUP BY a.username
+      GROUP BY a.username, a.is_anonymous, a.donate_percent
       ORDER BY donation DESC
       ");
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
@@ -332,6 +332,54 @@ class Transaction extends Base {
   public function createDebitAPRecord($account_id, $coin_address, $amount) {
     return $this->createDebitRecord($account_id, $coin_address, $amount, 'Debit_AP');
   }
+  
+  /**
+   * Create a payout debit record WITHOUT requiring balance to be 0
+   * Used for safe payout flow where RPC is called first
+   * @param account_id int Account ID
+   * @param coin_address string Coin Address
+   * @param amount float Amount to debit
+   * @param type string Transaction type (Debit_AP or Debit_MP)
+   * @return int Transaction ID or false
+   **/
+  public function createPayoutDebitRecord($account_id, $coin_address, $amount, $type) {
+    $type == 'Debit_MP' ? $txfee = $this->config['txfee_manual'] : $txfee = $this->config['txfee_auto'];
+    
+    // Add Debit record
+    if (!$this->addTransaction($account_id, $amount, $type, NULL, $coin_address, NULL)) {
+      $this->setErrorMessage('Failed to create ' . $type . ' transaction record in database for account ' . $account_id . ': ' . $this->getError());
+      return false;
+    }
+    
+    // Fetch the inserted record ID so we can return this at the end
+    $transaction_id = $this->insert_id;
+    
+    // Add TXFee record
+    if ($txfee > 0) {
+      if (!$this->addTransaction($account_id, $txfee, 'TXFee', NULL, $coin_address)) {
+        $this->setErrorMessage('Failed to create TXFee transaction record in database: ' . $this->getError());
+        return false;
+      }
+    }
+    
+    // Mark transactions archived
+    if (!$this->setArchived($account_id, $this->insert_id)) {
+      $this->setErrorMessage('Failed to mark transactions <= #' . $this->insert_id . ' as archived. ERROR: ' . $this->getError());
+      return false;
+    }
+    
+    // Notify user via mail
+    $aMailData['email'] = $this->user->getUserEmailById($account_id);
+    $aMailData['subject'] = $type . ' Completed';
+    $aMailData['amount'] = $amount - $txfee;
+    if (!$this->notification->sendNotification($account_id, 'payout', $aMailData)) {
+      $this->setErrorMessage('Failed to send notification email to users address: ' . $aMailData['email'] . 'ERROR: ' . $this->notification->getCronError());
+      // Don't return false here - email failure shouldn't stop the payout
+    }
+    
+    return $transaction_id;
+  }
+  
   private function createDebitRecord($account_id, $coin_address, $amount, $type) {
     $type == 'Debit_MP' ? $txfee = $this->config['txfee_manual'] : $txfee = $this->config['txfee_auto'];
     // Add Debit record
@@ -342,9 +390,11 @@ class Transaction extends Base {
     // Fetch the inserted record ID so we can return this at the end
     $transaction_id = $this->insert_id;
     // Add TXFee record
-    if (!$this->addTransaction($account_id, $txfee, 'TXFee', NULL, $coin_address)) {
-      $this->setErrorMessage('Failed to create TXFee transaction record in database: ' . $this->getError());
-      return false;
+    if ($txfee > 0) {
+      if (!$this->addTransaction($account_id, $txfee, 'TXFee', NULL, $coin_address)) {
+        $this->setErrorMessage('Failed to create TXFee transaction record in database: ' . $this->getError());
+        return false;
+      }
     }
     // Mark transactions archived
     if (!$this->setArchived($account_id, $this->insert_id)) {

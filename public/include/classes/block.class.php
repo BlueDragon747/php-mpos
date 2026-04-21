@@ -192,7 +192,7 @@ class Block extends Base {
    * @return bool
    **/
   public function setFinder($block_id, $account_id=NULL) {
-    $field = array( 'name' => 'account_id', 'value' => $account_id, 'type' => 'i' );
+    $field = array( 'name' => 'account_id', 'value' => $account_id, 'type' => 's' );
     return $this->updateSingle($block_id, $field);
   }
   
@@ -214,7 +214,7 @@ class Block extends Base {
    * @return bool
    **/
   public function setShareId($block_id, $share_id) {
-    $field = array( 'name' => 'share_id', 'value' => $share_id, 'type' => 'i');
+    $field = array( 'name' => 'share_id', 'value' => $share_id, 'type' => 's');
     return $this->updateSingle($block_id, $field);
   }
 
@@ -225,7 +225,7 @@ class Block extends Base {
    * @return bool
    **/
   public function setShares($block_id, $shares=NULL) {
-    $field = array( 'name' => 'shares', 'value' => $shares, 'type' => 'i');
+    $field = array( 'name' => 'shares', 'value' => $shares, 'type' => 's');
     return $this->updateSingle($block_id, $field);
   }
 

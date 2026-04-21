@@ -75,7 +75,7 @@
         </tr>
       </thead>
       <tbody style="font-size:12px;">
-{section transaction $TRANSACTIONS}
+{section name=transaction loop=$TRANSACTIONS}
         <tr class="{cycle values="odd,even"}">
           <td align="center">{$TRANSACTIONS[transaction].id}</td>
           <td>{$TRANSACTIONS[transaction].timestamp}</td>

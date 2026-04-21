@@ -32,6 +32,24 @@
         {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress_mm|default:$GLOBAL.userdata.coin_address_mm|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
       </fieldset>
       <fieldset>
+        <label>{$GLOBAL.config.currency_mm1} Payment Address</label>
+        {nocache}<input type="text" name="paymentAddress_mm1" value="{$smarty.request.paymentAddress_mm1|default:$GLOBAL.userdata.coin_address_mm1|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm3} Payment Address</label>
+        {nocache}<input type="text" name="paymentAddress_mm3" value="{$smarty.request.paymentAddress_mm3|default:$GLOBAL.userdata.coin_address_mm3|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm4} Payment Address</label>
+        {nocache}<input type="text" name="paymentAddress_mm4" value="{$smarty.request.paymentAddress_mm4|default:$GLOBAL.userdata.coin_address_mm4|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm5} Payment Address</label>
+      <font size="2">Unused payment address no need to change!</font>
+        {nocache}<input type="text" name="paymentAddress_mm5" value="unused1" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
+      </fieldset>
+      <fieldset>
+      <fieldset>
         <label>Donation Percentage</label>
         <font size="1"> Donation amount in percent ({$DONATE_THRESHOLD.min}-100%)</font>
         {nocache}<input type="text" name="donatePercent" value="{$smarty.request.donatePercent|default:$GLOBAL.userdata.donate_percent|escape|number_format:"2"}" size="4" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
@@ -46,8 +64,33 @@
         <label>{$GLOBAL.config.currency_mm} Automatic Payout Threshold</label>
         </br>
         <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm.min}-{$GLOBAL.config.ap_threshold_mm.max} {$GLOBAL.config.currency_mm}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold_mm" value="{nocache}{$smarty.request.payoutThreshold_mm|default:$GLOBAL.userdata.ap_threshold_mm|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
+        <input type="text" name="payoutThreshold_mm" value="{nocache}{$smarty.request.payoutThreshold_mm|default:$GLOBAL.userdata.ap_threshold_mm|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
       </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm1} Automatic Payout Threshold</label>
+        </br>
+        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm1.min}-{$GLOBAL.config.ap_threshold_mm1.max} {$GLOBAL.config.currency_mm1}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm1} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
+        <input type="text" name="payoutThreshold_mm1" value="{nocache}{$smarty.request.payoutThreshold_mm1|default:$GLOBAL.userdata.ap_threshold_mm1|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm1.max1|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm1.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm3} Automatic Payout Threshold</label>
+        </br>
+        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm3.min}-{$GLOBAL.config.ap_threshold_mm3.max} {$GLOBAL.config.currency_mm3}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm3} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
+        <input type="text" name="payoutThreshold_mm3" value="{nocache}{$smarty.request.payoutThreshold_mm3|default:$GLOBAL.userdata.ap_threshold_mm3|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm3.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm3.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm4} Automatic Payout Threshold</label>
+        </br>
+        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm4.min}-{$GLOBAL.config.ap_threshold_mm4.max} {$GLOBAL.config.currency_mm4}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm4} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
+        <input type="text" name="payoutThreshold_mm4" value="{nocache}{$smarty.request.payoutThreshold_mm4|default:$GLOBAL.userdata.ap_threshold_mm4|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm4.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm4.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
+      </fieldset>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm5} Automatic Payout Threshold</label>
+        </br>
+        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm5.min}-{$GLOBAL.config.ap_threshold_mm5.max} {$GLOBAL.config.currency_mm5}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm5} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
+        <input type="text" name="payoutThreshold_mm5" value="{nocache}{$smarty.request.payoutThreshold_mm5|default:$GLOBAL.userdata.ap_threshold_mm5|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm5.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm5.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
+      </fieldset>
+
       <fieldset>
         <label>Anonymous Account</label>
         Hide username on website from others. Admins can still get your user information.
@@ -185,6 +228,207 @@
   </article>
 </form>
 {/if}
+
+{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
+<form action="{$smarty.server.SCRIPT_NAME}" method="post">
+  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
+  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
+  <input type="hidden" name="do" value="cashOut_mm1">
+  <article class="module width_half">
+    <header>
+      <h3>{$GLOBAL.config.currency_mm1} Cash Out</h3>
+    </header>
+    <div class="module_content">
+      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
+        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm1} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
+      </p>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm1} Account Balance</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm1.confirmed|escape}" {$GLOBAL.config.currency_mm1} disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>Payout to</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm1|escape}" disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>4 digit PIN</label>
+        <input type="password" name="authPin" size="4" maxlength="4" />
+      </fieldset>
+    </div>
+    <footer>
+      <div class="submit_link">
+      {nocache}
+        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
+        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
+        <input type="hidden" name="utype" value="withdraw_funds">
+        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
+          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
+          	<input type="submit" value="Cash Out" class="alt_btn">
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Cash Out" class="alt_btn" disabled>
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
+          {/if}
+        {else}
+          <input type="submit" value="Cash Out" class="alt_btn">
+        {/if}
+      {/nocache}
+      </div>
+    </footer>
+  </article>
+</form>
+{/if}
+
+{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
+<form action="{$smarty.server.SCRIPT_NAME}" method="post">
+  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
+  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
+  <input type="hidden" name="do" value="cashOut_mm3">
+  <article class="module width_half">
+    <header>
+      <h3>{$GLOBAL.config.currency_mm3} Cash Out</h3>
+    </header>
+    <div class="module_content">
+      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
+        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm3} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
+      </p>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm3} Account Balance</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm3.confirmed|escape}" {$GLOBAL.config.currency_mm3} disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>Payout to</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm3|escape}" disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>4 digit PIN</label>
+        <input type="password" name="authPin" size="4" maxlength="4" />
+      </fieldset>
+    </div>
+    <footer>
+      <div class="submit_link">
+      {nocache}
+        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
+        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
+        <input type="hidden" name="utype" value="withdraw_funds">
+        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
+          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
+          	<input type="submit" value="Cash Out" class="alt_btn">
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Cash Out" class="alt_btn" disabled>
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
+          {/if}
+        {else}
+          <input type="submit" value="Cash Out" class="alt_btn">
+        {/if}
+      {/nocache}
+      </div>
+    </footer>
+  </article>
+</form>
+{/if}
+
+{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
+<form action="{$smarty.server.SCRIPT_NAME}" method="post">
+  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
+  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
+  <input type="hidden" name="do" value="cashOut_mm4">
+  <article class="module width_half">
+    <header>
+      <h3>{$GLOBAL.config.currency_mm4} Cash Out</h3>
+    </header>
+    <div class="module_content">
+      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
+        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm4} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
+      </p>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm4} Account Balance</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm4.confirmed|escape}" {$GLOBAL.config.currency_mm4} disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>Payout to</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm4|escape}" disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>4 digit PIN</label>
+        <input type="password" name="authPin" size="4" maxlength="4" />
+      </fieldset>
+    </div>
+    <footer>
+      <div class="submit_link">
+      {nocache}
+        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
+        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
+        <input type="hidden" name="utype" value="withdraw_funds">
+        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
+          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
+          	<input type="submit" value="Cash Out" class="alt_btn">
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Cash Out" class="alt_btn" disabled>
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
+          {/if}
+        {else}
+          <input type="submit" value="Cash Out" class="alt_btn">
+        {/if}
+      {/nocache}
+      </div>
+    </footer>
+  </article>
+</form>
+{/if}
+
+{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
+<form action="{$smarty.server.SCRIPT_NAME}" method="post">
+  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
+  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
+  <input type="hidden" name="do" value="cashOut_mm5">
+  <article class="module width_half">
+    <header>
+      <h3>{$GLOBAL.config.currency_mm5} Cash Out</h3>
+    </header>
+    <div class="module_content">
+      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
+        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm5} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
+      </p>
+      <fieldset>
+        <label>{$GLOBAL.config.currency_mm5} Account Balance</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm5.confirmed|escape}" {$GLOBAL.config.currency_mm5} disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>Payout to</label>
+        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm5|escape}" disabled />{/nocache}
+      </fieldset>
+      <fieldset>
+        <label>4 digit PIN</label>
+        <input type="password" name="authPin" size="4" maxlength="4" />
+      </fieldset>
+    </div>
+    <footer>
+      <div class="submit_link">
+      {nocache}
+        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
+        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
+        <input type="hidden" name="utype" value="withdraw_funds">
+        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
+          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
+          	<input type="submit" value="Cash Out" class="alt_btn">
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Cash Out" class="alt_btn" disabled>
+          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
+            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
+          {/if}
+        {else}
+          <input type="submit" value="Cash Out" class="alt_btn">
+        {/if}
+      {/nocache}
+      </div>
+    </footer>
+  </article>
+</form>
+{/if}
+
 
 <form action="{$smarty.server.SCRIPT_NAME}" method="post"><input type="hidden" name="act" value="updatePassword">
   <input type="hidden" name="page" value="{$smarty.request.page|escape}">

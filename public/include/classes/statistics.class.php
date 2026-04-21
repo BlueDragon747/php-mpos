@@ -146,7 +146,7 @@ class Statistics extends Base {
     if ($data = $this->memcache->get(__FUNCTION__ . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
-        b.*,
+        a.id AS account_id,
         a.username AS finder,
         a.is_anonymous AS is_anonymous,
         COUNT(b.id) AS solvedblocks, 
@@ -155,7 +155,7 @@ class Statistics extends Base {
       LEFT JOIN " . $this->user->getTableName() . " AS a 
       ON b.account_id = a.id
       WHERE confirmations > 0
-      GROUP BY finder
+      GROUP BY a.id, a.username, a.is_anonymous
       ORDER BY solvedblocks DESC LIMIT ?");
     if ($this->checkStmt($stmt) && $stmt->bind_param("i", $limit) && $stmt->execute() && $result = $stmt->get_result())
       return $this->memcache->setCache(__FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
@@ -507,10 +507,10 @@ class Statistics extends Base {
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
-        IFNULL(IF(our_result='Y', ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0), 0) AS hashrate
+        IFNULL(ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
       FROM (
         SELECT
-          id, our_result, IF(difficulty = 0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty) AS difficulty
+          id, IF(difficulty = 0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty) AS difficulty
         FROM
           shares
         WHERE username LIKE ?
@@ -518,7 +518,7 @@ class Statistics extends Base {
           AND our_result = 'Y'
       UNION
         SELECT
-          share_id, our_result, IF(difficulty = 0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty) AS difficulty
+          share_id, IF(difficulty = 0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty) AS difficulty
         FROM
           shares_archive
         WHERE username LIKE ?
@@ -671,8 +671,11 @@ class Statistics extends Base {
         }
       }
       // No cached data, fallback to SQL ONLY if we don't use memcache
-      if ($this->config['memcache']['enabled'])
+      if ($this->config['memcache']['enabled'] && $this->config['memcache']['force']['contrib_shares']) {
+        // Do not use SQL queries and a second layer of caching
+        $this->debug->append('Skipping SQL queries due to config option', 4);
         return false;
+      }
       $stmt = $this->mysqli->prepare("
         SELECT
           a.username AS account,
@@ -727,7 +730,6 @@ class Statistics extends Base {
     if ($data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
-        id,
         IFNULL(ROUND(SUM(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
         HOUR(time) AS hour
       FROM " . $this->share->getTableName() . "
@@ -738,7 +740,6 @@ class Statistics extends Base {
       GROUP BY HOUR(time)
       UNION
       SELECT
-        share_id,
         IFNULL(ROUND(SUM(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
         HOUR(time) AS hour
       FROM " . $this->share->getArchiveTableName() . "
@@ -769,8 +770,7 @@ class Statistics extends Base {
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
-        id,
-      	IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
+       	IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
         HOUR(s.time) AS hour
       FROM " . $this->share->getTableName() . " AS s
       WHERE time <= FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(NOW())/(60*60))*(60*60))
@@ -779,7 +779,6 @@ class Statistics extends Base {
       GROUP BY HOUR(time)
       UNION
       SELECT
-        share_id,
         IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
         HOUR(s.time) AS hour
       FROM " . $this->share->getArchiveTableName() . " AS s
@@ -879,9 +878,19 @@ class Statistics extends Base {
   /**
    * Get the Expected Time per Block in the whole Network in seconde
    * @return seconds double Seconds per Block
-   */
+   **/
   public function getNetworkExpectedTimePerBlock(){
-    if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    // Create unique cache key based on bitcoin wrapper instance
+    $cacheKey = __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
+    if ($data = $this->memcache->get($cacheKey)) {
+      // Verify cached data isn't negative
+      if (is_numeric($data) && $data < 0) {
+        $this->debug->append("WARNING: Cached negative EstTimePerBlock detected, clearing cache", 2);
+        $this->memcache->delete($cacheKey);
+      } else {
+        return $data;
+      }
+    }
 
     if ($this->bitcoin->can_connect() === true) {
       $dNetworkHashrate = $this->bitcoin->getnetworkhashps();
@@ -890,11 +899,32 @@ class Statistics extends Base {
       $dNetworkHashrate = 1;
       $dDifficulty = 1;
     }
-    if($dNetworkHashrate <= 0){
-      return $this->memcache->setCache(__FUNCTION__, $this->config['cointarget']);
+    
+    // Debug log the raw values
+    $this->debug->append("DEBUG: getNetworkExpectedTimePerBlock - hashrate=$dNetworkHashrate, difficulty=$dDifficulty", 4);
+    
+    // Ensure hashrate is a positive number
+    if (!is_numeric($dNetworkHashrate) || $dNetworkHashrate <= 0) {
+      $this->debug->append("WARNING: Invalid network hashrate: $dNetworkHashrate, using cointarget", 2);
+      return $this->memcache->setCache($cacheKey, $this->config['cointarget']);
+    }
+    
+    // Ensure difficulty is positive
+    if (!is_numeric($dDifficulty) || $dDifficulty <= 0) {
+      $this->debug->append("WARNING: Invalid difficulty: $dDifficulty, using cointarget", 2);
+      return $this->memcache->setCache($cacheKey, $this->config['cointarget']);
+    }
+    
+    // Calculate expected time
+    $estTime = pow(2, 32) * $dDifficulty / $dNetworkHashrate;
+    
+    // Protect against negative or zero values
+    if (!is_numeric($estTime) || $estTime <= 0) {
+      $this->debug->append("WARNING: Invalid EstTimePerBlock calculated: $estTime (difficulty: $dDifficulty, hashrate: $dNetworkHashrate), using cointarget", 2);
+      return $this->memcache->setCache($cacheKey, $this->config['cointarget']);
     }
 
-    return $this->memcache->setCache(__FUNCTION__, pow(2, 32) * $dDifficulty / $dNetworkHashrate);
+    return $this->memcache->setCache($cacheKey, $estTime);
   }
 
   /**
@@ -902,7 +932,8 @@ class Statistics extends Base {
    * @return difficulty double Next difficulty
    **/
   public function getExpectedNextDifficulty(){
-    if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    $cacheKey = __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
+    if ($data = $this->memcache->get($cacheKey)) return $data;
 
     if ($this->bitcoin->can_connect() === true) {
       $dDifficulty = $this->bitcoin->getdifficulty();
@@ -910,7 +941,7 @@ class Statistics extends Base {
       $dDifficulty = 1;
     }
 
-    return $this->memcache->setCache(__FUNCTION__, round($dDifficulty * $this->config['cointarget'] / $this->getNetworkExpectedTimePerBlock(), 8));
+    return $this->memcache->setCache($cacheKey, round($dDifficulty * $this->config['cointarget'] / $this->getNetworkExpectedTimePerBlock(), 8));
   }
 
   /**
@@ -918,7 +949,8 @@ class Statistics extends Base {
    * @return blocks int blocks until difficulty change
    **/
   public function getBlocksUntilDiffChange(){
-    if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    $cacheKey = __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
+    if ($data = $this->memcache->get($cacheKey)) return $data;
 
     if ($this->bitcoin->can_connect() === true) {
       $iBlockcount = $this->bitcoin->getblockcount();
@@ -926,7 +958,7 @@ class Statistics extends Base {
       $iBlockcount = 1;
     }
 
-    return $this->memcache->setCache(__FUNCTION__, $this->config['coindiffchangetarget'] - ($iBlockcount % $this->config['coindiffchangetarget']));
+    return $this->memcache->setCache($cacheKey, $this->config['coindiffchangetarget'] - ($iBlockcount % $this->config['coindiffchangetarget']));
   }
 
   /**
@@ -956,30 +988,6 @@ class Statistics extends Base {
       }
     }
     return round($pps_reward / (pow(2, $this->config['target_bits']) * $dDifficulty), 12);
-  }
-
-  public function getPPSValueExt() {
-    // Fetch RPC difficulty
-    if ($this->bitcoin->can_connect() === true) {
-      $dDifficulty = $this->bitcoin->getdifficulty();
-    } else {
-      $dDifficulty = 1;
-    }
-
-    if ($this->config['pps']['reward']['type'] == 'blockavg' && $this->block->getBlockCount() > 0) {
-      $pps_reward = round($this->block->getAvgBlockReward($this->config['pps']['blockavg']['blockcount']));
-    } else {
-      if ($this->config['pps']['reward']['type'] == 'block') {
-        if ($aLastBlock = $this->block->getLast()) {
-          $pps_reward = $aLastBlock['amount'];
-        } else {
-          $pps_reward = $this->config['pps']['reward']['default'];
-        }
-      } else {
-        $pps_reward = $this->config['pps']['reward']['default'];
-      }
-    }
-    return round($pps_reward / (pow(2, 32 - $this->config['target_bits']) * $dDifficulty), 12);
   }
 
   /**

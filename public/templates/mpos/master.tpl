@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 	<meta charset="utf-8"/>
-	<title>{$GLOBAL.website.title} Fusoincoin {$smarty.request.page|escape|default:" mining pool"|capitalize}</title>
+	<title>{$GLOBAL.website.title} Blakecoin {$smarty.request.page|escape|default:" mining pool"|capitalize}</title>
 	
+	<link rel="stylesheet" href="{$PATH}/css/theme.css" type="text/css" media="screen" />
 	<link rel="stylesheet" href="{$PATH}/css/layout.css" type="text/css" media="screen" />
   <link rel="stylesheet" href="{$PATH}/css/fontello.css">
   <link rel="stylesheet" href="{$PATH}/css/animation.css">
@@ -26,6 +27,7 @@
   <script type="text/javascript" src="{$PATH}/js/raphael.2.1.2.min.js"></script>
   <script type="text/javascript" src="{$PATH}/js/justgage.1.0.1.min.js"></script>
 	<script type="text/javascript" src="{$PATH}/js/custom.js"></script>
+	<script type="text/javascript" src="{$PATH}/js/theme.js"></script>
 	<script type="text/javascript" src="{$PATH}/js/tinybox.js"></script>
 	<script type="text/javascript" src="{$PATH}/../global/js/number_format.js"></script>
   <!--[if IE]><script type="text/javascript" src="{$PATH}/js/excanvas.js"></script><![endif]-->
@@ -52,7 +54,7 @@
 	<section id="main" class="column">
     {nocache}
     {if is_array($smarty.session.POPUP|default)}
-      {section popup $smarty.session.POPUP}
+      {section name=popup loop=$smarty.session.POPUP}
         <h4 class="{$smarty.session.POPUP[popup].TYPE|default:"info"}">{$smarty.session.POPUP[popup].CONTENT nofilter}</h4>
       {/section}
     {/if}

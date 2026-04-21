@@ -2,7 +2,7 @@
   <caption>Block Shares</caption> 
   <thead>
     <tr>
-{section block $BLOCKSFOUND step=-1 max=20}
+{section name=block loop=$BLOCKSFOUND step=-1 max=20}
       <th scope="col">{$BLOCKSFOUND[block].height}</th>
 {/section}
     </th>
@@ -10,13 +10,13 @@
   <tbody>
     <tr>
       <th scope="row">Expected</th>
-{section block $BLOCKSFOUND step=-1 max=20}
+{section name=block loop=$BLOCKSFOUND step=-1 max=20}
       <td>{round(pow(2,32 - $GLOBAL.config.targetdiff) * $BLOCKSFOUND[block].difficulty)}</td>
 {/section}
     </tr>
     <tr>
       <th scope="row">Actual</th>
-{section block $BLOCKSFOUND step=-1 max=20}
+{section name=block loop=$BLOCKSFOUND step=-1 max=20}
       <td>{$BLOCKSFOUND[block].shares}</td>
 {/section}
    </tr>
@@ -44,7 +44,7 @@ target and network difficulty and assuming a zero variance scenario.
     </thead>
     <tbody>
 {assign var=rank value=1}
-{section block $BLOCKSFOUND}
+{section name=block loop=$BLOCKSFOUND}
       <tr class="{cycle values="odd,even"}">
         <td class="center"><a href="{$GLOBAL.website.blockexplorer.url}{$BLOCKSFOUND[block].height}" target="_blank">{$BLOCKSFOUND[block].height}</a></td>
         <td class="center">

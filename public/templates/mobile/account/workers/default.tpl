@@ -6,7 +6,7 @@
         <th align="right">Khash/s</th>
         <th align="right">Difficulty</th>
       </tr>
-      {section worker $WORKERS}
+      {section name=worker loop=$WORKERS}
       {assign var="username" value="."|escape|explode:$WORKERS[worker].username:2} 
       <tr>
         <td colspan="4" align="left"{if $WORKERS[worker].hashrate > 0} style="color: orange"{/if}>{$username.0|escape}.{$username.1|escape}</td>

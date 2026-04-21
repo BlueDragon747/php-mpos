@@ -27,12 +27,17 @@ require_once('shared.inc.php');
 
 // Fetch our last block found from the DB as a starting point
 $aLastBlock = @$block_mm->getLast();
-$strLastBlockHash = $aLastBlock['blockhash'];
-if (!$strLastBlockHash) $strLastBlockHash = '';
+$strLastBlockHash = (is_array($aLastBlock) && isset($aLastBlock['blockhash'])) ? $aLastBlock['blockhash'] : '';
 
 // Fetch all transactions since our last block
+$aTransactions = array();
 if ( $bitcoin_mm->can_connect() === true ){
-  $aTransactions = $bitcoin_mm->listsinceblock($strLastBlockHash);
+  try {
+    $aTransactions = $bitcoin_mm->listsinceblock($strLastBlockHash);
+  } catch (Exception $e) {
+    $log->logError('RPC call failed, will retry on next run: ' . $e->getMessage());
+    $monitoring->endCronjob($cron_name, 'E0010', 0, true);
+  }
 } else {
   $log->logFatal('Unable to connect to RPC server backend [MM]');
   $monitoring->endCronjob($cron_name, 'E0006', 1, true);
@@ -58,7 +63,7 @@ if (empty($aTransactions['transactions'])) {
         $aData['amount'] . "\t" .
         $aData['confirmations'] . "\t\t" .
         $aData['difficulty'] . "\t" .
-        strftime("%Y-%m-%d %H:%M:%S", $aData['time']));
+        date("Y-m-d H:i:s", $aData["time"]));
       if ( ! empty($aBlockRPCInfo['flags']) && preg_match('/proof-of-stake/', $aBlockRPCInfo['flags']) ) {
         $log->logInfo("Block above with height " .  $aData['height'] . " not added to database, proof-of-stake block! [MM]");
         continue;
@@ -86,13 +91,46 @@ if (empty($aAllBlocks)) {
       $aBlockRPCInfo = $bitcoin_mm->getblock($aBlock['blockhash']);
       if ($share_mm->findUpstreamShare($aBlockRPCInfo, $iPreviousShareId)) {
         $iCurrentUpstreamId = $share_mm->getUpstreamShareId();
-        // Rarely happens, but did happen once to me
-        if ($iCurrentUpstreamId == $iPreviousShareId) {
-          $log->logFatal($share_mm->getErrorMsg('E0063'));
-          $monitoring->endCronjob($cron_name, 'E0063', 1, true);
+        // Validate share is > previous share (required for proper round share calculation)
+        // If not, search for a valid alternative share
+        if ($iCurrentUpstreamId <= $iPreviousShareId) {
+          $log->logDebug('Share ' . $iCurrentUpstreamId . ' is <= previous share ' . $iPreviousShareId . ', searching for valid alternative');
+          // Collect all invalid share IDs to exclude
+          $usedShares = array($iCurrentUpstreamId);
+          $maxAttempts = 10;
+          $attempts = 0;
+          $foundNew = false;
+          
+          while ($attempts < $maxAttempts) {
+            $attempts++;
+            // Pass $iPreviousShareId as minimum to ensure we find shares > previous
+            if ($share_mm->findUpstreamShare($aBlockRPCInfo, $iPreviousShareId, $usedShares)) {
+              $newShareId = $share_mm->getUpstreamShareId();
+              if (!in_array($newShareId, $usedShares) && $newShareId > $iPreviousShareId) {
+                $iCurrentUpstreamId = $newShareId;
+                $log->logDebug('Found valid alternative share: ' . $iCurrentUpstreamId . ' (attempt ' . $attempts . ')');
+                $foundNew = true;
+                break;
+              }
+              $usedShares[] = $newShareId;
+            } else {
+              break;
+            }
+          }
+          
+          if (!$foundNew) {
+            $log->logError('E0063: No valid share found for block ' . $aBlock['height'] . '. All shares were <= previous share ' . $iPreviousShareId);
+            // Skip this block - will retry on next cron run
+            $log->logInfo('Skipping block ' . $aBlock['height'] . ' - will retry on next cron run');
+            continue;
+          }
         }
-        // Out of order share detection
-        if ($iCurrentUpstreamId < $iPreviousShareId) {
+        // If we have a valid share, get the details for ALL cases (not just out-of-order else block)
+        $iRoundShares = $share_mm->getRoundShares($iPreviousShareId, $iCurrentUpstreamId);
+        $iAccountId = $user->getUserId($share_mm->getUpstreamFinder());
+        $iWorker = $share_mm->getUpstreamWorker();
+        // Out of order share detection - allow within 100 shares for batched submissions
+        if ($iCurrentUpstreamId < $iPreviousShareId && ($iPreviousShareId - $iCurrentUpstreamId) > 100) {
           // Fetch our offending block
           $aBlockError = $block_mm->getBlockByShareId($iPreviousShareId);
           $log->logError('E0001: The block with height ' . $aBlock['height'] . ' found share ' . $iCurrentUpstreamId . ' which is < than ' . $iPreviousShareId . ' of block ' . $aBlockError['height'] . '.');
@@ -114,10 +152,6 @@ if (empty($aAllBlocks)) {
             $monitoring->endCronjob($cron_name, 'E0004', 1, true);
           }
           $monitoring->endCronjob($cron_name, 'E0007', 0, true);
-        } else {
-          $iRoundShares = $share_mm->getRoundShares($iPreviousShareId, $iCurrentUpstreamId);
-          $iAccountId = $user->getUserId($share_mm->getUpstreamFinder());
-          $iWorker = $share_mm->getUpstreamWorker();
         }
       } else {
         $log->logFatal('E0005: Unable to fetch blocks upstream share, aborted:' . $share_mm->getCronError());

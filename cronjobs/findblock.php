@@ -27,12 +27,17 @@ require_once('shared.inc.php');
 
 // Fetch our last block found from the DB as a starting point
 $aLastBlock = @$block->getLast();
-$strLastBlockHash = $aLastBlock['blockhash'];
-if (!$strLastBlockHash) $strLastBlockHash = '';
+$strLastBlockHash = (is_array($aLastBlock) && isset($aLastBlock['blockhash'])) ? $aLastBlock['blockhash'] : '';
 
 // Fetch all transactions since our last block
+$aTransactions = array();
 if ( $bitcoin->can_connect() === true ){
-  $aTransactions = $bitcoin->listsinceblock($strLastBlockHash);
+  try {
+    $aTransactions = $bitcoin->listsinceblock($strLastBlockHash);
+  } catch (Exception $e) {
+    $log->logError('RPC call failed, will retry on next run: ' . $e->getMessage());
+    $monitoring->endCronjob($cron_name, 'E0010', 0, true);
+  }
 } else {
   $log->logFatal('Unable to connect to RPC server backend');
   $monitoring->endCronjob($cron_name, 'E0006', 1, true);
@@ -58,7 +63,7 @@ if (empty($aTransactions['transactions'])) {
         $aData['amount'] . "\t" .
         $aData['confirmations'] . "\t\t" .
         $aData['difficulty'] . "\t" .
-        strftime("%Y-%m-%d %H:%M:%S", $aData['time']));
+        date("Y-m-d H:i:s", $aData["time"]));
       if ( ! empty($aBlockRPCInfo['flags']) && preg_match('/proof-of-stake/', $aBlockRPCInfo['flags']) ) {
         $log->logInfo("Block above with height " .  $aData['height'] . " not added to database, proof-of-stake block!");
         continue;
@@ -86,39 +91,69 @@ if (empty($aAllBlocks)) {
       $aBlockRPCInfo = $bitcoin->getblock($aBlock['blockhash']);
       if ($share->findUpstreamShare($aBlockRPCInfo, $iPreviousShareId)) {
         $iCurrentUpstreamId = $share->getUpstreamShareId();
-        // Rarely happens, but did happen once to me
-        if ($iCurrentUpstreamId == $iPreviousShareId) {
-          $log->logFatal($share->getErrorMsg('E0063'));
-          $monitoring->endCronjob($cron_name, 'E0063', 1, true);
+        // Validate share is > previous share (required for proper round share calculation)
+        // If not, search for a valid alternative share
+        if ($iCurrentUpstreamId <= $iPreviousShareId) {
+          $log->logDebug('Share ' . $iCurrentUpstreamId . ' is <= previous share ' . $iPreviousShareId . ', searching for valid alternative');
+          // Collect all invalid share IDs to exclude
+          $usedShares = array($iCurrentUpstreamId);
+          $maxAttempts = 10;
+          $attempts = 0;
+          $foundNew = false;
+          
+          while ($attempts < $maxAttempts) {
+            $attempts++;
+            // Pass $iPreviousShareId as minimum to ensure we find shares > previous
+            if ($share->findUpstreamShare($aBlockRPCInfo, $iPreviousShareId, $usedShares)) {
+              $newShareId = $share->getUpstreamShareId();
+              if (!in_array($newShareId, $usedShares) && $newShareId > $iPreviousShareId) {
+                $iCurrentUpstreamId = $newShareId;
+                $log->logDebug('Found valid alternative share: ' . $iCurrentUpstreamId . ' (attempt ' . $attempts . ')');
+                $foundNew = true;
+                break;
+              }
+              $usedShares[] = $newShareId;
+            } else {
+              break;
+            }
+          }
+          
+          if (!$foundNew) {
+            $log->logError('E0063: No valid share found for block ' . $aBlock['height'] . '. All shares were <= previous share ' . $iPreviousShareId);
+            // Skip this block - will retry on next cron run
+            $log->logInfo('Skipping block ' . $aBlock['height'] . ' - will retry on next cron run');
+            continue;
+          }
         }
-        // Out of order share detection
-        if ($iCurrentUpstreamId < $iPreviousShareId) {
-          // Fetch our offending block
-          $aBlockError = $block->getBlockByShareId($iPreviousShareId);
-          $log->logError('E0001: The block with height ' . $aBlock['height'] . ' found share ' . $iCurrentUpstreamId . ' which is < than ' . $iPreviousShareId . ' of block ' . $aBlockError['height'] . '.');
-          if ( !($aShareError = $share->getShareById($aBlockError['share_id'])) || !($aShareCurrent = $share->getShareById($iCurrentUpstreamId))) {
-            // We were not able to fetch all shares that were causing this detection to trigger, bail out
-            $log->logFatal('E0002: Failed to fetch both offending shares ' . $iCurrentUpstreamId . ' and ' . $iPreviousShareId . '. Block height: ' . $aBlock['height']);
-            $monitoring->endCronjob($cron_name, 'E0002', 1, true);
-          }
-          // Shares seem to be out of order, so lets change them
-          if ( !$share->updateShareById($iCurrentUpstreamId, $aShareError) || !$share->updateShareById($iPreviousShareId, $aShareCurrent)) {
-            // We couldn't update one of the shares! That might mean they have been deleted already
-            $log->logFatal('E0003: Failed to change shares order: ' . $share->getCronError());
-            $monitoring->endCronjob($cron_name, 'E0003', 1, true);
-          }
-          // Reset our offending block so the next run re-checks the shares
-          if (!$block->setShareId($aBlockError['id'], NULL) && !$block->setFinder($aBlockError['id'], NULL) || !$block->setShares($aBlockError['id'], NULL)) {
-            $log->logFatal('E0004: Failed to reset previous block: ' . $aBlockError['height']);
-            $log->logError('Failed to reset block in database: ' . $aBlockError['height']);
-            $monitoring->endCronjob($cron_name, 'E0004', 1, true);
-          }
-          $monitoring->endCronjob($cron_name, 'E0007', 0, true);
-        } else {
-          $iRoundShares = $share->getRoundShares($iPreviousShareId, $iCurrentUpstreamId);
-          $iAccountId = $user->getUserId($share->getUpstreamFinder());
-          $iWorker = $share->getUpstreamWorker();
+      // If we have a valid share, get the details for ALL cases (not just out-of-order else block)
+      $iRoundShares = $share->getRoundShares($iPreviousShareId, $iCurrentUpstreamId);
+      $iAccountId = $user->getUserId($share->getUpstreamFinder());
+      $iWorker = $share->getUpstreamWorker();
+
+      // Out of order share detection - allow within 100 shares for batched submissions
+      if ($iCurrentUpstreamId < $iPreviousShareId && ($iPreviousShareId - $iCurrentUpstreamId) > 100) {
+        // Fetch our offending block
+        $aBlockError = $block->getBlockByShareId($iPreviousShareId);
+        $log->logError('E0001: The block with height ' . $aBlock['height'] . ' found share ' . $iCurrentUpstreamId . ' which is < than ' . $iPreviousShareId . ' of block ' . $aBlockError['height'] . '.');
+        if ( !($aShareError = $share->getShareById($aBlockError['share_id'])) || !($aShareCurrent = $share->getShareById($iCurrentUpstreamId))) {
+          // We were not able to fetch all shares that were causing this detection to trigger, bail out
+          $log->logFatal('E0002: Failed to fetch both offending shares ' . $iCurrentUpstreamId . ' and ' . $iPreviousShareId . '. Block height: ' . $aBlock['height']);
+          $monitoring->endCronjob($cron_name, 'E0002', 1, true);
         }
+        // Shares seem to be out of order, so lets change them
+        if ( !$share->updateShareById($iCurrentUpstreamId, $aShareError) || !$share->updateShareById($iPreviousShareId, $aShareCurrent)) {
+          // We couldn't update one of the shares! That might mean they have been deleted already
+          $log->logFatal('E0003: Failed to change shares order: ' . $share->getCronError());
+          $monitoring->endCronjob($cron_name, 'E0003', 1, true);
+        }
+        // Reset our offending block so the next run re-checks the shares
+        if (!$block->setShareId($aBlockError['id'], NULL) && !$block->setFinder($aBlockError['id'], NULL) || !$block->setShares($aBlockError['id'], NULL)) {
+          $log->logFatal('E0004: Failed to reset previous block: ' . $aBlockError['height']);
+          $log->logError('Failed to reset block in database: ' . $aBlockError['height']);
+          $monitoring->endCronjob($cron_name, 'E0004', 1, true);
+        }
+        $monitoring->endCronjob($cron_name, 'E0007', 0, true);
+      }
       } else {
         $log->logFatal('E0005: Unable to fetch blocks upstream share, aborted:' . $share->getCronError());
         $monitoring->endCronjob($cron_name, 'E0005', 0, true);
@@ -136,6 +171,7 @@ if (empty($aAllBlocks)) {
       );
 
       // Store new information
+      $log->logDebug('Setting share_id=' . $iCurrentUpstreamId . ' for block_id=' . $aBlock['id']);
       if (!$block->setShareId($aBlock['id'], $iCurrentUpstreamId))
         $log->logError('Failed to update share ID in database for block ' . $aBlock['height'] . ': ' . $block->getCronError());
       if (!empty($iAccountId) && !$block->setFinder($aBlock['id'], $iAccountId))

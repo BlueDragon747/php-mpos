@@ -289,11 +289,16 @@ class BitcoinClient extends jsonRPCClient {
    * @throws none
    */
   public function can_connect() {
+    // Set a short timeout to prevent hanging
+    $old_timeout = ini_get('default_socket_timeout');
+    ini_set('default_socket_timeout', 2); // 2 second timeout
     try {
       $r = $this->getinfo();
     } catch (Exception $e) {
+      ini_set('default_socket_timeout', $old_timeout);
       return $e->getMessage();
     }
+    ini_set('default_socket_timeout', $old_timeout);
     return true;
   }
 

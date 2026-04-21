@@ -11,7 +11,7 @@
     <tbody>
 {assign var=rank value=1}
 {assign var=listed value=0}
-{section contrib $CONTRIBHASHES}
+{section name=contrib loop=$CONTRIBHASHES}
       {math assign="estday" equation="round(reward / ( diff * pow(2,32) / ( hashrate * 1000 ) / 3600 / 24), 3)" diff=$DIFFICULTY reward=$REWARD hashrate=$CONTRIBHASHES[contrib].hashrate}
       {if $GLOBAL.userdata.username|default:"" == $CONTRIBSHARES[contrib].account}{assign var=listed value=1}{/if}
       <tr>

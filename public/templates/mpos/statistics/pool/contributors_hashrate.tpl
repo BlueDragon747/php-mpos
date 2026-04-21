@@ -15,7 +15,7 @@
     <tbody>
 {assign var=rank value=1}
 {assign var=listed value=0}
-{section contrib $CONTRIBHASHES}
+{section name=contrib loop=$CONTRIBHASHES}
       {math assign="estday" equation="round(reward / ( diff * pow(2,32) / ( hashrate * 1000 ) / 3600 / 24), 3)" diff=$DIFFICULTY reward=$REWARD hashrate=$CONTRIBHASHES[contrib].hashrate}
       <tr{if $GLOBAL.userdata.username|default:""|lower == $CONTRIBHASHES[contrib].account|lower}{assign var=listed value=1} style="background-color:#99EB99;"{else} class="{cycle values="odd,even"}"{/if}>
         <td align="center">{$rank++}</td>

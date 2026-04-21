@@ -65,7 +65,7 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
     $aLastAccountedBlock = array('height' => 0, 'confirmations' => 1);
   }
   // Ensure we are not paying out twice, ignore if the previous paid block is orphaned (-1 confirmations) and payout anyway
-  if ((!$aBlock['accounted'] && $aBlock['height'] > $aLastAccountedBlock['height']) || (@$aLastAccountedBlock['confirmations'] == -1)) {
+  if ((!$aBlock['accounted'] && $aBlock['height'] > ($aLastAccountedBlock['height'] ?? 0)) || ((isset($aLastAccountedBlock['confirmations']) && $aLastAccountedBlock['confirmations'] == -1))) {
     $iPreviousShareId = @$aAllBlocks[$iIndex - 1]['share_id'] ? $aAllBlocks[$iIndex - 1]['share_id'] : 0;
     $iCurrentUpstreamId = $aBlock['share_id'];
     if (!is_numeric($iCurrentUpstreamId)) {
@@ -85,8 +85,13 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
       // We need to go one ID lower due to `id >` or we won't match if minimum share ID == $aBlock['share_id']
       $aAccountShares = $share->getSharesForAccounts($iMinimumShareId - 1, $aBlock['share_id']);
       if (empty($aAccountShares)) {
-        $log->logFatal("No shares found for this block, aborted! Block Height : " . $aBlock['height'] . ', Block ID: ' . $aBlock['id']);
-        $monitoring->endCronjob($cron_name, 'E0013', 1, true);
+        // Fallback: try with previous share ID if minimum calculation failed (handles batched/consecutive shares)
+        $log->logDebug("No shares found with minimum calculation, trying with previous share ID");
+        $aAccountShares = $share->getSharesForAccounts($iPreviousShareId, $aBlock['share_id']);
+        if (empty($aAccountShares)) {
+          $log->logFatal("No shares found for this block, aborted! Block Height : " . $aBlock['height'] . ', Block ID: ' . $aBlock['id']);
+          $monitoring->endCronjob($cron_name, 'E0013', 1, true);
+        }
       }
       foreach($aAccountShares as $key => $aData) {
         $iNewRoundShares += $aData['valid'];
@@ -249,16 +254,17 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
     }
   } else {
     $log->logFatal('Potential double payout detected for block ' . $aBlock['id'] . '. Aborted.');
-    $aMailData = array(
-      'email' => $setting->getValue('system_error_email'),
-      'subject' => 'Payout processing aborted',
-      'Error' => 'Potential double payout detected. All payouts halted until fixed!',
-      'BlockID' => $aBlock['id'],
-      'Block Height' => $aBlock['height'],
-      'Block Share ID' => $aBlock['share_id']
-    );
-    if (!$mail->sendMail('notifications/error', $aMailData))
-      $log->logError("    Failed sending notifications: " . $notification->getCronError());
+    // Email notifications disabled - using logs only
+    // $aMailData = array(
+    //   'email' => $setting->getValue('system_error_email'),
+    //   'subject' => 'Payout processing aborted',
+    //   'Error' => 'Potential double payout detected. All payouts halted until fixed!',
+    //   'BlockID' => $aBlock['id'],
+    //   'Block Height' => $aBlock['height'],
+    //   'Block Share ID' => $aBlock['share_id']
+    // );
+    // if (!$mail->sendMail('notifications/error', $aMailData))
+    //   $log->logError("    Failed sending notifications: " . $notification->getCronError());
     $monitoring->endCronjob($cron_name, 'E0015', 1, true);
   }
 }

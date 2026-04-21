@@ -12,7 +12,7 @@
     </thead>
     <tbody>
 {assign var=rank value=1}
-{section contrib $PPLNSROUNDSHARES}
+{section name=contrib loop=$PPLNSROUNDSHARES}
       <tr{if $GLOBAL.userdata.username|default:"" == $PPLNSROUNDSHARES[contrib].username} style="background-color:#99EB99;"{else} class="{cycle values="odd,even"}"{/if}>
         <td align="center">{$rank++}</td>
         <td>{if $PPLNSROUNDSHARES[contrib].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$PPLNSROUNDSHARES[contrib].username|default:"unknown"|escape}{/if}</td>

@@ -32,7 +32,7 @@ $(document).ready(function(){
   // jqPlit defaults
   var jqPlotOverviewOptions = {
     highlighter: { show: true },
-    grid: { drawBorder: false, background: '#fbfbfb', shadow: false },
+    grid: { drawBorder: false, background: 'transparent', shadow: false },
     stackSeries: false,
     seriesColors: [ '#26a4ed', '#ee8310', '#e9e744' ],
     seriesDefaults:{
@@ -58,7 +58,7 @@ $(document).ready(function(){
   var jqPlotShareinfoOptions = {
     title: 'Shares',
     highlighter: { show: false },
-    grid: { drawBorder: false, background: '#fbfbfb', shadow: false },
+    grid: { drawBorder: false, background: 'transparent', shadow: false },
     seriesColors: [ '#26a4ed', '#ee8310', '#e9e744' ],
     seriesDefaults: {
       renderer: $.jqplot.DonutRenderer,

@@ -3,6 +3,10 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class Monitoring extends Base {
    protected $table = 'monitoring';
+   
+   // Static cache to prevent repeated database queries
+   private static $statusCache = array();
+   private static $cacheInitialized = false;
 
   /**
    * Store Uptime Robot status information as JSON in settings table
@@ -56,23 +60,65 @@ class Monitoring extends Base {
    * @return bool true or false
    **/
   public function isDisabled($name) {
-    $aStatus = $this->getStatus($name . '_disabled');
-    return $aStatus['value'];
+    $cacheKey = $name . '_disabled';
+    if (!isset(self::$statusCache[$cacheKey])) {
+      $aStatus = $this->getStatus($cacheKey);
+      self::$statusCache[$cacheKey] = isset($aStatus['value']) ? $aStatus['value'] : false;
+    }
+    return self::$statusCache[$cacheKey];
   }
 
   /**
-   * Fetch a value from our table
+   * Fetch a value from our table with caching
    * @param name string Setting name
    * @return value string Value
    **/
   public function getStatus($name) {
+    // Check if value is already cached
+    if (isset(self::$statusCache[$name])) {
+      return self::$statusCache[$name];
+    }
+    
+    // If cache not initialized, load all monitoring values at once
+    if (!self::$cacheInitialized) {
+      $this->loadAllStatus();
+      if (isset(self::$statusCache[$name])) {
+        return self::$statusCache[$name];
+      }
+    }
+    
+    // Query individual value if not in cache
     $query = $this->mysqli->prepare("SELECT * FROM $this->table WHERE name = ? LIMIT 1");
     if ($query && $query->bind_param('s', $name) && $query->execute() && $result = $query->get_result()) {
-      return $result->fetch_assoc();
+      $data = $result->fetch_assoc();
+      self::$statusCache[$name] = $data;
+      return $data;
     } else {
       $this->sqlError();
     }
-    return $value;
+    return null;
+  }
+  
+  /**
+   * Load all monitoring status values into cache
+   * This prevents multiple database queries when checking many crons
+   **/
+  private function loadAllStatus() {
+    $query = $this->mysqli->query("SELECT * FROM $this->table");
+    if ($query) {
+      while ($row = $query->fetch_assoc()) {
+        self::$statusCache[$row['name']] = $row;
+      }
+      self::$cacheInitialized = true;
+    }
+  }
+
+  /**
+   * Clear the status cache (useful after updates)
+   **/
+  public function clearCache() {
+    self::$statusCache = array();
+    self::$cacheInitialized = false;
   }
 
   /**
@@ -87,10 +133,28 @@ class Monitoring extends Base {
       VALUES (?, ?, ?)
       ON DUPLICATE KEY UPDATE value = ?
       ");
-    if ($stmt && $stmt->bind_param('ssss', $name, $type, $value, $value) && $stmt->execute())
+    if ($stmt && $stmt->bind_param('ssss', $name, $type, $value, $value) && $stmt->execute()) {
+      // Update cache with new value
+      self::$statusCache[$name] = array('name' => $name, 'type' => $type, 'value' => $value);
       return true;
+    }
     $this->debug->append("Failed to set $name to $value");
     return false;
+  }
+
+  /**
+   * Start a cronjob, mark various fields properly
+   * @param cron_name string Cronjob name
+   **/
+  public function startCronjob($cron_name) {
+    $aStatus = $this->getStatus($cron_name . '_active');
+    if ($aStatus['value'] == 1) {
+      $this->setErrorMessage('Cron is already active in database: ' . $cron_name . '_active is 1');
+      return false;
+    }
+    $this->setStatus($cron_name . "_active", "yesno", 1);
+    $this->setStatus($cron_name . '_starttime', 'date', time());
+    return true;
   }
 
   /**

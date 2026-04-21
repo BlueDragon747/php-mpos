@@ -47,6 +47,48 @@ $aSettings['website'][] = array(
   'tooltip' => 'The email address for your pool, used in mail templates and notifications.'
 );
 $aSettings['website'][] = array(
+  'display' => 'Enable SMTP', 'type' => 'select',
+  'options' => array( 0 => 'No', 1 => 'Yes' ),
+  'default' => 0,
+  'name' => 'smtp_enabled', 'value' => $setting->getValue('smtp_enabled'),
+  'tooltip' => 'Enable SMTP email sending instead of native PHP mail(). Required for Gmail, Outlook, etc.'
+);
+$aSettings['website'][] = array(
+  'display' => 'SMTP Host', 'type' => 'text',
+  'size' => 25,
+  'default' => 'smtp.gmail.com',
+  'name' => 'smtp_host', 'value' => $setting->getValue('smtp_host'),
+  'tooltip' => 'SMTP server hostname. For Gmail: smtp.gmail.com, for Outlook: smtp.office365.com'
+);
+$aSettings['website'][] = array(
+  'display' => 'SMTP Username', 'type' => 'text',
+  'size' => 25,
+  'default' => '',
+  'name' => 'smtp_username', 'value' => $setting->getValue('smtp_username'),
+  'tooltip' => 'SMTP username (usually your full email address)'
+);
+$aSettings['website'][] = array(
+  'display' => 'SMTP Password', 'type' => 'password',
+  'size' => 25,
+  'default' => '',
+  'name' => 'smtp_password', 'value' => $setting->getValue('smtp_password'),
+  'tooltip' => 'SMTP password or App Password (for Gmail, use App Password from Google Account settings)'
+);
+$aSettings['website'][] = array(
+  'display' => 'SMTP Encryption', 'type' => 'select',
+  'options' => array( 'tls' => 'TLS (Port 587)', 'ssl' => 'SSL (Port 465)', 'none' => 'None' ),
+  'default' => 'tls',
+  'name' => 'smtp_secure', 'value' => $setting->getValue('smtp_secure'),
+  'tooltip' => 'SMTP encryption method. Gmail/Outlook typically use TLS on port 587.'
+);
+$aSettings['website'][] = array(
+  'display' => 'SMTP Port', 'type' => 'text',
+  'size' => 5,
+  'default' => '587',
+  'name' => 'smtp_port', 'value' => $setting->getValue('smtp_port'),
+  'tooltip' => 'SMTP port number (587 for TLS, 465 for SSL, 25 for unencrypted)'
+);
+$aSettings['website'][] = array(
   'display' => 'Website theme', 'type' => 'select',
   'options' => $aThemes,
   'default' => 'mpos',

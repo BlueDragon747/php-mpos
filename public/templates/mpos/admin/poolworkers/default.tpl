@@ -32,7 +32,7 @@
       </tr>
     </thead>
       {nocache}
-      {section worker $WORKERS}
+      {section name=worker loop=$WORKERS}
     <tbody>
       <tr>
         <td align="left">{$WORKERS[worker].username|escape}</td>

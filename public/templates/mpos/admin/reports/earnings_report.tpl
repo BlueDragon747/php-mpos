@@ -34,7 +34,7 @@
 {assign var=pplnsvalid value=0}
 {assign var=pplnsinvalid value=0}
 {assign var=amount value=0}
-{section txs $REPORTDATA}
+{section name=txs loop=$REPORTDATA}
       {assign var="totalshares" value=$totalshares+$REPORTDATA[txs].shares}
       {assign var=totalvalid value=$totalvalid+$REPORTDATA[txs]['user'].valid}
       {assign var=totalinvalid value=$totalinvalid+$REPORTDATA[txs]['user'].invalid}

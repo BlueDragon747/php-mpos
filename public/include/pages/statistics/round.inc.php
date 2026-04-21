@@ -17,7 +17,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
     $iHeight = $roundstats->getPreviousBlock($_REQUEST['height']);
   } else if (empty($_REQUEST['height'])) {
       $iBlock = $block->getLast();
-      $iHeight = $iBlock['height'];  
+      $iHeight = isset($iBlock['height']) ? $iBlock['height'] : 0;
   } else {
       $iHeight = $_REQUEST['height'];
   }

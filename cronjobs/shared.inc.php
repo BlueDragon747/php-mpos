@@ -63,6 +63,8 @@ foreach ($argv as $option) {
   switch ($option) {
   case '-f':
     $monitoring->setStatus($cron_name . "_disabled", "yesno", 0);
+    // Clear the monitoring status cache so the new value is read
+    $monitoring->clearCache();
     break;
   }
 }

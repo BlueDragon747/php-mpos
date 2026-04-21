@@ -99,13 +99,13 @@ class RoundStats extends Base {
         a.id,
         a.username,
         a.is_anonymous,
-        s.valid,
-        s.invalid
+        SUM(s.valid) AS valid,
+        SUM(s.invalid) AS invalid
         FROM " . $this->statistics->getTableName() . " AS s
         LEFT JOIN " . $this->block->getTableName() . " AS b ON s.block_id = b.id
         LEFT JOIN " . $this->user->getTableName() . " AS a ON a.id = s.account_id
         WHERE b.height = ? AND s.valid > 0
-        GROUP BY username ASC
+        GROUP BY a.id, a.username, a.is_anonymous
         ORDER BY valid DESC
         ");
     if ($this->checkStmt($stmt) && $stmt->bind_param('i', $iHeight) && $stmt->execute() && $result = $stmt->get_result()) {
@@ -128,13 +128,13 @@ class RoundStats extends Base {
       SELECT
         a.username,
         a.is_anonymous,
-        s.pplns_valid,
-        s.pplns_invalid
+        SUM(s.pplns_valid) AS pplns_valid,
+        SUM(s.pplns_invalid) AS pplns_invalid
         FROM " . $this->statistics->getTableName() . " AS s
         LEFT JOIN " . $this->block->getTableName() . " AS b ON s.block_id = b.id
         LEFT JOIN " . $this->user->getTableName() . " AS a ON a.id = s.account_id
         WHERE b.height = ? AND s.pplns_valid > 0
-        GROUP BY username ASC
+        GROUP BY a.username, a.is_anonymous
         ORDER BY pplns_valid DESC
         ");
     if ($this->checkStmt($stmt) && $stmt->bind_param('i', $iHeight) && $stmt->execute() && $result = $stmt->get_result())

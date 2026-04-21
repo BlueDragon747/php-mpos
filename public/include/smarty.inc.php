@@ -109,7 +109,7 @@ class Smarty_Resource_Hybrid extends Smarty_Resource {
    * @param Smarty_Template_Source   $source    source object
    * @param Smarty_Internal_Template $_template template object
    */
-  public function populate(Smarty_Template_Source $source, Smarty_Internal_Template $_template=null) {
+  public function populate(Smarty_Template_Source $source, ?Smarty_Internal_Template $_template = null) {
     if ( !@$_REQUEST['disable_template_override'] ) {
       $this->databaseResource->populate($source, $_template);
       if( $source->exists )
@@ -150,10 +150,13 @@ class Smarty_Resource_Hybrid extends Smarty_Resource {
 $debug->append('Instantiating Smarty Object', 3);
 $smarty = new Smarty;
 
+// Register custom modifiers for PHP functions used in templates
+$smarty->registerPlugin('modifier', 'file_exists', 'file_exists');
+
 // Assign our local paths
 $debug->append('Define Smarty Paths', 3);
-$smarty->template_dir = BASEPATH . 'templates/' . THEME . '/';
-$smarty->compile_dir = BASEPATH . 'templates/compile/' . THEME . '/';
+$smarty->setTemplateDir(BASEPATH . 'templates/' . THEME . '/');
+$smarty->setCompileDir(BASEPATH . 'templates/compile/' . THEME . '/');
 $smarty->registerResource('hybrid', new Smarty_Resource_Hybrid(
   new Smarty_Resource_Database($template),
   new Smarty_Internal_Resource_File()
@@ -166,7 +169,7 @@ if ($config['smarty']['cache']) {
   $debug->append('Enable smarty cache');
   $smarty->setCaching(Smarty::CACHING_LIFETIME_SAVED);
   $smarty->cache_lifetime = $config['smarty']['cache_lifetime'];
-  $smarty->cache_dir = BASEPATH . "templates/cache/" . THEME;
+  $smarty->setCacheDir(BASEPATH . "templates/cache/" . THEME);
   $smarty->escape_html = true;
   $smarty->use_sub_dirs = true;
 }

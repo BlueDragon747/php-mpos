@@ -1,6 +1,15 @@
 <?php
 (!cfip()) ? header('HTTP/1.1 401 Unauthorized') : 0;
 
+// Load PHPMailer classes
+require_once(BASEPATH . 'include/lib/PHPMailer/src/PHPMailer.php');
+require_once(BASEPATH . 'include/lib/PHPMailer/src/SMTP.php');
+require_once(BASEPATH . 'include/lib/PHPMailer/src/Exception.php');
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception;
+
 class Mail extends Base {
   /**
   * Mail form contact site admin
@@ -59,6 +68,21 @@ class Mail extends Base {
     $this->smarty->assign('WEBSITENAME', $this->setting->getValue('website_name'));
     $this->smarty->assign('SUBJECT', $aData['subject']);
     $this->smarty->assign('DATA', $aData);
+    
+    // Check if SMTP is enabled
+    $smtp_enabled = $this->setting->getValue('smtp_enabled');
+    
+    if ($smtp_enabled) {
+      return $this->sendMailSMTP($template, $aData);
+    } else {
+      return $this->sendMailNative($template, $aData);
+    }
+  }
+  
+  /**
+   * Send email using native PHP mail() function
+   */
+  private function sendMailNative($template, $aData) {
     $headers = 'From: ' . $this->setting->getValue('website_name') . '<' . $this->setting->getValue('website_email') . ">\n";
     $headers .= "MIME-Version: 1.0\n";
     $headers .= "Content-Type: text/html; charset=ISO-8859-1\r\n";
@@ -68,6 +92,56 @@ class Mail extends Base {
       return true;
     $this->setErrorMessage($this->sqlError('E0031'));
     return false;
+  }
+  
+  /**
+   * Send email using SMTP (PHPMailer)
+   */
+  private function sendMailSMTP($template, $aData) {
+    $mail = new PHPMailer(true);
+    
+    try {
+      // Server settings
+      $mail->SMTPDebug = 0; // Set to 2 for debugging
+      $mail->isSMTP();
+      $mail->Host = $this->setting->getValue('smtp_host');
+      $mail->SMTPAuth = true;
+      $mail->Username = $this->setting->getValue('smtp_username');
+      $mail->Password = $this->setting->getValue('smtp_password');
+      
+      // Encryption and port
+      $smtp_secure = $this->setting->getValue('smtp_secure');
+      if ($smtp_secure == 'tls') {
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+      } else if ($smtp_secure == 'ssl') {
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        $mail->Port = 465;
+      } else {
+        $mail->Port = $this->setting->getValue('smtp_port') ?: 587;
+      }
+      
+      // Recipients
+      $mail->setFrom($this->setting->getValue('website_email'), $this->setting->getValue('website_name'));
+      $mail->addAddress($aData['email']);
+      
+      // Reply-To if provided
+      if (strlen(@$aData['senderName']) > 0 && @strlen($aData['senderEmail']) > 0) {
+        $mail->addReplyTo($aData['senderEmail'], $aData['senderName']);
+      }
+      
+      // Content
+      $mail->isHTML(true);
+      $mail->Subject = $this->smarty->fetch(BASEPATH . 'templates/mail/subject.tpl');
+      $mail->Body = $this->smarty->fetch(BASEPATH . 'templates/mail/' . $template . '.tpl');
+      
+      $mail->send();
+      return true;
+      
+    } catch (Exception $e) {
+      $this->setErrorMessage("Mailer Error: {$mail->ErrorInfo}");
+      return false;
+    }
   }
 }
 

@@ -11,7 +11,7 @@
     </thead>
     <tbody>
 {assign var=rank value=1}
-{section block $BLOCKSFOUND}
+{section name=block loop=$BLOCKSFOUND}
       <tr class="{cycle values="odd,even"}">
         {if ! $GLOBAL.website.blockexplorer.disabled}
         <td align="center"><a href="{$GLOBAL.website.blockexplorer.url}{$BLOCKSFOUND[block].blockhash}" target="_new">{$BLOCKSFOUND[block].height}</a></td>

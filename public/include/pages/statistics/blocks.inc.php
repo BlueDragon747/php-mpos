@@ -23,7 +23,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
     $iHeight = $_REQUEST['height'];
   } else if (empty($_REQUEST['height'])) {
       $aBlock = $block->getLast();
-      $iHeight = $aBlock['height']; 
+      $iHeight = isset($aBlock['height']) ? $aBlock['height'] : 0;
   }
 
   $test = false;

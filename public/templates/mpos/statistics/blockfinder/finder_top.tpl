@@ -12,7 +12,7 @@
     </thead>
     <tbody>
 {assign var=rank value=1}
-{section block $BLOCKSSOLVEDBYACCOUNT}
+{section name=block loop=$BLOCKSSOLVEDBYACCOUNT}
       <tr class="{cycle values="odd,even"}">
         <td align="center">{$rank++}</td>
         <td>{if $BLOCKSSOLVEDBYACCOUNT[block].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$BLOCKSSOLVEDBYACCOUNT[block].finder|default:"unknown"|escape}{/if}</td>

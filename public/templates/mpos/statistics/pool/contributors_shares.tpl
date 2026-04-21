@@ -12,7 +12,7 @@
     <tbody>
 {assign var=rank value=1}
 {assign var=listed value=0}
-{section shares $CONTRIBSHARES}
+{section name=shares loop=$CONTRIBSHARES}
       <tr{if $GLOBAL.userdata.username|default:""|lower == $CONTRIBSHARES[shares].account|lower}{assign var=listed value=1} style="background-color:#99EB99;"{else} class="{cycle values="odd,even"}"{/if}>
         <td align="center">{$rank++}</td>
         <td align="right">{if $CONTRIBSHARES[shares].donate_percent > 0}<i class="icon-star-empty"></i>{/if}</td>

@@ -9,7 +9,7 @@
     <tbody>
 {assign var=rank value=1}
 {assign var=listed value=0}
-{section shares $CONTRIBSHARES}
+{section name=shares loop=$CONTRIBSHARES}
 {if $GLOBAL.userdata.username|default:"" == $CONTRIBSHARES[shares].account}{assign var=listed value=1}{/if}
       <tr>
         <th aign="center">{$rank++}</th>

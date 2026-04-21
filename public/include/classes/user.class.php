@@ -210,9 +210,11 @@ class User extends Base {
     $stmt = $this->mysqli->prepare("SELECT pin FROM $this->table WHERE id=? AND pin=? LIMIT 1");
     $pin_hash = $this->getHash($pin);
     if ($stmt->bind_param('is', $userId, $pin_hash) && $stmt->execute() && $stmt->bind_result($row_pin) && $stmt->fetch()) {
+      $stmt->close(); // Close the statement before calling another query
       $this->setUserPinFailed($userId, 0);
       return ($pin_hash === $row_pin);
     }
+    $stmt->close(); // Close on failure too
     $this->log->log('info', $this->getUserName($userId).' incorrect pin');
     $this->incUserPinFailed($userId);
     // Check if this account should be locked
@@ -417,7 +419,7 @@ class User extends Base {
    * @param strToken string Token for confirmation
    * @return bool
    **/
-  public function updateAccount($userID, $address, $threshold, $donate, $email, $is_anonymous, $strToken, $address_mm, $threshold_mm) {
+  public function updateAccount($userID, $address, $threshold, $donate, $email, $is_anonymous, $strToken, $address_mm, $threshold_mm, $address_mm1, $threshold_mm1, $address_mm3, $threshold_mm3, $address_mm4, $threshold_mm4, $address_mm5, $threshold_mm5) {
     $this->debug->append("STA " . __METHOD__, 4);
     $bUser = false;
     $donate = round($donate, 2);
@@ -436,6 +438,24 @@ class User extends Base {
       return false;
     } else if ($threshold_mm > $this->config['ap_threshold_mm']['max']) {
       $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm']['max']);
+      return false;
+    } else if ($threshold_mm1 < $this->config['ap_threshold_mm1']['min'] && $threshold_mm1 != 0) {
+      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold_mm1']['min']);
+      return false;
+    } else if ($threshold_mm1 > $this->config['ap_threshold_mm1']['max']) {
+      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm1']['max']);
+      return false;
+    } else if ($threshold_mm3 < $this->config['ap_threshold_mm3']['min'] && $threshold_mm3 != 0) {
+      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold_mm3']['min']);
+      return false;
+    } else if ($threshold_mm3 > $this->config['ap_threshold_mm3']['max']) {
+      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm3']['max']);
+      return false;
+    } else if ($threshold_mm4 > $this->config['ap_threshold_mm4']['max']) {
+      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm4']['max']);
+      return false;
+    } else if ($threshold_mm5 > $this->config['ap_threshold_mm5']['max']) {
+      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm5']['max']);
       return false;
     }
     if (!is_numeric($donate)) {
@@ -473,10 +493,27 @@ class User extends Base {
     if (empty($address_mm)) {
     	$address_mm = NULL;
     }
+    if (empty($address_mm1)) {
+    	$address_mm1 = NULL;
+    }
+    if (empty($address_mm3)) {
+    	$address_mm3 = NULL;
+    }
+    if (empty($address_mm4)) {
+    	$address_mm4 = NULL;
+    }
+    if (empty($address_mm5)) {
+    	$address_mm5 = NULL;
+    }
+
 
     // Number sanitizer, just in case we fall through above
     $threshold = min($this->config['ap_threshold']['max'], max(0, floatval($threshold)));
     $threshold_mm = min($this->config['ap_threshold_mm']['max'], max(0, floatval($threshold_mm)));
+    $threshold_mm1 = min($this->config['ap_threshold_mm1']['max'], max(0, floatval($threshold_mm1)));
+    $threshold_mm3 = min($this->config['ap_threshold_mm3']['max'], max(0, floatval($threshold_mm3)));
+    $threshold_mm4 = min($this->config['ap_threshold_mm4']['max'], max(0, floatval($threshold_mm4)));
+    $threshold_mm5 = min($this->config['ap_threshold_mm5']['max'], max(0, floatval($threshold_mm5)));
     $donate = min(100, max(0, floatval($donate)));
 
     // twofactor - consume the token if it is enabled and valid
@@ -498,13 +535,13 @@ class User extends Base {
     }
     
     // We passed all validation checks so update the account
-    $stmt = $this->mysqli->prepare("UPDATE $this->table SET coin_address = ?, coin_address_mm = ?, ap_threshold = ?, ap_threshold_mm = ?, donate_percent = ?, email = ?, is_anonymous = ? WHERE id = ?");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('ssdddsii', $address, $address_mm, $threshold, $threshold_mm, $donate, $email, $is_anonymous, $userID) && $stmt->execute()) {
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET coin_address = ?, coin_address_mm = ?, coin_address_mm1 = ?, coin_address_mm3 = ?, coin_address_mm4 = ?, coin_address_mm5 = ?, ap_threshold = ?, ap_threshold_mm = ?, ap_threshold_mm1 = ?, ap_threshold_mm3 = ?, ap_threshold_mm4 = ?, ap_threshold_mm5 = ?, donate_percent = ?, email = ?, is_anonymous = ? WHERE id = ?");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('ssssssdddddddsii', $address, $address_mm, $address_mm1, $address_mm3, $address_mm4, $address_mm5, $threshold, $threshold_mm, $threshold_mm1, $threshold_mm3, $threshold_mm4, $threshold_mm5, $donate, $email, $is_anonymous, $userID) && $stmt->execute()) {
       $this->log->log("info", $this->getUserName($userID)." updated their account details");
       return true;
     }
     // Catchall
-    $this->setErrorMessage('Failed to update your account:'.$address.' | '.$address_mm.' | '. $this->mysqli->error);
+    $this->setErrorMessage('Failed to update your account:'.$address.' | '.$address_mm.' | '.$address_mm1.' | '.$address_mm3.' | '.$address_mm4.' | '.$address_mm5.' | '. $this->mysqli->error);
     $this->debug->append('Account update failed: ' . $this->mysqli->error);
     return false;
   }
@@ -519,9 +556,11 @@ class User extends Base {
     if (!is_string($key)) return false;
     $stmt = $this->mysqli->prepare("SELECT api_key, id FROM $this->table WHERE api_key = ? LIMIT 1");
     if ($this->checkStmt($stmt) && $stmt->bind_param("s", $key) && $stmt->execute() && $stmt->bind_result($api_key, $id) && $stmt->fetch()) {
+      $stmt->close();
       if ($api_key === $key)
         return $id;
     }
+    $stmt->close();
     header("HTTP/1.1 401 Unauthorized");
     die('Access denied');
   }
@@ -645,7 +684,7 @@ class User extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
       id, username, pin, api_key, is_admin, is_anonymous, email, no_fees,
-      IFNULL(donate_percent, '0') as donate_percent, coin_address, coin_address_mm, ap_threshold, ap_threshold_mm
+      IFNULL(donate_percent, '0') as donate_percent, coin_address, coin_address_mm, coin_address_mm1, coin_address_mm3, coin_address_mm4, coin_address_mm5, ap_threshold, ap_threshold_mm, ap_threshold_mm1, ap_threshold_mm3, ap_threshold_mm4, ap_threshold_mm5
       FROM $this->table
       WHERE id = ? LIMIT 0,1");
     if ($this->checkStmt($stmt)) {

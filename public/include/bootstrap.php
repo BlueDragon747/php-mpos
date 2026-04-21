@@ -19,8 +19,8 @@ if (!include_once(BASEPATH . 'include/config/security.inc.dist.php')) die('Unabl
 if (@file_exists(BASEPATH . 'include/config/security.inc.php')) include_once(BASEPATH . 'include/config/security.inc.php');
 
 // start our session, we need it for smarty caching
-$session_start = @session_start();
 session_set_cookie_params(time()+$config['cookie']['duration'], $config['cookie']['path'], $config['cookie']['domain'], $config['cookie']['secure'], $config['cookie']['httponly']);
+$session_start = @session_start();
 if (!$session_start) {
     $log->log("info", "Forcing session id regeneration, session failed to start [hijack attempt?]");
       session_destroy();

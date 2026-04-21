@@ -54,27 +54,31 @@ if ($setting->getValue('disable_manual_payouts') != 1 && $aManualPayouts = $tran
     $transaction_id = NULL;
     $rpc_txid = NULL;
     $log->logInfo(sprintf($mask, $aUserData['id'], $aUserData['username'], $aUserData['confirmed'], $aUserData['coin_address'], $aUserData['payout_id']));
-    if (!$oPayout->setProcessed($aUserData['payout_id'])) {
-      $log->logFatal('    unable to mark transactions ' . $aData['id'] . ' as processed. ERROR: ' . $oPayout->getCronError());
-      $monitoring->endCronjob($cron_name, 'E0010', 1, true);
-    }
     if ($bitcoin->validateaddress($aUserData['coin_address'])) {
-      if (!$transaction_id = $transaction->createDebitAPRecord($aUserData['id'], $aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual'])) {
-        $log->logFatal('    failed to fullt debit user ' . $aUserData['username'] . ': ' . $transaction->getCronError());
+      // SAFE PAYOUT FLOW: Try RPC call FIRST, only deduct balance on success
+      try {
+        $rpc_txid = $bitcoin->sendtoaddress($aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual']);
+      } catch (Exception $e) {
+        $log->logError('E0078: RPC method did not return 200 OK: Address: ' . $aUserData['coin_address'] . ' ERROR: ' . $e->getMessage());
+        // RPC failed - skip this payout, will retry next cron run (balance not deducted yet)
+        $log->logInfo('    payout failed for user ' . $aUserData['username'] . ' - RPC error, will retry next run');
+        continue;
+      }
+      
+      // RPC succeeded - now create debit record and mark as processed
+      if (!$transaction_id = $transaction->createPayoutDebitRecord($aUserData['id'], $aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual'], 'Debit_AP')) {
+        $log->logFatal('    failed to fully debit user ' . $aUserData['username'] . ': ' . $transaction->getCronError());
         $monitoring->endCronjob($cron_name, 'E0064', 1, true);
-      } else {
-        // Run the payouts from RPC now that the user is fully debited
-        try {
-          $rpc_txid = $bitcoin->sendtoaddress($aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual']);
-        } catch (Exception $e) {
-          $log->logError('E0078: RPC method did not return 200 OK: Address: ' . $aUserData['coin_address'] . ' ERROR: ' . $e->getMessage());
-          // Remove this line below if RPC calls are failing but transactions are still added to it
-          // Don't blame MPOS if you run into issues after commenting this out!
-          $monitoring->endCronjob($cron_name, 'E0078', 1, true);
-        }
-        // Update our transaction and add the RPC Transaction ID
-        if (empty($rpc_txid) || !$transaction->setRPCTxId($transaction_id, $rpc_txid))
-          $log->logError('Unable to add RPC transaction ID ' . $rpc_txid . ' to transaction record ' . $transaction_id . ': ' . $transaction->getCronError());
+      }
+      
+      // Update transaction with RPC Transaction ID
+      if (empty($rpc_txid) || !$transaction->setRPCTxId($transaction_id, $rpc_txid))
+        $log->logError('Unable to add RPC transaction ID ' . $rpc_txid . ' to transaction record ' . $transaction_id . ': ' . $transaction->getCronError());
+      
+      // Mark payout as processed
+      if (!$oPayout->setProcessed($aUserData['payout_id'])) {
+        $log->logFatal('    unable to mark transactions ' . $aUserData['id'] . ' as processed. ERROR: ' . $oPayout->getCronError());
+        $monitoring->endCronjob($cron_name, 'E0010', 1, true);
       }
     } else {
       $log->logInfo('    failed to validate address for user: ' . $aUserData['username']);
@@ -103,23 +107,110 @@ if ($setting->getValue('disable_auto_payouts') != 1 && $aAutoPayouts = $transact
     $rpc_txid = NULL;
     $log->logInfo(sprintf($mask, $aUserData['id'], $aUserData['username'], $aUserData['confirmed'], $aUserData['coin_address'], $aUserData['ap_threshold']));
     if ($bitcoin->validateaddress($aUserData['coin_address'])) {
-      if (!$transaction_id = $transaction->createDebitAPRecord($aUserData['id'], $aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual'])) {
-        $log->logFatal('    failed to fully debit user ' . $aUserData['username'] . ': ' . $transaction->getCronError());
-        $monitoring->endCronjob($cron_name, 'E0064', 1, true);
-      } else {
-        // Run the payouts from RPC now that the user is fully debited
-        try {
-          $rpc_txid = $bitcoin->sendtoaddress($aUserData['coin_address'], $aUserData['confirmed'] - $config['txfee_manual']);
-        } catch (Exception $e) {
-          $log->logError('E0078: RPC method did not return 200 OK: Address: ' . $aUserData['coin_address'] . ' ERROR: ' . $e->getMessage());
-          // Remove this line below if RPC calls are failing but transactions are still added to it
-          // Don't blame MPOS if you run into issues after commenting this out!
-          $monitoring->endCronjob($cron_name, 'E0078', 1, true);
+      // SAFE PAYOUT FLOW: Try RPC call FIRST, only deduct balance on success
+      $sendAmount = $aUserData['confirmed'] - $config['txfee_auto'];
+      $log->logInfo('    [DEBUG] About to send ' . $sendAmount . ' to user ' . $aUserData['username'] . ' (confirmed: ' . $aUserData['confirmed'] . ', fee: ' . $config['txfee_auto'] . ')');
+      try {
+		$sendAmount = round($aUserData['confirmed'] - $config['txfee_auto'], 8);
+        $rpc_txid = $bitcoin->sendtoaddress($aUserData['coin_address'], $sendAmount);
+        $log->logInfo('    [DEBUG] RPC send successful, txid: ' . $rpc_txid);
+      } catch (Exception $e) {
+        $log->logError('E0078: RPC method did not return 200 OK: Address: ' . $aUserData['coin_address'] . ' ERROR: ' . $e->getMessage());
+        
+        // CRITICAL: Check if coins were actually sent despite the error
+        // This can happen if RPC times out after coins are sent
+        $log->logInfo('    [WARNING] RPC error occurred, checking if coins were already sent...');
+        sleep(5); // Wait for transaction to propagate
+        
+        $foundTx = null;
+        $maxRetries = 3;
+        $retryDelay = 10; // seconds
+        
+        for ($retry = 1; $retry <= $maxRetries; $retry++) {
+          try {
+            // Check recent transactions up to 2 hours back (for repeated RPC errors)
+            // and handle balance changes by looking for approximate amount match
+            $twoHoursAgo = time() - 7200; // 2 hours ago
+            $recentTxs = $bitcoin->listsinceblock('', 1, true);
+            
+            if (!empty($recentTxs['transactions'])) {
+              foreach ($recentTxs['transactions'] as $tx) {
+                if ($tx['category'] == 'send' && 
+                    $tx['address'] == $aUserData['coin_address'] && 
+                    $tx['confirmations'] >= 0 &&
+                    $tx['timereceived'] >= $twoHoursAgo) {
+                  
+                  // Check if amount is close to expected (within 50 coin tolerance for fast chains)
+                  // or if transaction is very recent (within 15 minutes, likely our payout)
+                  $txAge = time() - $tx['timereceived'];
+                  $expectedAmount = $sendAmount; // Fixed: was -$sendAmount which doubled the diff
+                  $actualAmount = abs($tx['amount']);
+                  $amountDiff = abs($actualAmount - $expectedAmount);
+                  
+                  // For fast chains, allow 50 coin difference
+                  // OR if transaction is within 15 minutes (very recent, likely our payout)
+                  if ($amountDiff < 50.0 || $txAge < 900) {
+                    $foundTx = $tx;
+                    $log->logInfo('    [DEBUG] Found matching transaction: txid=' . $tx['txid'] . ', amount=' . $actualAmount . ', expected=' . $expectedAmount . ', age=' . round($txAge/60) . 'min, diff=' . $amountDiff);
+                    break 2; // Break out of both loops
+                  }
+                }
+              }
+            }
+            
+            // If we found a transaction, we're done
+            if ($foundTx) {
+              break;
+            }
+            
+            // No transaction found yet, retry if we have attempts left
+            if ($retry < $maxRetries) {
+              $log->logInfo('    [WARNING] No matching transaction found, retrying check in ' . $retryDelay . ' seconds (attempt ' . $retry . '/' . $maxRetries . ')...');
+              sleep($retryDelay);
+            }
+            
+          } catch (Exception $e2) {
+            $log->logError('    [ERROR] Failed to check recent transactions (attempt ' . $retry . '/' . $maxRetries . '): ' . $e2->getMessage());
+            if ($retry < $maxRetries) {
+              $log->logInfo('    [WARNING] Retrying transaction check in ' . $retryDelay . ' seconds...');
+              sleep($retryDelay);
+            } else {
+              break; // Out of retries
+            }
+          }
         }
-        // Update our transaction and add the RPC Transaction ID
-        if (empty($rpc_txid) || !$transaction->setRPCTxId($transaction_id, $rpc_txid))
-          $log->logError('Unable to add RPC transaction ID ' . $rpc_txid . ' to transaction record ' . $transaction_id . ': ' . $transaction->getCronError());
+        
+        if ($foundTx) {
+          $rpc_txid = $foundTx['txid'];
+          $log->logInfo('    [CRITICAL] Coins WERE sent despite error! txid: ' . $rpc_txid);
+          $log->logInfo('    [CRITICAL] Proceeding with debit record creation to prevent duplicate payout');
+          // Continue to debit record creation below
+        } else {
+          $log->logInfo('    payout failed for user ' . $aUserData['username'] . ' - RPC error, will retry next run');
+          continue;
+        }
       }
+      
+      // RPC succeeded - now create debit record
+      $log->logInfo('    [DEBUG] Creating debit record for user ' . $aUserData['username'] . ', amount: ' . $sendAmount);
+      $transaction_id = $transaction->createPayoutDebitRecord($aUserData['id'], $aUserData['coin_address'], $sendAmount, 'Debit_AP');
+      if ($transaction_id === false || $transaction_id === null || $transaction_id === 0) {
+        $error = $transaction->getCronError();
+        $log->logFatal('    [CRITICAL] FAILED to create debit record for user ' . $aUserData['username'] . ': ' . $error);
+        $log->logFatal('    [CRITICAL] Coins were sent (txid: ' . $rpc_txid . ') but NO DEBIT RECORD CREATED!');
+        $monitoring->endCronjob($cron_name, 'E0064', 1, true);
+      }
+      $log->logInfo('    [DEBUG] Debit record created successfully, transaction_id: ' . $transaction_id);
+      
+      // Update transaction with RPC Transaction ID
+      if (empty($rpc_txid) || !$transaction->setRPCTxId($transaction_id, $rpc_txid)) {
+        $log->logError('    [WARNING] Unable to add RPC transaction ID ' . $rpc_txid . ' to transaction record ' . $transaction_id . ': ' . $transaction->getCronError());
+        $log->logError('    [WARNING] Payout completed but txid not recorded in database');
+      } else {
+        $log->logInfo('    [DEBUG] RPC txid recorded successfully');
+      }
+      
+      $log->logInfo('    [SUCCESS] Payout completed for user ' . $aUserData['username'] . ' - sent: ' . $sendAmount . ', txid: ' . $rpc_txid . ', tx_record: ' . $transaction_id);
     } else {
       $log->logInfo('    failed to validate address for user: ' . $aUserData['username']);
       continue;

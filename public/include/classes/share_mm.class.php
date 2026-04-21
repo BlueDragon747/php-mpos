@@ -54,7 +54,7 @@ class Share_mm Extends Base {
       }
     }
     $sql .= " WHERE id = ? LIMIT 1";
-    $this->addParam('i', $id);
+    $this->addParam('s', $id);
     $stmt = $this->mysqli->prepare($sql);
     if ($this->checkStmt($stmt) && call_user_func_array( array($stmt, 'bind_param'), $this->getParam()) && $stmt->execute())
       return true;
@@ -86,7 +86,7 @@ class Share_mm Extends Base {
       ON a.username = SUBSTRING_INDEX( s.username , '.', 1 )
       WHERE s.id > ? AND s.id <= ? AND s.our_result = 'Y' AND a.is_locked != 2
       ");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('ii', $previous_upstream, $current_upstream) && $stmt->execute() && $result = $stmt->get_result())
+    if ($this->checkStmt($stmt) && $stmt->bind_param('ss', $previous_upstream, $current_upstream) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_object()->total;
     return $this->sqlError();
   }
@@ -110,9 +110,10 @@ class Share_mm Extends Base {
       LEFT JOIN " . $this->user->getTableName() . " AS a
       ON a.username = SUBSTRING_INDEX( s.username , '.', 1 )
       WHERE s.id > ? AND s.id <= ? AND a.is_locked != 2
-      GROUP BY username DESC
+      GROUP BY username, a.id, a.no_fees
+      ORDER BY valid DESC
       ");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('ii', $previous_upstream, $current_upstream) && $stmt->execute() && $result = $stmt->get_result())
+    if ($this->checkStmt($stmt) && $stmt->bind_param('ss', $previous_upstream, $current_upstream) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_all(MYSQLI_ASSOC);
     return $this->sqlError();
   }
@@ -157,8 +158,9 @@ class Share_mm Extends Base {
       LEFT JOIN " . $this->user->getTableName() . " AS a
       ON a.username = SUBSTRING_INDEX( s.username , '.', 1 )
       WHERE s.share_id > ? AND s.share_id <= ? AND a.is_locked != 2
-      GROUP BY account DESC");
-    if ($this->checkStmt($stmt) && $stmt->bind_param("ii", $iMinId, $iMaxId) && $stmt->execute() && $result = $stmt->get_result()) {
+      GROUP BY account, a.id, a.no_fees
+      ORDER BY valid DESC");
+    if ($this->checkStmt($stmt) && $stmt->bind_param("ss", $iMinId, $iMaxId) && $stmt->execute() && $result = $stmt->get_result()) {
       $aData = NULL;
       while ($row = $result->fetch_assoc()) {
         $aData[$row['account']] = $row;
@@ -227,7 +229,7 @@ class Share_mm Extends Base {
           WHERE id > ? AND id <= ?";
     }
     $archive_stmt = $this->mysqli->prepare($sql);
-    if ($this->checkStmt($archive_stmt) && $archive_stmt->bind_param('iii', $block_id, $previous_upstream, $current_upstream) && $archive_stmt->execute())
+    if ($this->checkStmt($archive_stmt) && $archive_stmt->bind_param('sss', $block_id, $previous_upstream, $current_upstream) && $archive_stmt->execute())
       return true;
     return $this->sqlError();
   }
@@ -249,7 +251,7 @@ class Share_mm Extends Base {
       sleep($this->config['purge']['sleep']);
       $stmt = $this->mysqli->prepare("DELETE FROM $this->table WHERE id > ? AND id <= ? ORDER BY id LIMIT " . $this->config['purge']['shares']);
       $start = microtime(true);
-      if ($this->checkStmt($stmt) && $stmt->bind_param('ii', $previous_upstream, $current_upstream) && $stmt->execute()) {
+      if ($this->checkStmt($stmt) && $stmt->bind_param('ss', $previous_upstream, $current_upstream) && $stmt->execute()) {
         $affected = $stmt->affected_rows;
       } else {
         return $this->sqlError();
@@ -284,7 +286,9 @@ class Share_mm Extends Base {
    * @param last int Skips all shares up to last to find new share
    * @return bool
    **/
-  public function findUpstreamShare($aBlock, $last=0) {
+  public function findUpstreamShare($aBlock, $last=0, $excludeIds=array()) {
+    $excludeList = implode(',', array_map('intval', $excludeIds));
+    if (empty($excludeList)) $excludeList = '0';
     // Many use stratum, so we create our stratum check first
     $version = pack("I*", sprintf('%08d', $aBlock['version']));
     $previousblockhash = pack("H*", swapEndian($aBlock['previousblockhash']));
@@ -293,14 +297,14 @@ class Share_mm Extends Base {
     $bits = pack("H*", swapEndian($aBlock['bits']));
     $nonce = pack("I*", $aBlock['nonce']);
     $header_bin = $version .  $previousblockhash . $merkleroot . $time .  $bits . $nonce;
-    $header_hex = implode(unpack("H*", $header_bin));
+    $header_hex = bin2hex($header_bin);
 
     // Stratum supported blockhash solution entry
     $stmt = $this->mysqli->prepare("SELECT SUBSTRING_INDEX( `username` , '.', 1 ) AS account, username as worker, id FROM $this->table WHERE solution = ? LIMIT 1");
     if ($this->checkStmt($stmt) && $stmt->bind_param('s', $aBlock['hash']) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'stratum_blockhash';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
 
@@ -310,7 +314,7 @@ class Share_mm Extends Base {
     if ($this->checkStmt($stmt) && $stmt->bind_param('s', $scrypt_hash) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'stratum_solution';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
 
@@ -321,7 +325,7 @@ class Share_mm Extends Base {
     if ($this->checkStmt($stmt) && $stmt->bind_param('s', $ppheader) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'pp_solution';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
 
@@ -335,26 +339,29 @@ class Share_mm Extends Base {
       AND UNIX_TIMESTAMP(time) >= ?
       AND UNIX_TIMESTAMP(time) <= ( ? + 60 )
       ORDER BY id ASC LIMIT 1");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('iii', $last, $aBlock['time'], $aBlock['time']) && $stmt->execute() && $result = $stmt->get_result()) {
+    if ($this->checkStmt($stmt) && $stmt->bind_param('sii', $last, $aBlock['time'], $aBlock['time']) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'upstream_share';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
 
     // We failed again, now we take ANY result matching the timestamp
+    // Relaxed time window to handle batched share submissions (±4 hours)
     $stmt = $this->mysqli->prepare("
       SELECT
       SUBSTRING_INDEX( `username` , '.', 1 ) AS account, username as worker, id
       FROM $this->table
       WHERE our_result = 'Y'
-      AND id > ?
-      AND UNIX_TIMESTAMP(time) >= ?
-      ORDER BY id ASC LIMIT 1");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('ii', $last, $aBlock['time']) && $stmt->execute() && $result = $stmt->get_result()) {
+      AND id NOT IN ($excludeList)
+      AND id >= ?
+      AND UNIX_TIMESTAMP(time) >= (? - 14400)
+      AND UNIX_TIMESTAMP(time) <= (? + 14400)
+      ORDER BY ABS(UNIX_TIMESTAMP(time) - ?) ASC, id ASC LIMIT 1");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('ssss', $last, $aBlock['time'], $aBlock['time'], $aBlock['time']) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'any_share';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
     $this->setErrorMessage($this->getErrorMsg('E0052', $aBlock['height']));
@@ -370,14 +377,14 @@ class Share_mm Extends Base {
     $bits = pack("H*", swapEndian($aBlock['bits']));
     $nonce = pack("I*", $aBlock['nonce']);
     $header_bin = $version .  $previousblockhash . $merkleroot . $time .  $bits . $nonce;
-    $header_hex = implode(unpack("H*", $header_bin));
+    $header_hex = bin2hex($header_bin);
 
     // Stratum supported blockhash solution entry
     $stmt = $this->mysqli->prepare("SELECT SUBSTRING_INDEX( `username` , '.', 1 ) AS account, username as worker, id FROM $this->table WHERE solution = ? LIMIT 1");
     if ($this->checkStmt($stmt) && $stmt->bind_param('s', $aBlock['hash']) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'stratum_blockhash';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
 
@@ -387,7 +394,7 @@ class Share_mm Extends Base {
     if ($this->checkStmt($stmt) && $stmt->bind_param('s', $scrypt_hash) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'stratum_solution';
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_int($this->oUpstream->id))
+      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id))
         return true;
     }
 
@@ -410,7 +417,7 @@ class Share_mm Extends Base {
         ORDER BY id DESC
       ) AS b
       WHERE total <= ?");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('iii', $current_upstream, $iCount, $iCount) && $stmt->execute() && $result = $stmt->get_result())
+    if ($this->checkStmt($stmt) && $stmt->bind_param('sdd', $current_upstream, $iCount, $iCount) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_object()->id;
     return $this->sqlError();
   }

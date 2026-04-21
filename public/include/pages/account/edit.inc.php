@@ -151,21 +151,140 @@ if ($user->isAuthenticated()) {
         	}
         	break;
 
+          case 'cashOut_mm1':
+        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+        	} else {
+        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $dBalance = $aBalance['confirmed'];
+        	  $user->log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
+        	  if ($dBalance > $config['txfee_manual']) {
+        	    if (!$oPayout->isPayoutActive_mm1($_SESSION['USERDATA']['id'])) {
+        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+        	        if ($iPayoutId = $oPayout->createPayout_mm1($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	        } else {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	        }
+        	      } else {
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	      }
+        	    } else {
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	    }
+        	  } else {
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm1'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	  }
+        	}
+        	break;
+
+
+          case 'cashOut_mm3':
+        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+        	} else {
+        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $dBalance = $aBalance['confirmed'];
+        	  $user->log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
+        	  if ($dBalance > $config['txfee_manual']) {
+        	    if (!$oPayout->isPayoutActive_mm3($_SESSION['USERDATA']['id'])) {
+        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+        	        if ($iPayoutId = $oPayout->createPayout_mm3($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	        } else {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	        }
+        	      } else {
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	      }
+        	    } else {
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	    }
+        	  } else {
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm3'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	  }
+        	}
+        	break;
+
+          case 'cashOut_mm4':
+        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+        	} else {
+        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $dBalance = $aBalance['confirmed'];
+        	  $user->log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
+        	  if ($dBalance > $config['txfee_manual']) {
+        	    if (!$oPayout->isPayoutActive_mm4($_SESSION['USERDATA']['id'])) {
+        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+        	        if ($iPayoutId = $oPayout->createPayout_mm4($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	        } else {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	        }
+        	      } else {
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	      }
+        	    } else {
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	    }
+        	  } else {
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm4'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	  }
+        	}
+        	break;
+
+          case 'cashOut_mm5':
+        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+        	} else {
+        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $dBalance = $aBalance['confirmed'];
+        	  $user->log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
+        	  if ($dBalance > $config['txfee_manual']) {
+        	    if (!$oPayout->isPayoutActive_mm5($_SESSION['USERDATA']['id'])) {
+        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
+        	        if ($iPayoutId = $oPayout->createPayout_mm5($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	        } else {
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	        }
+        	      } else {
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	      }
+        	    } else {
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	    }
+        	  } else {
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm5'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	  }
+        	}
+        	break;
+
+
+
           case 'updateAccount':
             if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-              if ($user->updateAccount($_SESSION['USERDATA']['id'], $_POST['paymentAddress'], $_POST['payoutThreshold'], $_POST['donatePercent'], $_POST['email'], $_POST['is_anonymous'], $oldtoken_ea, $_POST['paymentAddress_mm'], $_POST['payoutThreshold_mm'])) {
-            	$_SESSION['POPUP'][] = array('CONTENT' => 'Account details updated', 'TYPE' => 'success');
+              if ($user->updateAccount($_SESSION['USERDATA']['id'], $_POST['paymentAddress'] ?? '', $_POST['payoutThreshold'] ?? 0, $_POST['donatePercent'] ?? 0, $_POST['email'] ?? '', $_POST['is_anonymous'] ?? 0, $oldtoken_ea, $_POST['paymentAddress_mm'] ?? '', $_POST['payoutThreshold_mm'] ?? 0, $_POST['paymentAddress_mm1'] ?? '', $_POST['payoutThreshold_mm1'] ?? 0, $_POST['paymentAddress_mm3'] ?? '', $_POST['payoutThreshold_mm3'] ?? 0, $_POST['paymentAddress_mm4'] ?? '', $_POST['payoutThreshold_mm4'] ?? 0, $_POST['paymentAddress_mm5'] ?? '', $_POST['payoutThreshold_mm5'] ?? 0)) {
+              	$_SESSION['POPUP'][] = array('CONTENT' => 'Account details updated', 'TYPE' => 'success');
               } else {
-            	$_SESSION['POPUP'][] = array('CONTENT' => 'Failed to update your account: ' . $user->getError(), 'TYPE' => 'errormsg');
+              	$_SESSION['POPUP'][] = array('CONTENT' => 'Failed to update your account: ' . $user->getError(), 'TYPE' => 'errormsg');
               }
             } else {
               $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
             }
-        	break;
+         	break;
 
           case 'updatePassword':
             if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-              if ($user->updatePassword($_SESSION['USERDATA']['id'], $_POST['currentPassword'], $_POST['newPassword'], $_POST['newPassword2'], $oldtoken_cp)) {
+              if ($user->updatePassword($_SESSION['USERDATA']['id'], $_POST['currentPassword'] ?? '', $_POST['newPassword'] ?? '', $_POST['newPassword2'] ?? '', $oldtoken_cp)) {
                 $_SESSION['POPUP'][] = array('CONTENT' => 'Password updated', 'TYPE' => 'success');
               } else {
                 $_SESSION['POPUP'][] = array('CONTENT' => $user->getError(), 'TYPE' => 'errormsg');
@@ -173,7 +292,7 @@ if ($user->isAuthenticated()) {
             } else {
               $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
             }
-        	break;
+         	break;
         }
       }
     }
