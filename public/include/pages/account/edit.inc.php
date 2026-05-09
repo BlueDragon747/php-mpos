@@ -95,9 +95,9 @@ if ($user->isAuthenticated()) {
         switch (@$_POST['do']) {
           case 'cashOut':
         	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'main');
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'main');
         	} else {
         	  $aBalance = $transaction->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
@@ -106,27 +106,27 @@ if ($user->isAuthenticated()) {
         	    if (!$oPayout->isPayoutActive($_SESSION['USERDATA']['id'])) {
         	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
         	        if ($iPayoutId = $oPayout->createPayout($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'main', 'TYPE' => 'success');
         	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'main');
         	        }
         	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'main');
         	      }
         	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'main');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'main');
         	  }
         	}
         	break;
 
           case 'cashOut_mm':
         	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm');
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm');
         	} else {
         	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
@@ -135,47 +135,47 @@ if ($user->isAuthenticated()) {
         	    if (!$oPayout->isPayoutActive_mm($_SESSION['USERDATA']['id'])) {
         	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
         	        if ($iPayoutId = $oPayout->createPayout_mm($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm', 'TYPE' => 'success');
         	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm');
         	        }
         	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm');
         	      }
         	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm');
         	  }
         	}
         	break;
 
           case 'cashOut_mm1':
         	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm1');
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
         	} else {
-        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $aBalance = $transaction_mm1->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
         	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
         	  if ($dBalance > $config['txfee_manual']) {
         	    if (!$oPayout->isPayoutActive_mm1($_SESSION['USERDATA']['id'])) {
         	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
         	        if ($iPayoutId = $oPayout->createPayout_mm1($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm1', 'TYPE' => 'success');
         	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm1');
         	        }
         	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm1');
         	      }
         	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm1'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm1'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
         	  }
         	}
         	break;
@@ -183,87 +183,87 @@ if ($user->isAuthenticated()) {
 
           case 'cashOut_mm3':
         	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm3');
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
         	} else {
-        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $aBalance = $transaction_mm3->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
         	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
         	  if ($dBalance > $config['txfee_manual']) {
         	    if (!$oPayout->isPayoutActive_mm3($_SESSION['USERDATA']['id'])) {
         	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
         	        if ($iPayoutId = $oPayout->createPayout_mm3($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm3', 'TYPE' => 'success');
         	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm3');
         	        }
         	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm3');
         	      }
         	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm3'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm3'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
         	  }
         	}
         	break;
 
           case 'cashOut_mm4':
         	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm4');
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
         	} else {
-        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $aBalance = $transaction_mm4->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
         	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
         	  if ($dBalance > $config['txfee_manual']) {
         	    if (!$oPayout->isPayoutActive_mm4($_SESSION['USERDATA']['id'])) {
         	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
         	        if ($iPayoutId = $oPayout->createPayout_mm4($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm4', 'TYPE' => 'success');
         	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm4');
         	        }
         	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm4');
         	      }
         	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm4'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm4'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
         	  }
         	}
         	break;
 
           case 'cashOut_mm5':
         	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info');
+        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm5');
           } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg');
+            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
         	} else {
-        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
+        	  $aBalance = $transaction_mm5->getBalance($_SESSION['USERDATA']['id']);
         	  $dBalance = $aBalance['confirmed'];
         	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
         	  if ($dBalance > $config['txfee_manual']) {
         	    if (!$oPayout->isPayoutActive_mm5($_SESSION['USERDATA']['id'])) {
         	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
         	        if ($iPayoutId = $oPayout->createPayout_mm5($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId);
+        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm5', 'TYPE' => 'success');
         	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg');
+        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm5');
         	        }
         	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
+        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm5');
         	      }
         	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg');
+        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm5'] . ' to cover transaction fees', 'TYPE' => 'errormsg');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm5'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
         	  }
         	}
         	break;
@@ -297,6 +297,28 @@ if ($user->isAuthenticated()) {
       }
     }
   }
+}
+
+// AJAX short-circuit for cash-out + future inline POST handlers. The
+// SPA POSTs the cashOut form with `_ajax=1`; we serve back the
+// resulting popups as JSON so the page can update the matching coin
+// card in place instead of doing a full reload (which "flashes" and
+// resets scroll). Mirrors the pattern in admin/templates.inc.php.
+if (!empty($_REQUEST['_ajax']) && @$_POST['do']) {
+  $ajax_popups = array();
+  if (isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP'])) {
+    foreach ($_SESSION['POPUP'] as $p) {
+      $ajax_popups[] = array(
+        'content' => isset($p['CONTENT']) ? (string)$p['CONTENT'] : '',
+        'type'    => isset($p['TYPE']) ? (string)$p['TYPE'] : 'info',
+        'coin'    => isset($p['COIN']) ? (string)$p['COIN'] : '',
+      );
+    }
+    $_SESSION['POPUP'] = array();
+  }
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(array('popups' => $ajax_popups));
+  exit;
 }
 
 
@@ -370,6 +392,122 @@ function _ae_balance($tx, $uid) {
   $b = $tx->getBalance($uid);
   return isset($b['confirmed']) ? (float)$b['confirmed'] : 0.0;
 }
+
+// Per-slot pending-payout state. Returned as
+// ['active' => bool, 'requestedAt' => ISO-ish string|null, 'txid' => string|null].
+//   - `active` is true while either:
+//      * a payouts_<slot> row with completed=0 exists (the moment after
+//        the user clicked Cash Out, before cronjobs-py picks it up), or
+//      * a transactions_outbox row exists for this user/slot whose
+//        status is anything other than 'reconciled' or 'abandoned'
+//        (cronjobs-py has broadcast it but on-chain confs haven't
+//        matured yet), or
+//      * an unarchived Debit_MP row exists in transactions_<slot>
+//        (defensive — covers the gap if outbox row is missing).
+//   - `requestedAt` prefers the outbox.created_at (broadcast time); if
+//     no outbox row exists yet, falls back to the payouts row time.
+//   - `txid` comes from the outbox row, null until cronjobs-py broadcasts.
+// Slot key is restricted to a known whitelist so this can't become an
+// SQL injection vector.
+function _ae_pending_payout($mysqli, $slotKey, $uid) {
+  $base = array('active' => false, 'requestedAt' => null, 'txid' => null, 'amount' => null, 'kind' => null);
+  $payoutsTable = array(
+    'main' => 'payouts',
+    'mm'   => 'payouts_mm',
+    'mm1'  => 'payouts_mm1',
+    'mm3'  => 'payouts_mm3',
+    'mm4'  => 'payouts_mm4',
+    'mm5'  => 'payouts_mm5',
+  );
+  $txTable = array(
+    'main' => 'transactions',
+    'mm'   => 'transactions_mm',
+    'mm1'  => 'transactions_mm1',
+    'mm3'  => 'transactions_mm3',
+    'mm4'  => 'transactions_mm4',
+    'mm5'  => 'transactions_mm5',
+  );
+  $outboxSlot = ($slotKey === 'main') ? '' : $slotKey;   // BLC slot in outbox is ''
+  if (!isset($payoutsTable[$slotKey]) || $uid <= 0) return $base;
+
+  // 1) Outbox-backed pending: cronjobs-py has broadcast (or is about
+  //    to). status='reconciled' or 'abandoned' is no longer pending.
+  $sql = "SELECT txid, status, created_at, amount FROM transactions_outbox
+          WHERE account_id = ? AND slot = ?
+            AND status NOT IN ('reconciled', 'abandoned')
+          ORDER BY id DESC LIMIT 1";
+  if ($stmt = $mysqli->prepare($sql)) {
+    if ($stmt->bind_param('is', $uid, $outboxSlot) && $stmt->execute()) {
+      $stmt->bind_result($otxid, $ostatus, $ocreated, $oamount);
+      if ($stmt->fetch()) {
+        $base['active']      = true;
+        $base['requestedAt'] = (string)$ocreated;
+        if ($otxid !== null && $otxid !== '') $base['txid'] = (string)$otxid;
+        if ($oamount !== null && $oamount !== '') $base['amount'] = (string)$oamount;
+      }
+    }
+    $stmt->close();
+  }
+  if ($base['active']) {
+    // Look up the kind from the matching debit row in
+    // transactions_<slot>: Debit_MP = manual cash-out request,
+    // Debit_AP = auto-payout fired by the cronjobs-py threshold job.
+    if ($base['txid'] !== null) {
+      $sql = "SELECT type FROM " . $txTable[$slotKey]
+           . " WHERE account_id = ? AND txid = ? AND type IN ('Debit_MP','Debit_AP')
+              ORDER BY id DESC LIMIT 1";
+      if ($stmt = $mysqli->prepare($sql)) {
+        if ($stmt->bind_param('is', $uid, $base['txid']) && $stmt->execute()) {
+          $stmt->bind_result($ttype);
+          if ($stmt->fetch()) {
+            $base['kind'] = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
+          }
+        }
+        $stmt->close();
+      }
+    }
+    return $base;
+  }
+
+  // 2) Pre-broadcast: payouts_<slot> row queued but cronjobs-py
+  //    hasn't run yet (so no outbox / no Debit_MP exists). Only
+  //    manual cash-outs go through the payouts_<slot> queue —
+  //    auto-payouts skip it and write Debit_AP + outbox directly,
+  //    so we can hard-code kind='manual' here.
+  $sql = "SELECT time FROM " . $payoutsTable[$slotKey]
+       . " WHERE completed = 0 AND account_id = ? ORDER BY id DESC LIMIT 1";
+  if ($stmt = $mysqli->prepare($sql)) {
+    if ($stmt->bind_param('i', $uid) && $stmt->execute()) {
+      $stmt->bind_result($ptime);
+      if ($stmt->fetch()) {
+        $base['active']      = true;
+        $base['requestedAt'] = (string)$ptime;
+        $base['kind']        = 'manual';
+      }
+    }
+    $stmt->close();
+  }
+  if ($base['active']) return $base;
+
+  // 3) Defensive: unarchived Debit_MP / Debit_AP without an outbox
+  //    row (legacy payouts the cronjobs-py reconciler hasn't touched
+  //    yet). Type tells us the kind.
+  $sql = "SELECT txid, type FROM " . $txTable[$slotKey]
+       . " WHERE account_id = ? AND type IN ('Debit_MP','Debit_AP') AND archived = 0
+          ORDER BY id DESC LIMIT 1";
+  if ($stmt = $mysqli->prepare($sql)) {
+    if ($stmt->bind_param('i', $uid) && $stmt->execute()) {
+      $stmt->bind_result($tx, $ttype);
+      if ($stmt->fetch()) {
+        $base['active'] = true;
+        if ($tx !== null && $tx !== '') $base['txid'] = (string)$tx;
+        $base['kind']   = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
+      }
+    }
+    $stmt->close();
+  }
+  return $base;
+}
 $_uid = isset($_SESSION['USERDATA']['id']) ? (int)$_SESSION['USERDATA']['id'] : 0;
 $_userdata = array();
 if ($_uid > 0) {
@@ -431,6 +569,10 @@ foreach (array(
     'cashOutAction'    => $cash_action,
     'addressField'     => $addr_field,
     'thresholdField'   => $thr_field,
+    // SPA flips header to "Pending payout" while one is in flight,
+    // then offers a click-through to the body details (requestedAt +
+    // txid once the cronjobs-py payouts worker broadcasts).
+    'pendingPayout'    => _ae_pending_payout($mysqli, $key, $_uid),
   );
 }
 
@@ -458,6 +600,10 @@ if (isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP'])) {
     $popups[] = array(
       'content' => isset($p['CONTENT']) ? (string)$p['CONTENT'] : '',
       'type'    => isset($p['TYPE']) ? (string)$p['TYPE'] : 'info',
+      // Per-coin tagging for cash-out success — lets the SPA flip the
+      // matching payout card body to show the success message inline
+      // instead of routing it to the page-top popup strip.
+      'coin'    => isset($p['COIN']) ? (string)$p['COIN'] : '',
     );
   }
   $_SESSION['POPUP'] = array();

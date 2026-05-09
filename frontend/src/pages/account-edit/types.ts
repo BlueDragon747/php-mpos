@@ -26,6 +26,31 @@ export interface CoinSlotState {
   // cashOut handler (the legacy template hides cashOut for mm5).
   confirmedBalance: number;
   cashOutEnabled: boolean;
+  // Pending-payout state, derived per-slot from the `payouts_<slot>`
+  // table on initial render. While `active`, the SPA replaces the
+  // header's balance + Cash Out controls with a clickable
+  // "Pending payout" label that flips the body to show details.
+  pendingPayout: {
+    active: boolean;
+    // ISO-ish timestamp string of the user's most-recent pending
+    // request, or null when none active. Server hands us whatever
+    // format MariaDB emits for TIMESTAMP — typically
+    // `YYYY-MM-DD HH:MM:SS` — the SPA strips seconds for display.
+    requestedAt: string | null;
+    // Filled once the cronjobs-py payouts worker has broadcast the
+    // corresponding Debit_MP. Null until then; the body shows
+    // "Queued, awaiting broadcast" in that gap.
+    txid: string | null;
+    // Net amount being paid out (transactions_outbox.amount). Null
+    // until the outbox row exists (i.e., during the pre-broadcast
+    // queued window or for the legacy unarchived-Debit_MP fallback
+    // path).
+    amount: string | null;
+    // Whether the pending payout came from a manual cash-out request
+    // (Debit_MP / payouts_<slot> row) or an auto-payout fired by the
+    // threshold job (Debit_AP). Null when we couldn't classify it.
+    kind: 'manual' | 'auto' | null;
+  };
   // Form action name expected by the PHP switch: 'cashOut' for primary,
   // 'cashOut_mm', 'cashOut_mm1', 'cashOut_mm3', 'cashOut_mm4', 'cashOut_mm5'.
   cashOutAction: string;
@@ -62,6 +87,11 @@ export interface TwoFactorState {
 export interface PopupMessage {
   content: string;
   type: 'success' | 'errormsg' | 'info';
+  // Per-coin tag for cash-out success popups. When set (e.g. 'blc',
+  // 'pho', 'bbtc', 'elt', 'umo', 'lit'), the SPA flips the matching
+  // payout card body to show the message inline instead of routing it
+  // to the page-top popup strip. Empty/missing for non-cashOut popups.
+  coin?: string;
 }
 
 export interface EditAccountInitial {
