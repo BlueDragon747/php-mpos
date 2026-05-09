@@ -1,0 +1,10 @@
+[Unit]
+Description=Blakestream-MPOS backup snapshot
+After=mariadb.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/env bash -lc 'source /root/.mpos-deploy.env; exec "$${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}/bin/backup.sh" /var/backups/blakestream-mpos'
+StandardOutput=journal
+StandardError=journal

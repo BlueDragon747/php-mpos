@@ -29,8 +29,12 @@ class Worker extends Base {
       }
       // Prefix the WebUser to Worker name
       $value['username'] = "$username." . $value['username'];
+      // The monitor checkbox is OMITTED from $_POST when unchecked
+      // (standard HTML form convention). Coerce to 0 so the NOT NULL
+      // column doesn't reject the UPDATE under MariaDB strict mode.
+      $monitor = !empty($value['monitor']) ? 1 : 0;
       $stmt = $this->mysqli->prepare("UPDATE $this->table SET password = ?, username = ?, monitor = ? WHERE account_id = ? AND id = ? LIMIT 1");
-      if ( ! ( $this->checkStmt($stmt) && $stmt->bind_param('ssiii', $value['password'], $value['username'], $value['monitor'], $account_id, $key) && $stmt->execute()) )
+      if ( ! ( $this->checkStmt($stmt) && $stmt->bind_param('ssiii', $value['password'], $value['username'], $monitor, $account_id, $key) && $stmt->execute()) )
         $iFailed++;
       }
     }

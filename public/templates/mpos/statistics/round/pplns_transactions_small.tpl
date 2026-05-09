@@ -18,7 +18,7 @@
     </thead>
     <tbody>
 {section name=txs loop=$ROUNDTRANSACTIONS}
-      <tr{if $GLOBAL.userdata.username|default:"" == $ROUNDTRANSACTIONS[txs].username}{assign var=listed value=1} style="background-color:#99EB99;"{else} class="{cycle values="odd,even"}"{/if}>
+      <tr{if $GLOBAL.userdata.username|default:"" == $ROUNDTRANSACTIONS[txs].username}{assign var=listed value=1} style="background-color:#2e7d32; color:#ffffff;"{else} class="{cycle values="odd,even"}"{/if}>
         <td>{if $ROUNDTRANSACTIONS[txs].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$ROUNDTRANSACTIONS[txs].username|default:"unknown"|escape}{/if}</td>
         <td align="right">{$SHARESDATA[$ROUNDTRANSACTIONS[txs].username].valid|number_format}</td>
         <td align="right">{$SHARESDATA[$ROUNDTRANSACTIONS[txs].username].invalid|number_format}</td>

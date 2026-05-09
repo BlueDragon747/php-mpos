@@ -1,108 +1,130 @@
-{if $DISABLE_TRANSACTIONSUMMARY|default:"0" != 1}
-<article class="module width_full">
-  <header><h3>Transaction Summary</h3></header>
-  <table class="tablesorter" cellspacing="0">
-    <thead>
-      <tr>
-    {foreach $SUMMARY as $type=>$total}
-        <th>{$type}</th>
-    {/foreach}
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-    {foreach $SUMMARY as $type=>$total}
-        <td class="right">{$total|number_format:"8"}</td>
-    {/foreach}
-      </tr>
-    </tbody>
-  </table>
-</article>
-{/if}
-
-<article class="module width_quarter">
-  <header><h3>Transaction Filter</h3></header>
-  <div class="module_content">
-  <form action="{$smarty.server.SCRIPT_NAME}">
-    <input type="hidden" name="page" value="{$smarty.request.page|escape}" />
-    <input type="hidden" name="action" value="{$smarty.request.action|escape}" />
-    <table cellspacing="0" class="tablesorter">
-    <tbody>
-      <tr>
-        <td align="left">
-{if $smarty.request.start|default:"0" > 0}
-          <a href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&start={$smarty.request.start|escape|default:"0" - $LIMIT}{if $FILTERS|default:""}{$FILTERS}{/if}"><i class="icon-left-open"></i></a>
+{if !$smarty.session.AUTHENTICATED|default}
+  <article class="module module width_full">
+    <header><h3>Transactions</h3></header>
+    <div class="module_content">
+      <p>You must be logged in to view this page.</p>
+    </div>
+  </article>
 {else}
-          <i class="icon-left-open"></i>
+  {if $TX_CSS}
+    {foreach from=$TX_CSS item=cssPath}
+      <link rel="stylesheet" href="{$cssPath}">
+    {/foreach}
+  {/if}
+  <div id="bsx-v2-shell">
+    <div id="app-transactions"
+         data-initial='{$TX_INITIAL_JSON nofilter}'></div>
+  </div>
+  {if $TX_JS}
+    <script type="module" src="{$TX_JS}"></script>
+  {else}
+    <p style="color:#e57373; padding: 1em;">
+      v2 build not deployed. From a checkout of this repo, run
+      <code>cd frontend &amp;&amp; bun install &amp;&amp; bun run build</code>
+      and rsync <code>public/v2/</code> to the host.
+    </p>
+  {/if}
 {/if}
-        </td>
-        <td align="right">
-          <a href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&start={$smarty.request.start|escape|default:"0" + $LIMIT}{if $FILTERS|default:""}{$FILTERS}{/if}"><i class="icon-right-open"></i></a>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-    <fieldset>
-      <label>Type</label>
-      {html_options name="filter[type]" options=$TRANSACTIONTYPES selected=$smarty.request.filter.type|default:""}
-    </fieldset>
-    <fieldset>
-      <label>Status</label>
-      {html_options name="filter[status]" options=$TXSTATUS selected=$smarty.request.filter.status|default:""}
-    </fieldset>
-    </div>
-  <footer>
-    <div class="submit_link">
-      <input type="submit" value="Filter" class="alt_btn">
-    </div>
-  </footer>
-</form>
-</article>
 
-<article class="module width_3_quarter">
-  <header><h3>Transaction History</h3></header>
-    <table cellspacing="0" class="tablesorter" width="100%">
-      <thead>
-        <tr>
-          <th align="center">ID</th>
-          <th>Date</th>
-          <th>TX Type</th>
-          <th align="center">Status</th>
-          <th>Payment Address</th>
-          <th>TX #</th>
-          <th>Block #</th>
-          <th>Amount</th>
-        </tr>
-      </thead>
-      <tbody style="font-size:12px;">
-{section name=transaction loop=$TRANSACTIONS}
-        <tr class="{cycle values="odd,even"}">
-          <td align="center">{$TRANSACTIONS[transaction].id}</td>
-          <td>{$TRANSACTIONS[transaction].timestamp}</td>
-          <td>{$TRANSACTIONS[transaction].type}</td>
-          <td align="center">
-            {if $TRANSACTIONS[transaction].type == 'Credit_PPS' OR
-                $TRANSACTIONS[transaction].type == 'Fee_PPS' OR
-                $TRANSACTIONS[transaction].type == 'Donation_PPS' OR
-                $TRANSACTIONS[transaction].type == 'Debit_MP' OR
-                $TRANSACTIONS[transaction].type == 'Debit_AP' OR
-                $TRANSACTIONS[transaction].type == 'TXFee' OR
-                $TRANSACTIONS[transaction].confirmations >= $GLOBAL.confirmations
-            }<span class="confirmed">Confirmed</span>
-            {else if $TRANSACTIONS[transaction].confirmations == -1}<span class="orphan">Orphaned</span>
-            {else}<span class="unconfirmed">Unconfirmed</span>{/if}
-          </td>
-          <td><a href="#" onClick="alert('{$TRANSACTIONS[transaction].coin_address|escape}')">{$TRANSACTIONS[transaction].coin_address|truncate:20:"...":true:true}</a></td>
-          {if ! $GLOBAL.website.transactionexplorer.disabled}
-            <td><a href="{$GLOBAL.website.transactionexplorer.url}{$TRANSACTIONS[transaction].txid|escape}" title="{$TRANSACTIONS[transaction].txid|escape}">{$TRANSACTIONS[transaction].txid|truncate:20:"...":true:true}</a></td>
-          {else}
-            <td><a href="#" onClick="alert('{$TRANSACTIONS[transaction].txid|escape}')" title="{$TRANSACTIONS[transaction].txid|escape}">{$TRANSACTIONS[transaction].txid|truncate:20:"...":true:true}</a></td>
-          {/if}
-          <td>{if $TRANSACTIONS[transaction].height == 0}n/a{else}<a href="{$smarty.server.SCRIPT_NAME}?page=statistics&action=round&height={$TRANSACTIONS[transaction].height}">{$TRANSACTIONS[transaction].height}</a>{/if}</td>
-          <td><font color="{if $TRANSACTIONS[transaction].type == 'Credit' or $TRANSACTIONS[transaction].type == 'Credit_PPS' or $TRANSACTIONS[transaction].type == 'Bonus'}green{else}red{/if}">{$TRANSACTIONS[transaction].amount|number_format:"8"}</td>
-        </tr>
-{/section}
-      </tbody>
-    </table>
-    <footer><p style="margin-left: 25px; font-size: 9px;"><b>Debit_AP</b> = Auto Threshold Payment, <b>Debit_MP</b> = Manual Payment, <b>Donation</b> = Donation, <b>Fee</b> = Pool Fees (if applicable)</p></footer>
-</article>
+<style>
+  #bsx-v2-shell {
+    margin: 0 16px 6px 16px;
+  }
+  section#main > .spacer { height: 0; }
+
+  aside#sidebar {
+    background: var(--bg-secondary);
+    margin-top: 0;
+    padding-top: 0;
+    min-height: 0;
+  }
+  section#main {
+    background: none;
+    min-height: 0;
+  }
+
+  /* Light-mode overrides — scoped so they only fire when MPOS's
+     sidebar Light Mode toggle is active. */
+  [data-theme="light"] #bsx-v2-shell .bsx-card {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.10);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-card header {
+    background: #f1f3f5;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-card h3 { color: #1f2933; }
+  [data-theme="light"] #bsx-v2-shell .tx-summary-coin { color: #1976d2; }
+
+  [data-theme="light"] #bsx-v2-shell .tx-filter-select {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.18);
+    color: #1f2933;
+    /* swap the SVG arrow to a dark stroke so it's visible on white */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M3 5l3 3 3-3' fill='none' stroke='%231f2933' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-filter-input {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.18);
+    color: #1f2933;
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-filter-input::placeholder { color: #6b7280; }
+
+  [data-theme="light"] #bsx-v2-shell .tx-table thead th {
+    color: #4a5568;
+    background: #f1f3f5;
+    border-bottom-color: rgba(0, 0, 0, 0.10);
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-table th,
+  [data-theme="light"] #bsx-v2-shell .tx-table td {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+    color: #2d3748;
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-table tbody tr:nth-child(even) td {
+    background: rgba(0,0,0,0.02);
+  }
+  [data-theme="light"] #bsx-v2-shell .td-addr a,
+  [data-theme="light"] #bsx-v2-shell .td-txid a,
+  [data-theme="light"] #bsx-v2-shell .td-block a { color: #1976d2; }
+
+  [data-theme="light"] #bsx-v2-shell .tx-status-confirmed {
+    background: rgba(46, 125, 50, 0.18);
+    border-color: rgba(46, 125, 50, 0.45);
+    color: #1b5e20;
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-status-unconfirmed {
+    background: rgba(239, 108, 0, 0.18);
+    border-color: rgba(239, 108, 0, 0.45);
+    color: #b53d00;
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-status-orphan {
+    background: rgba(198, 40, 40, 0.16);
+    border-color: rgba(198, 40, 40, 0.45);
+    color: #b71c1c;
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-amount-credit { color: #2e7d32; }
+  [data-theme="light"] #bsx-v2-shell .tx-amount-debit  { color: #c62828; }
+
+  [data-theme="light"] #bsx-v2-shell .tx-footer {
+    background: #f8f9fa;
+    border-top-color: rgba(0, 0, 0, 0.08);
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-legend { color: #2d3748; }
+  [data-theme="light"] #bsx-v2-shell .tx-legend strong { color: #1976d2; }
+  [data-theme="light"] #bsx-v2-shell .tx-pager-info { color: #2d3748; }
+
+  [data-theme="light"] #bsx-v2-shell .bsx-btn {
+    color: #1f2933;
+    background: rgba(25, 118, 210, 0.08);
+    border-color: rgba(25, 118, 210, 0.40);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-btn:hover:not(.is-disabled) {
+    background: rgba(25, 118, 210, 0.18);
+    border-color: rgba(25, 118, 210, 0.55);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-btn-primary {
+    background: rgba(25, 118, 210, 0.16);
+    border-color: rgba(25, 118, 210, 0.50);
+    color: #0d47a1;
+  }
+</style>

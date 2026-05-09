@@ -11,7 +11,36 @@ class Base {
   private $sError = '';
   private $sCronError = '';
   protected $table = '';
-  private $values = array(), $types = ''; 
+  private $values = array(), $types = '';
+
+  // Service-injection properties. Declared here so PHP 8.2+ doesn't emit
+  // "Creation of dynamic property" deprecation warnings on every cron +
+  // page load when the corresponding setX() method below assigns them.
+  // PHP 9 makes this a fatal error — keeping them declared is forward-safe.
+  protected $debug;
+  protected $log;
+  protected $mysqli;
+  protected $mail;
+  protected $salt;
+  protected $salty;
+  protected $smarty;
+  protected $user;
+  protected $session;
+  protected $config;
+  protected $aErrorCodes;
+  protected $token;
+  protected $block;
+  protected $payout;
+  protected $notification;
+  protected $transaction;
+  protected $memcache;
+  protected $statistics;
+  protected $setting;
+  protected $tools;
+  protected $bitcoin;
+  protected $tokentype;
+  protected $CSRFToken;
+  protected $share;
 
   public function getTableName() {
     return $this->table;

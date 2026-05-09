@@ -14,18 +14,49 @@ class Token Extends Base {
   }
   
   /**
-   * Fetch a token from our table
-   * @param name string Setting name
-   * @return value string Value
+   * Fetch a token from our table.
+   *
+   * SECURITY: every caller MUST pass $strType (no fallback to "any
+   * type"). The match additionally requires the row's type column to
+   * equal the requested type, AND the row's `time + expiration` to be
+   * in the future. This prevents:
+   *
+   *   1. Token reuse across types (e.g. a password-reset token being
+   *      accepted by the email-confirm flow, or vice-versa).
+   *   2. Stale tokens lingering past their expiration window — even
+   *      if the cleanup cron lags, the row is rejected at lookup.
+   *
+   * Returns false on missing/invalid type, missing token row, or
+   * expired token.
    **/
   public function getToken($strToken, $strType=NULL) {
     if (empty($strType) || ! $iToken_id = $this->tokentype->getTypeId($strType)) {
       $this->setErrorMessage('Invalid token type: ' . $strType);
       return false;
     }
-    $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE token = ? LIMIT 1");
-    if ($stmt && $stmt->bind_param('s', $strToken) && $stmt->execute() && $result = $stmt->get_result())
-      return $result->fetch_assoc();
+    $expireSeconds = (int)$this->tokentype->getExpiration($iToken_id);
+    // Constrain by token AND type. expiration=0 is the historic MPOS
+    // "does not expire" sentinel for confirm_email/invitation/unlock.
+    $expirySql = $expireSeconds > 0
+      ? "  AND UNIX_TIMESTAMP(time) + ? >= UNIX_TIMESTAMP() "
+      : "";
+    $stmt = $this->mysqli->prepare(
+      "SELECT * FROM $this->table "
+      . "WHERE token = ? AND type = ? "
+      . $expirySql
+      . "LIMIT 1"
+    );
+    $bound = $expireSeconds > 0
+      ? ($stmt && $stmt->bind_param('sii', $strToken, $iToken_id, $expireSeconds))
+      : ($stmt && $stmt->bind_param('si', $strToken, $iToken_id));
+    if ($bound && $stmt->execute() && $result = $stmt->get_result()) {
+      $row = $result->fetch_assoc();
+      if (!$row) {
+        $this->setErrorMessage('Token not found, wrong type, or expired');
+        return false;
+      }
+      return $row;
+    }
     return $this->sqlError();
   }
   
@@ -37,26 +68,37 @@ class Token Extends Base {
    * @param checkTimeExplicitly Check the token time for expiration; can cause issues w/ timezone & sync
    * @return int 0 or 1
    */
-  public function isTokenValid($account_id, $token, $type, $checkTimeExplicitly=false) {
+  public function isTokenValid($account_id, $token, $type, $checkTimeExplicitly=true) {
     if (!is_int($account_id) || !is_int($type)) {
       $this->setErrorMessage("Invalid token");
       return 0;
     }
-    $expiretime = $this->tokentype->getExpiration($type);
-    $ctimedata = new DateTime($this->getCreationTime($token));
+    $expiretime = (int)$this->tokentype->getExpiration($type);
+    $created = $this->getCreationTime($token);
+    if (!$created) {
+      $this->setErrorMessage("Token not found");
+      return 0;
+    }
+    $ctimedata = new DateTime($created);
     $checktime = $ctimedata->getTimestamp() + $expiretime;
     $now = time();
-    if ($checktime >= $now && $checkTimeExplicitly || !$checkTimeExplicitly) {
+    if (($expiretime <= 0 || $checktime >= $now) && $checkTimeExplicitly || !$checkTimeExplicitly) {
       if ($checkTimeExplicitly) {
-        $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE account_id = ? AND token = ? AND type = ? AND ? >= UNIX_TIMESTAMP() LIMIT 1");
-        $stmt->bind_param('isii', $account_id, $token, $type, $checktime);
+        if ($expiretime > 0) {
+          $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE account_id = ? AND token = ? AND type = ? AND ? >= UNIX_TIMESTAMP() LIMIT 1");
+          $stmt->bind_param('isii', $account_id, $token, $type, $checktime);
+        } else {
+          $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE account_id = ? AND token = ? AND type = ? LIMIT 1");
+          $stmt->bind_param('isi', $account_id, $token, $type);
+        }
       } else {
         $stmt = $this->mysqli->prepare("SELECT * FROM $this->table WHERE account_id = ? AND token = ? AND type = ? LIMIT 1");
         $stmt->bind_param('isi', $account_id, $token, $type);
       }
-      if ($stmt->execute())
+      if ($stmt && $stmt->execute()) {
         $res = $stmt->get_result();
         return $res->num_rows;
+      }
       return $this->sqlError();
     } else {
       $this->setErrorMessage("Token has expired or is invalid");

@@ -36,6 +36,7 @@
       <li class="icon-exchange"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=transactions_mm4">{$GLOBAL.config.currency_mm4} Transactions_mm4</a></li>
       <li class="icon-exchange"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=transactions_mm5">{$GLOBAL.config.currency_mm5} Transactions_mm5</a></li>
       <li class="icon-cog"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=settings">Settings</a></li>
+      <li class="icon-cube"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=system">System Status</a></li>
       <li class="icon-doc"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=news">News</a></li>
       <li class="icon-chart"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=reports">Reports</a></li>
       <li class="icon-photo"><a href="{$smarty.server.SCRIPT_NAME}?page=admin&action=poolworkers">Pool Workers</a></li>
@@ -88,7 +89,7 @@
       {else}
       <li class="icon-login"><a href="{$smarty.server.SCRIPT_NAME}?page=login">Login</a></li>
       <li class="icon-pencil"><a href="{$smarty.server.SCRIPT_NAME}?page=register">Sign Up</a></li>
-      {if $GLOBAL.config.disable_contactform|default:"0" != 1}
+      {if $GLOBAL.config.disable_contactform|default:"0" != 1 && $GLOBAL.config.disable_contactform_guest|default:"0" != 1}
       <li class="icon-mail"><a href="{$smarty.server.SCRIPT_NAME}?page=contactform">Contact</a></li>
       {/if}
       <li class="icon-doc"><a href="{$smarty.server.SCRIPT_NAME}?page=tac">Terms and Conditions</a></li>
@@ -98,15 +99,39 @@
     {if $smarty.session.AUTHENTICATED|default:"0" == 1}
      <br />
     {else}
-    <ul>
-     <center>
-      <div style="display: inline-block;">
-      <i><u><b><font size="2">LIVE STATS</font></b></u></i>
-      <div id="mr" style="width:180px; height:120px;"></div>
-      <div id="hr" style="width:180px; height:120px;"></div>
-      </div>
-     </center>
-    </ul>
+    <div class="bsx-livestats">
+      <div class="bsx-livestats-title">LIVE STATS</div>
+      <div id="mr" class="bsx-livestats-gauge"></div>
+      <div id="hr" class="bsx-livestats-gauge"></div>
+    </div>
+    <style>
+      .bsx-livestats {
+        margin: 8px 12px 12px 12px;
+        padding: 10px 8px 6px 8px;
+        background: rgba(255,255,255,.03);
+        border: 1px solid rgba(255,255,255,.06);
+        border-radius: 6px;
+        text-align: center;
+      }
+      .bsx-livestats-title {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.10em;
+        color: #cdd;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .bsx-livestats-gauge {
+        width: 100%;
+        height: 130px;
+        margin: 0 auto;
+      }
+      [data-theme="light"] .bsx-livestats {
+        background: #ffffff;
+        border-color: rgba(0,0,0,.10);
+      }
+      [data-theme="light"] .bsx-livestats-title { color: #1f2933; }
+    </style>
     {if !$GLOBAL.website.api.disabled && !$GLOBAL.config.disable_navbar && !$GLOBAL.config.disable_navbar_api}
       {include file="global/navjs_api.tpl"}
     {else}

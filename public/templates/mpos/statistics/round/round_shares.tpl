@@ -14,7 +14,7 @@
 {assign var=rank value=1}
 {assign var=listed value=0}
 {foreach key=id item=data from=$ROUNDSHARES}
-      <tr{if $GLOBAL.userdata.username|default:"" == $data.username}{assign var=listed value=1} style="background-color:#99EB99;"{else} class="{cycle values="odd,even"}"{/if}>
+      <tr{if $GLOBAL.userdata.username|default:"" == $data.username}{assign var=listed value=1} style="background-color:#2e7d32; color:#ffffff;"{else} class="{cycle values="odd,even"}"{/if}>
         <td align="center">{$rank++}</td>
         <td>{if $data.is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$data.username|default:"unknown"|escape}{/if}</td>
         <td align="right">{$data.valid|number_format}</td>

@@ -5,6 +5,7 @@
   <input type="hidden" name="page" value="{$smarty.request.page}" />
   <input type="hidden" name="action" value="{$smarty.request.action}" />
   <input type="hidden" name="do" value="save" />
+  <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
   <table>
     <thead>
       <th class="left">Setting</th>

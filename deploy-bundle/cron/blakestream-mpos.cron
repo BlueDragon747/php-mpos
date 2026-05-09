@@ -1,0 +1,50 @@
+# /etc/cron.d/blakestream-mpos — PHP cron schedule for the MPOS pool.
+#
+# Wave 5 deploys this file alongside cronjobs-py running in shadow
+# mode. PHP cron is the AUTHORITATIVE coin-moving scheduler during
+# the soak window; cronjobs-py shadow predicts and the drift-check
+# CLI compares the two ledgers.
+#
+# Cadence matches the upstream MPOS reference deploy:
+#   findblock          every 1 min
+#   blockupdate        every 2 min
+#   pplns_payout       every 2 min
+#   payouts            every 5 min
+#   liquid_payout     every 10 min
+#   statistics         every 5 min
+#   archive_cleanup    every 1 hour
+#   token_cleanup      every 1 hour
+#   tickerupdate       every 5 min
+#   notifications      every 5 min
+#
+# Each merge-mine slot has its own per-coin cronjob (findblock_mm.php
+# etc.) which the upstream MPOS reference deploy runs at the same
+# cadence as the parent — handled below.
+#
+# All cronjobs run as `www-data` so they can read global.inc.php
+# (which is mode 640 owned by www-data:www-data) and the per-cron
+# logs in /opt/blakestream-mpos/cronjobs/logs/<cronname>/.
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CRONDIR=/opt/blakestream-mpos/cronjobs
+PHP=/usr/bin/php
+
+# parent chain
+*  *    * * *   www-data cd $CRONDIR && $PHP findblock.php       >/dev/null 2>&1
+*/2 *   * * *   www-data cd $CRONDIR && $PHP blockupdate.php     >/dev/null 2>&1
+*/2 *   * * *   www-data cd $CRONDIR && $PHP pplns_payout.php    >/dev/null 2>&1
+*/5 *   * * *   www-data cd $CRONDIR && $PHP payouts.php         >/dev/null 2>&1
+*/10 *  * * *   www-data cd $CRONDIR && $PHP liquid_payout.php   >/dev/null 2>&1
+*/5 *   * * *   www-data cd $CRONDIR && $PHP statistics.php      >/dev/null 2>&1
+17 *    * * *   www-data cd $CRONDIR && $PHP archive_cleanup.php >/dev/null 2>&1
+23 *    * * *   www-data cd $CRONDIR && $PHP token_cleanup.php   >/dev/null 2>&1
+*/5 *   * * *   www-data cd $CRONDIR && $PHP tickerupdate.php    >/dev/null 2>&1
+*/5 *   * * *   www-data cd $CRONDIR && $PHP notifications.php   >/dev/null 2>&1
+
+# merge-mined aux chains. The mm files iterate every wallet_<slot>
+# they find configured in global.inc.php, so one of each is enough.
+*  *    * * *   www-data cd $CRONDIR && $PHP findblock_mm.php       >/dev/null 2>&1
+*/2 *   * * *   www-data cd $CRONDIR && $PHP blockupdate_mm.php     >/dev/null 2>&1
+*/2 *   * * *   www-data cd $CRONDIR && $PHP pplns_payout_mm.php    >/dev/null 2>&1
+*/5 *   * * *   www-data cd $CRONDIR && $PHP payouts_mm.php         >/dev/null 2>&1
+17 *    * * *   www-data cd $CRONDIR && $PHP archive_cleanup_mm.php >/dev/null 2>&1

@@ -1,6 +1,7 @@
 <?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
+#[\AllowDynamicProperties]
 class Payout Extends Base {
   protected $table = 'payouts';
   protected $table_mm = 'payouts_mm';
@@ -77,7 +78,7 @@ class Payout Extends Base {
    * @param strToken string Token to confirm
    * @return data mixed Inserted ID or false
    **/
-  public function createPayout($account_id=NULL, $strToken) {
+  public function createPayout($account_id = NULL, $strToken = NULL) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
       // twofactor - consume the token if it is enabled and valid
@@ -103,7 +104,7 @@ class Payout Extends Base {
     return $this->sqlError('E0049');
   }
 
-  public function createPayout_mm($account_id=NULL, $strToken) {
+  public function createPayout_mm($account_id = NULL, $strToken = NULL) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
       // twofactor - consume the token if it is enabled and valid
@@ -129,7 +130,7 @@ class Payout Extends Base {
     return $this->sqlError('E0049');
   }
 
-  public function createPayout_mm1($account_id=NULL, $strToken) {
+  public function createPayout_mm1($account_id = NULL, $strToken = NULL) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm1 (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
       // twofactor - consume the token if it is enabled and valid
@@ -156,7 +157,7 @@ class Payout Extends Base {
   }
 
 
-  public function createPayout_mm3($account_id=NULL, $strToken) {
+  public function createPayout_mm3($account_id = NULL, $strToken = NULL) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm3 (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
       // twofactor - consume the token if it is enabled and valid
@@ -181,7 +182,7 @@ class Payout Extends Base {
     }
     return $this->sqlError('E0049');
   }
-  public function createPayout_mm4($account_id=NULL, $strToken) {
+  public function createPayout_mm4($account_id = NULL, $strToken = NULL) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm4 (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
       // twofactor - consume the token if it is enabled and valid
@@ -206,7 +207,7 @@ class Payout Extends Base {
     }
     return $this->sqlError('E0049');
   }
-  public function createPayout_mm5($account_id=NULL, $strToken) {
+  public function createPayout_mm5($account_id = NULL, $strToken = NULL) {
     $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm5 (account_id) VALUES (?)");
     if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
       // twofactor - consume the token if it is enabled and valid

@@ -7,8 +7,12 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
   die("404 Page not found");
 }
 
+// CSRF + method enforcement on admin settings save.
+require_once dirname(__FILE__) . '/../../admin_csrf.inc.php';
+_require_admin_csrf($csrftoken);
+
 if (@$_REQUEST['do'] == 'save' && !empty($_REQUEST['data'])) {
-  $user->log->log("warn", @$_SESSION['USERDATA']['username']." changed admin settings");
+  $log->log("warn", @$_SESSION['USERDATA']['username']." changed admin settings");
   foreach($_REQUEST['data'] as $var => $value) {
     $setting->setValue($var, $value);
   }

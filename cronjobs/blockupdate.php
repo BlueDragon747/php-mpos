@@ -36,12 +36,38 @@ $aAllBlocks = $block->getAllUnconfirmed(max($config['network_confirmations'],$co
 $header = false;
 foreach ($aAllBlocks as $iIndex => $aBlock) {
   !$header ? $log->logInfo("ID\tHeight\tBlockhash\tConfirmations") : $header = true;
-  $aBlockInfo = $bitcoin->getblock($aBlock['blockhash']);
-  // Fetch this blocks transaction details to find orphan blocks
-  $aTxDetails = $bitcoin->gettransaction($aBlockInfo['tx'][0]);
+  try {
+    $aBlockInfo = $bitcoin->getblock($aBlock['blockhash']);
+  } catch (Exception $e) {
+    $log->logError("    getblock({$aBlock['blockhash']}) RPC exception; skipping: " . $e->getMessage());
+    continue;
+  }
+  // Defensive: an RPC error or unexpected shape (e.g. unknown
+  // blockhash, daemon mid-restart) used to abort the whole loop and
+  // leave subsequent blocks' confirmations stale. Skip the offending
+  // row instead and keep going.
+  if (!is_array($aBlockInfo) || !isset($aBlockInfo['confirmations'])) {
+    $log->logError("    getblock({$aBlock['blockhash']}) returned no usable info; skipping");
+    continue;
+  }
+  // tx[] may be empty on some pruned/special blocks. Guard before
+  // dereferencing.
+  $isOrphan = false;
+  if (isset($aBlockInfo['tx'][0])) {
+    try {
+      $aTxDetails = $bitcoin->gettransaction($aBlockInfo['tx'][0]);
+    } catch (Exception $e) {
+      $log->logError("    gettransaction({$aBlockInfo['tx'][0]}) RPC exception; skipping orphan check: " . $e->getMessage());
+      $aTxDetails = null;
+    }
+    if (is_array($aTxDetails)
+        && isset($aTxDetails['details'][0]['category'])
+        && $aTxDetails['details'][0]['category'] === 'orphan') {
+      $isOrphan = true;
+    }
+  }
   $log->logInfo($aBlock['id'] . "\t" . $aBlock['height'] .  "\t" . $aBlock['blockhash'] . "\t" . $aBlock['confirmations'] . " -> " . $aBlockInfo['confirmations']);
-  if ($aTxDetails['details'][0]['category'] == 'orphan') {
-    // We have an orphaned block, we need to invalidate all transactions for this one
+  if ($isOrphan) {
     if ($block->setConfirmations($aBlock['id'], -1)) {
       $log->logInfo("    Block marked as orphan");
     } else {

@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Blakestream-MPOS backup (timer)
+
+[Timer]
+# Daily at 03:17 local time. Randomised by 5 minutes to avoid stampedes
+# when multiple Blakestream hosts share a backup target.
+OnCalendar=03:17
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

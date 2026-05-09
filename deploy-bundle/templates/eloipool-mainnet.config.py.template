@@ -1,0 +1,120 @@
+# Generated from deploy-bundle/templates/eloipool-mainnet.config.py.template
+# by deploy-bundle/scripts/mainnet/40-install-pool.sh. Do not edit in
+# place — re-run the deploy script if you need to change ports/creds.
+
+ServerName = '@@SERVER_NAME@@'
+NoInteractive = True
+
+# Mainnet ShareTarget floored at diff 512. The Blakecoin ASIC family
+# operates cleanly at diff 512+ on AT1 / EU3 (vardiff 512-3800 range);
+# our pool was previously running at diff 1-350 which sat right on the
+# bdiff-1 floor and tripped H-not-zero rejects. Vardiff retargets up
+# from this floor as miner share rate justifies. Bdiff-1 floor stays
+# on as a sanity net.
+SkipBdiff1Floor = False
+ShareTarget = 0x00000000007fff80000000000000000000000000000000000000000000000000
+
+# Vardiff on. Each miner's stream gets adjusted toward
+# DynamicTargetGoal shares per DynamicTargetWindow seconds, with a
+# DynamicTargetQuick fast-path for new connections.
+DynamicTargetting       = 2
+AllowShareDifficultyAboveNetwork = True
+DynamicTargetGoal       = 8
+DynamicTargetWindow     = 120
+DynamicTargetQuick      = True
+
+WorkQueueSizeRegular  = (0x100,  0x1000)
+WorkQueueSizeClear    = (0x1000, 0x2000)
+WorkQueueSizeLongpoll = (0x1000, 0x2000)
+
+WorkUpdateInterval    = 55
+MinimumTxnUpdateWait  = 5
+TxnUpdateRetryWait    = 1
+IdleSleepTime         = 0.1
+
+# Pool tracker / fallback wallet (mainnet bech32, blc1...). The deploy
+# script asks the daemon for a fresh address if the operator didn't
+# pin one via $MPOS_TRACKER_ADDR.
+TrackerAddr = '@@POOL_TRACKER_ADDR@@'
+
+# PPLNS share->payout split happens in MPOS cronjobs; the eloipool
+# side only needs a coinbaser that maps stratum-username → blc address.
+# We default to a single-output coinbaser pointed at TrackerAddr.
+CoinbaserCmd = '@@COINBASER_CMD@@'
+
+TemplateSources = (
+    {
+        'name':     'primary',
+        'uri':      'http://@@RPC_USER@@:@@RPC_PASS@@@127.0.0.1:8772',  # Blakecoin mainnet RPC
+        'priority': 0,
+        'weight':   1,
+    },
+)
+
+TemplateChecks = None
+
+BlockSubmissions = (
+    {'name': 'primary', 'uri': 'http://@@RPC_USER@@:@@RPC_PASS@@@127.0.0.1:8772'},
+)
+
+MinimumTemplateAcceptanceRatio = 0
+MinimumTemplateScore = 1
+DelayLogForUpstream = False
+
+GotWorkTarget = 0x00000000ffff0000000000000000000000000000000000000000000000000000
+
+POT = 2
+Greedy = False
+
+# Blakecoin mainnet network magic + parent-chain p2p port.
+# pchMessageStart from src/chainparams.cpp Blakecoin-0.15.21 mainnet.
+UpstreamBitcoindNode = ('127.0.0.1', 8773)
+UpstreamNetworkId    = b'\xf9\xbe\xb4\xd2'
+
+JSONRPCAddresses     = (('::ffff:127.0.0.1', 19334),)
+StratumAddresses     = (('0.0.0.0', @@STRATUM_PORT@@),)
+BitcoinNodeAddresses = ()
+TrustedForwarders    = ('::ffff:127.0.0.1',)
+
+# Internal-RPC creds for the merged-mine-proxy.
+SecretUser = 'auxpow'
+SecretPass = '@@MMP_SECRET@@'
+GotWorkURI  = 'http://auxpow:@@MMP_SECRET@@@127.0.0.1:19335/'
+
+# --- SHARES -> MPOS MySQL shares table ------------------------------------
+ShareLogging = (
+    {
+        'type':     'sql',
+        'engine':   'mysql',
+        'dbopts': {
+            'host':   '@@MPOS_DB_HOST@@',
+            'port':    @@MPOS_DB_PORT@@,
+            'user':   '@@MPOS_DB_USER@@',
+            'passwd': '@@MPOS_DB_PASS@@',
+            'db':     '@@MPOS_DB_NAME@@',
+        },
+        'statement': (
+            "insert into shares (rem_host, username, our_result, "
+            "upstream_result, reason, solution, difficulty) values "
+            "({remoteHost}, {username}, {YN(not(rejectReason))}, "
+            "{YN(upstreamResult)}, {rejectReason}, {solution}, "
+            "{target2bdiff(target)})"
+        ),
+        'chain_id': 'primary',
+    },
+    {
+        'type': 'logfile',
+        'filename': '@@LOG_ROOT@@/pool/share-logfile',
+        'format': "{time} {Q(remoteHost)} {username} {YN(not(rejectReason))} {dash(YN(upstreamResult))} {dash(rejectReason)} {dash(target2bdiff(target))} {solution}\n",
+    },
+)
+
+Authentication = (
+    {'module': 'mpos'},
+)
+
+LogFile = {
+    'filename': '@@LOG_ROOT@@/pool/eloipool.log',
+    'when': 'midnight',
+    'backupCount': 7,
+}

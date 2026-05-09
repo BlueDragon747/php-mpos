@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS `news` (
   `content` text NOT NULL,
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `active` tinyint(1) NOT NULL DEFAULT '0',
+  `show_on` enum('home','dashboard','both') NOT NULL DEFAULT 'home',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
 
@@ -420,7 +421,15 @@ CREATE TABLE IF NOT EXISTS `settings` (
   UNIQUE KEY `setting` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Data exporting was unselected.
+-- Seed settings rows needed by a fresh automated install. DB_VERSION keeps
+-- the cronjobs' shared.inc.php gate
+-- (DB_VERSION constant from public/include/version.inc.php)
+-- doesn't abort every cron on a fresh install with "Cronjob is
+-- currently disabled due to required upgrades." backups_enabled defaults
+-- the deploy backup timer to on while still allowing the admin UI to pause it.
+INSERT INTO `settings` (`name`, `value`) VALUES ('DB_VERSION', '0.0.5')
+  ON DUPLICATE KEY UPDATE `value` = '0.0.5';
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('backups_enabled', '1');
 
 -- Dumping structure for table mpos.shares
 CREATE TABLE IF NOT EXISTS `shares` (

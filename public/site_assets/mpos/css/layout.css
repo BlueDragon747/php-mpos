@@ -875,3 +875,51 @@ border: 1px solid var(--border-success);
 color: var(--text-heading);
 padding: 10px;
 font-size: 14px;}
+
+/* ─── Blakestream layout primitives ───────────────────────────────────
+ *
+ * `bsx-row` is a flexbox row with a uniform 6px gap and items
+ * top-aligned. Replaces the legacy `<center><div display:inline-block>`
+ * column patterns whose gaps depended on HTML inline-whitespace and
+ * varied across browsers / DPI scales.
+ *
+ *   <div class="bsx-row bsx-row-center">
+ *     <div class="bsx-col">…</div>
+ *     <div class="bsx-col">…</div>
+ *     <div class="bsx-col">…</div>
+ *   </div>
+ *
+ * Modifiers:
+ *   .bsx-row-center  — center the row horizontally
+ *   .bsx-row-between — pack columns to the edges (space-between)
+ *   .bsx-row-wrap    — allow columns to wrap on narrow viewports
+ *
+ * Default gap is 6px (operator's preference at first rollout).
+ * Override with --bsx-row-gap on the parent if a section needs it.
+ */
+
+.bsx-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--bsx-row-gap, 6px);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.bsx-row-center  { justify-content: center; }
+.bsx-row-between { justify-content: space-between; }
+.bsx-row-wrap    { flex-wrap: wrap; }
+
+.bsx-col {
+    /* Don't grow or shrink by default — each column owns its width
+     * via inline `style="width:..."` (gauges) or a fixed CSS class.
+     * Pages that want equal-width columns can set
+     * `.bsx-col { flex: 1 1 0; }` in a more specific selector. */
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.bsx-col-grow   { flex: 1 1 0; }
+.bsx-col-stretch { align-self: stretch; }

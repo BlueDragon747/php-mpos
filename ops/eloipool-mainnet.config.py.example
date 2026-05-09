@@ -1,0 +1,141 @@
+# Mainnet-safe Eloipool config for Blakestream-MPOS.
+#
+# Copy to eloipool-mainnet/config.py and fill in @@TOKENS@@ before start.
+# This is the production preset — the lab regtest config
+# (~/eloipool-testnet/config.py) uses a wide-open ShareTarget for demo
+# purposes and is NOT safe to point at a real mainnet pool.
+#
+# Key differences vs. the regtest demo config:
+#   - ShareTarget restored to diff-1
+#   - AllowShareDifficultyAboveNetwork = False
+#   - DynamicTargetting = 2 (power-of-two per-miner diff)
+#   - Authentication = 'mpos' (validate stratum workers against pool_worker)
+#   - SQL queue depth raised to 200k (as we learned in regtest load tests)
+
+ServerName = '@@SERVER_NAME@@'
+NoInteractive = True
+
+# Keep the traditional share floor logic in mainnet.
+SkipBdiff1Floor = False
+
+# Production share target: diff-1. Do NOT loosen this — a looser target
+# hands out trivial shares that don't reflect useful work and will spam
+# mpos.shares. Dynamic targetting below scales per-miner above this floor.
+ShareTarget = 0x00000000ffff0000000000000000000000000000000000000000000000000000
+
+# Dynamic per-miner targetting, power-of-two difficulties. Goal 8
+# shares/min keeps the UI ticking without crushing MySQL on a big pool.
+DynamicTargetting       = 2
+AllowShareDifficultyAboveNetwork = False
+DynamicTargetGoal       = 8
+DynamicTargetWindow     = 120
+DynamicTargetQuick      = True
+
+WorkQueueSizeRegular  = (0x100,  0x1000)
+WorkQueueSizeClear    = (0x1000, 0x2000)
+WorkQueueSizeLongpoll = (0x1000, 0x2000)
+
+WorkUpdateInterval    = 55
+MinimumTxnUpdateWait  = 5
+TxnUpdateRetryWait    = 1
+IdleSleepTime         = 0.1
+
+# The pool's "house" Blakecoin address. Anything the coinbaser can't
+# split across miners (rounding remainder, unmapped stratum usernames,
+# pool keep) lands here. Use a mainnet `blc1...` or legacy `B...`.
+TrackerAddr = '@@POOL_TRACKER_ADDR@@'
+
+# PPLNS split via the real coinbaser. See
+# ~/eloipool-auxpow/deploy-bundle/coinbaser.py for the env-var contract.
+CoinbaserCmd = '/opt/blakecoin-pool/bin/coinbaser-wrapper.sh %d %p'
+
+TemplateSources = (
+    {
+        'name':     'primary',
+        'uri':      'http://@@RPC_USER@@:@@RPC_PASS@@@127.0.0.1:8772',  # Blakecoin mainnet
+        'priority': 0,
+        'weight':   1,
+    },
+)
+
+TemplateChecks = None
+
+BlockSubmissions = (
+    {'name': 'primary', 'uri': 'http://@@RPC_USER@@:@@RPC_PASS@@@127.0.0.1:8772'},
+)
+
+MinimumTemplateAcceptanceRatio = 0
+MinimumTemplateScore = 1
+DelayLogForUpstream = False
+
+UpstreamBitcoindNode = ('127.0.0.1', 8773)       # Blakecoin mainnet p2p
+UpstreamNetworkId    = b'\xbf\x0c\x6b\xbd'        # Blakecoin mainnet magic
+
+GotWorkTarget = 0x00000000ffff0000000000000000000000000000000000000000000000000000
+
+POT = 2
+Greedy = False
+
+JSONRPCAddresses     = (('::ffff:127.0.0.1', 8337),)
+StratumAddresses     = (('0.0.0.0', 3334),)
+BitcoinNodeAddresses = (('::ffff:127.0.0.1', 8338),)
+TrustedForwarders    = ('::ffff:127.0.0.1',)
+
+# --- SHARES -> MPOS MySQL shares table ------------------------------------
+ShareLogging = (
+    {
+        'type':     'sql',
+        'engine':   'mysql',
+        'dbopts': {
+            'host':   '127.0.0.1',
+            'port':    3306,
+            'user':   'mpos',
+            'passwd': '@@MPOS_DB_PASS@@',
+            'db':     'mpos',
+        },
+        'statement': (
+            "insert into shares (rem_host, username, our_result, "
+            "upstream_result, reason, solution, difficulty) values "
+            "({remoteHost}, {username}, {YN(not(rejectReason))}, "
+            "{YN(upstreamResult)}, {rejectReason}, {solution}, "
+            "{target2bdiff(target)})"
+        ),
+        'chain_id': 'primary',
+    },
+    # Keep a local logfile as a second sink for share debugging.
+    {
+        'type': 'logfile',
+        'filename': '/var/log/blakecoin-pool/share-logfile',
+        'format': "{time} {Q(remoteHost)} {username} {YN(not(rejectReason))} {dash(YN(upstreamResult))} {dash(rejectReason)} {dash(target2bdiff(target))} {solution}\n",
+    },
+)
+
+# Production: require miners to exist in the MPOS pool_worker table with
+# matching password. This prevents random strangers from submitting work
+# under somebody else's username and stealing credit.
+#
+# The `mpos` backend is a convention — if your eloipool tree doesn't ship
+# one, a small authentication/mpos.py module like this works:
+#
+#     # authentication/mpos.py
+#     import pymysql, hashlib
+#     def check(username, password):
+#         # username comes in as "account[.workername]"
+#         account, _, worker = username.partition('.')
+#         # salt with the same $config['SALT'] as MPOS
+#         # (read from /etc/mpos-salt.txt or env)
+#         db = pymysql.connect(...)
+#         cur = db.cursor()
+#         cur.execute("SELECT password FROM pool_worker WHERE username=%s",
+#                     (username,))
+#         row = cur.fetchone()
+#         return bool(row) and row[0] == password
+Authentication = (
+    {'module': 'mpos'},
+)
+
+LogFile = {
+    'filename': '/var/log/blakecoin-pool/eloipool-rotating.log',
+    'when': 'midnight',
+    'backupCount': 7,
+}

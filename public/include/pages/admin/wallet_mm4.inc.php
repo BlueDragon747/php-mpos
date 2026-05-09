@@ -51,5 +51,8 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $debug->append('Using cached page', 3);
 }
 
+$wallet_ticker = isset($config['currency_mm4']) ? $config['currency_mm4'] : '';
+include __DIR__ . '/_wallet_coin_meta.inc.php';
+
 $smarty->assign("CONTENT", "default.tpl");
 ?>

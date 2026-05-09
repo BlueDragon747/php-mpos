@@ -17,15 +17,16 @@ $(document).ready(function(){
     max: Math.round({/literal}{$GLOBAL.workers}{literal} * 2),
     title: "Miners",
     gaugeColor: '#6f7a8a',
-    labelFontColor: '#555',
-    titleFontColor: '#555',
-    valueFontColor: '#555',
+    valueFontColor: '#888',
+    titleFontColor: '#cdd',
+    labelFontColor: '#b3b3b3',
     label: "Active Miners",
     relativeGaugeSize: true,
     showMinMax: true,
-    shadowOpacity : 0.8,
-    shadowSize : 0,
-    shadowVerticalOffset : 10
+    showInnerShadow: true,
+    shadowOpacity: 0.8,
+    shadowSize: 0,
+    shadowVerticalOffset: 10
   });
 
   g2 = new JustGage({
@@ -35,15 +36,16 @@ $(document).ready(function(){
     max: Math.round({/literal}{$GLOBAL.hashrate}{literal} * 2),
     title: "Pool Hashrate",
     gaugeColor: '#6f7a8a',
-    labelFontColor: '#555',
-    titleFontColor: '#555',
-    valueFontColor: '#555',
+    valueFontColor: '#888',
+    titleFontColor: '#cdd',
+    labelFontColor: '#b3b3b3',
     label: "{/literal}{$GLOBAL.hashunits.pool}{literal}",
     relativeGaugeSize: true,
     showMinMax: true,
-    shadowOpacity : 0.8,
-    shadowSize : 0,
-    shadowVerticalOffset : 10
+    showInnerShadow: true,
+    shadowOpacity: 0.8,
+    shadowSize: 0,
+    shadowVerticalOffset: 10
   });
 
   {/literal}{if $GLOBAL.config.disable_navbar|default:"0" != 1 && $GLOBAL.config.disable_navbar_api|default:"0" != 1}{literal}

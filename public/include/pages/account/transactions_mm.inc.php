@@ -7,15 +7,20 @@ if ($user->isAuthenticated()) {
   $aTransactions = $transaction_mm->getTransactions($start, @$_REQUEST['filter'], $iLimit, $_SESSION['USERDATA']['id']);
   $aTransactionTypes = $transaction_mm->getTypes();
   if (!$aTransactions) $_SESSION['POPUP'][] = array('CONTENT' => 'Could not find any transaction', 'TYPE' => 'errormsg');
-  if (!$setting->getValue('disable_transactionsummary')) {
-    $aTransactionSummary_mm = $transaction_mm->getTransactionSummary_mm($_SESSION['USERDATA']['id']);
-    $smarty->assign('SUMMARY_MM', $aTransactionSummary_mm);
-  }
-  $smarty->assign('LIMIT', $iLimit);
-  $smarty->assign('TRANSACTIONS', $aTransactions);
-  $smarty->assign('TRANSACTIONTYPES', $aTransactionTypes);
-  $smarty->assign('TXSTATUS', array('' => '', 'Confirmed' => 'Confirmed', 'Unconfirmed' => 'Unconfirmed', 'Orphan' => 'Orphan'));
-  $smarty->assign('DISABLE_TRANSACTIONSUMMARY', $setting->getValue('disable_transactionsummary'));
+  $summary_disabled = !empty($setting->getValue('disable_transactionsummary'));
+  $aTransactionSummary = !$summary_disabled
+    ? $transaction_mm->getTransactionSummary_mm($_SESSION['USERDATA']['id'])
+    : null;
+
+  $tx_v2_action          = 'transactions_mm';
+  $tx_v2_currency        = isset($config['currency_mm']) ? $config['currency_mm'] : '';
+  $tx_v2_transactions    = $aTransactions;
+  $tx_v2_types           = $aTransactionTypes;
+  $tx_v2_summary         = $aTransactionSummary;
+  $tx_v2_summary_disabled = $summary_disabled;
+  $tx_v2_start           = (int)$start;
+  $tx_v2_limit           = $iLimit;
+  include __DIR__ . '/_transactions_v2.inc.php';
 }
 $smarty->assign('CONTENT', 'default.tpl');
 ?>

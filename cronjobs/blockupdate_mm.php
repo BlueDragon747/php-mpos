@@ -46,10 +46,30 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
   	continue;
   }
 
+  if (!is_array($aBlockInfo) || !isset($aBlockInfo['confirmations'])) {
+    $log->logError("    getblock({$aBlock['blockhash']}) returned no usable info [MM]; skipping");
+    continue;
+  }
+
   // Fetch this blocks transaction details to find orphan blocks
-  $aTxDetails = $bitcoin_mm->gettransaction($aBlockInfo['tx'][0]);
+  $isOrphan = false;
+  if (isset($aBlockInfo['tx'][0])) {
+    try
+    {
+      $aTxDetails = $bitcoin_mm->gettransaction($aBlockInfo['tx'][0]);
+      if (is_array($aTxDetails)
+          && isset($aTxDetails['details'][0]['category'])
+          && $aTxDetails['details'][0]['category'] == 'orphan') {
+        $isOrphan = true;
+      }
+    }
+    catch(Exception $e)
+    {
+      $log->logError("    gettransaction({$aBlockInfo['tx'][0]}) RPC exception [MM]; skipping orphan check: " . $e->getMessage());
+    }
+  }
   $log->logInfo($aBlock['id'] . "\t" . $aBlock['height'] .  "\t" . $aBlock['blockhash'] . "\t" . $aBlock['confirmations'] . " -> " . $aBlockInfo['confirmations']);
-  if ($aTxDetails['details'][0]['category'] == 'orphan') {
+  if ($isOrphan) {
     // We have an orphaned block, we need to invalidate all transactions for this one
     if ($block_mm->setConfirmations($aBlock['id'], -1)) {
       $log->logInfo("    Block marked as orphan [MM]");

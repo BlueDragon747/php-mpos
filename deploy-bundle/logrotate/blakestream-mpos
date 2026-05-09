@@ -1,0 +1,85 @@
+# /etc/logrotate.d/blakestream-mpos
+#
+# Retention policy for the MPOS pool stack. See MPOS-Postsegwit.md
+# (the "Log files: kept vs rotated" table) for what each file is for.
+#
+# Rule of thumb:
+#   - eloipool.log already self-rotates (Python TimedRotatingFileHandler
+#     in eloipool config), so it's NOT listed here.
+#   - PHP cron logs in /opt/blakestream-mpos/cronjobs/logs/<job>/
+#     are daily-stamped by KLogger; once a year of them is plenty.
+#   - mmp.log is the loud one — rotate small + keep few.
+#   - mergeminer.stderr is mostly a duplicate of mmp.log; size-cap it.
+
+# --- cronjobs-py + sse + nginx (info-level, daily) ----------------------
+/var/log/blakestream-mpos/cronjobs.stdout
+/var/log/blakestream-mpos/cronjobs.stderr
+/var/log/blakestream-mpos/sse.stdout
+/var/log/blakestream-mpos/sse.stderr
+/var/log/blakestream-mpos/nginx-access.log
+/var/log/blakestream-mpos/nginx-error.log
+{
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+
+# --- per-share audit log (small but valuable; keep more history) -------
+/var/log/blakestream-mpos/pool/share-logfile {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su blakestream-mpos blakestream-mpos
+}
+
+# --- eloipool stdout/stderr (just systemd capture; main log self-rotates)
+/var/log/blakestream-mpos/pool/eloipool.stdout
+/var/log/blakestream-mpos/pool/eloipool.stderr
+{
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su blakestream-mpos blakestream-mpos
+}
+
+# --- merged-mine-proxy (loud during aux daemon sync; rotate fast) ------
+/var/log/blakestream-mpos/pool/mmp.log
+/var/log/blakestream-mpos/pool/mergeminer.stdout
+/var/log/blakestream-mpos/pool/mergeminer.stderr
+{
+    hourly
+    rotate 12
+    size 50M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su blakestream-mpos blakestream-mpos
+}
+
+# --- PHP cron per-job logs (KLogger writes log_<date>.txt per job) -----
+# KLogger names files log_<YYYY-MM-DD>.txt so we can use a simple
+# `find` cron to age them out; this entry just bounds individual
+# files in case any of them gets unusually large.
+/opt/blakestream-mpos/cronjobs/logs/*/log_*.txt {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

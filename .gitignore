@@ -1,5 +1,7 @@
-# Local Config
-#/public/include/config/global.inc.php
+# Local Config — global.inc.php is rendered by the deploy bundle from
+# templates/ at install time and contains DB creds + RPC creds. Never
+# track. (security.inc.php remains tracked — no secrets, just policy.)
+/public/include/config/global.inc.php
 #/public/include/config/security.inc.php
 
 # Templates
@@ -23,3 +25,6 @@ public/include/config/global.inc.sha.php
 .buildpath
 .project
 .settings
+
+# Vite build output (frontend/ produces this; build locally before deploy)
+/public/v2/dist/

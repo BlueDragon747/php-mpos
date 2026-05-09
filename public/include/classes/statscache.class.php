@@ -9,6 +9,12 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 class StatsCache {
   public $flag;
   private $cache, $round;
+  // Declared to silence PHP 8.2+ "Creation of dynamic property" on
+  // constructor-stashed service refs.
+  protected $config;
+  protected $debug;
+  protected $memcache;
+  protected $setting;
 
   public function __construct($config, $debug) {
     $this->config = $config;

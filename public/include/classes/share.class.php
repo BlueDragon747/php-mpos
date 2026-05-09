@@ -379,12 +379,17 @@ class Share Extends Base {
     if ($this->checkStmt($stmt) && $stmt->bind_param('ssss', $last, $aBlock['time'], $aBlock['time'], $aBlock['time']) && $stmt->execute() && $result = $stmt->get_result()) {
       $this->oUpstream = $result->fetch_object();
       $this->share_type = 'any_share';
-      $this->debug->append("DEBUG: Found any_share result: id=" . ($this->oUpstream->id ?? 'null') . ", account=" . ($this->oUpstream->account ?? 'null') . ", worker=" . ($this->oUpstream->worker ?? 'null'), 4);
-      if (!empty($this->oUpstream->account) && !empty($this->oUpstream->worker) && is_numeric($this->oUpstream->id)) {
+      // $this->oUpstream is null when the query returned zero rows.
+      // PHP 8.1+ warns on `->prop` access against null; use null-safe form.
+      $upAccount = $this->oUpstream->account ?? null;
+      $upWorker  = $this->oUpstream->worker  ?? null;
+      $upId      = $this->oUpstream->id      ?? null;
+      $this->debug->append("DEBUG: Found any_share result: id=" . ($upId ?? 'null') . ", account=" . ($upAccount ?? 'null') . ", worker=" . ($upWorker ?? 'null'), 4);
+      if (!empty($upAccount) && !empty($upWorker) && is_numeric($upId)) {
         $this->debug->append("DEBUG: any_share match SUCCESS", 4);
         return true;
       }
-      $this->debug->append("DEBUG: any_share result failed validation - account=" . var_export($this->oUpstream->account, true) . ", worker=" . var_export($this->oUpstream->worker, true) . ", id=" . var_export($this->oUpstream->id, true), 4);
+      $this->debug->append("DEBUG: any_share result failed validation - account=" . var_export($upAccount, true) . ", worker=" . var_export($upWorker, true) . ", id=" . var_export($upId, true), 4);
     } else {
       $this->debug->append("DEBUG: any_share query returned no results", 4);
     }

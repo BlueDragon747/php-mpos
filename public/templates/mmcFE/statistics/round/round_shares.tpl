@@ -14,7 +14,7 @@
 {assign var=rank value=1}
 {assign var=listed value=0}
 {section name=contrib loop=$ROUNDSHARES}
-      <tr{if $GLOBAL.userdata.username == $ROUNDSHARES[contrib].username}{assign var=listed value=1} style="background-color:#99EB99;"{else} class="{cycle values="odd,even"}"{/if}>
+      <tr{if $GLOBAL.userdata.username == $ROUNDSHARES[contrib].username}{assign var=listed value=1} style="background-color:#2e7d32; color:#ffffff;"{else} class="{cycle values="odd,even"}"{/if}>
         <td class="center">{$rank++}</td>
         <td>{if $ROUNDSHARES[contrib].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$ROUNDSHARES[contrib].username|escape}{/if}</td>
         <td class="right">{$ROUNDSHARES[contrib].valid|number_format}</td>

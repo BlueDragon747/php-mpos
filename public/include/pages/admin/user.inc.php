@@ -7,6 +7,11 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
   die("404 Page not found");
 }
 
+// CSRF + method enforcement on admin/user mutations (lock toggle,
+// no-fees flag, admin promotion).
+require_once dirname(__FILE__) . '/../../admin_csrf.inc.php';
+_require_admin_csrf($csrftoken);
+
 // Some defaults
 $iLimit = 30;
 $smarty->assign('LIMIT', $iLimit);
@@ -39,6 +44,7 @@ case 'admin':
 }
 
 // Gernerate the GET URL for filters
+$aUsers = array();
 if (isset($_REQUEST['filter'])) {
   // Fetch round shares for estimates
   $aRoundShares = $statistics->getRoundShares();
@@ -52,7 +58,8 @@ if (isset($_REQUEST['filter'])) {
   $smarty->assign('FILTERS', $strFilters);
 
   // Fetch requested users
-  if ($aUsers = $statistics->getAllUserStats($_REQUEST['filter'], $iLimit, $start)) {
+  if ($real = $statistics->getAllUserStats($_REQUEST['filter'], $iLimit, $start)) {
+    $aUsers = $real;
     // Add additional stats to each user
     foreach ($aUsers as $iKey => $aUser) {
       $aBalance = $transaction->getBalance($aUser['id']);
@@ -68,14 +75,14 @@ if (isset($_REQUEST['filter'])) {
       }
       $aUsers[$iKey] = $aUser;
     }
-
-    // Assign our variables
-    $smarty->assign("USERS", $aUsers);
   } else {
     $_SESSION['POPUP'][] = array('CONTENT' => 'Could not find any users', 'TYPE' => 'errormsg');
   }
 }
 
+if (!empty($aUsers)) {
+  $smarty->assign("USERS", $aUsers);
+}
 
 // Tempalte specifics
 $smarty->assign("CONTENT", "default.tpl");

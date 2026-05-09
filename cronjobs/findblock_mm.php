@@ -154,8 +154,12 @@ if (empty($aAllBlocks)) {
           $monitoring->endCronjob($cron_name, 'E0007', 0, true);
         }
       } else {
-        $log->logFatal('E0005: Unable to fetch blocks upstream share, aborted:' . $share_mm->getCronError());
-        $monitoring->endCronjob($cron_name, 'E0005', 0, true);
+        // See findblock.php for why this is a warn+continue rather than a
+        // fatal abort: non-pool-found blocks legitimately have no matching
+        // pool share, and aborting the whole cron on the first such entry
+        // blocks every subsequent pool-mined block from being credited.
+        $log->logWarn('E0005: No matching upstream share for [MM] block ' . $aBlock['height'] . ' (likely non-pool / solo-mined); skipping credit, continuing.');
+        continue;
       }
 
       $log->logInfo(

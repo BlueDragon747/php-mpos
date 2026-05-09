@@ -9,32 +9,27 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
 
 if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $iLimit = 30;
-  $debug->append('No cached version available, fetching from backend', 3);
   empty($_REQUEST['start']) ? $start = 0 : $start = $_REQUEST['start'];
-  $aTransactions_mm5 = $transaction_mm5->getTransactions($start, @$_REQUEST['filter'], $iLimit);
+  $aTransactions = $transaction_mm5->getTransactions($start, @$_REQUEST['filter'], $iLimit);
   $aTransactionTypes = $transaction_mm5->getTypes();
-  if (!$aTransactions_mm5) $_SESSION['POPUP'][] = array('CONTENT' => 'Could not find any transaction', 'TYPE' => 'errormsg');
-  if (!$setting->getValue('disable_transactionsummary')) {
-    $aTransactionSummary = $transaction_mm5->getTransactionSummary_mm5();
-    $smarty->assign('SUMMARY', $aTransactionSummary);
-  }
-  $smarty->assign('LIMIT', $iLimit);
-  $smarty->assign('TRANSACTIONS', $aTransactions_mm5);
-  $smarty->assign('TRANSACTIONTYPES', $aTransactionTypes);
-  $smarty->assign('TXSTATUS', array('' => '', 'Confirmed' => 'Confirmed', 'Unconfirmed' => 'Unconfirmed', 'Orphan' => 'Orphan'));
-  $smarty->assign('DISABLE_TRANSACTIONSUMMARY', $setting->getValue('disable_transactionsummary'));
-} else {
-  $debug->append('Using cached page', 3);
+  if (!$aTransactions) $_SESSION['POPUP'][] = array('CONTENT' => 'Could not find any transaction', 'TYPE' => 'errormsg');
+  $summary_disabled = !empty($setting->getValue('disable_transactionsummary'));
+  $aTransactionSummary = !$summary_disabled
+    ? $transaction_mm5->getTransactionSummary_mm5()
+    : null;
+
+  $tx_v2_action          = 'transactions_mm5';
+  $tx_v2_page            = 'admin';
+  $tx_v2_show_username   = true;
+  $tx_v2_currency        = isset($config['currency_mm5']) ? $config['currency_mm5'] : '';
+  $tx_v2_transactions    = $aTransactions;
+  $tx_v2_types           = $aTransactionTypes;
+  $tx_v2_summary         = $aTransactionSummary;
+  $tx_v2_summary_disabled = $summary_disabled;
+  $tx_v2_start           = (int)$start;
+  $tx_v2_limit           = $iLimit;
+  include __DIR__ . '/../account/_transactions_v2.inc.php';
 }
 
-// Gernerate the GET URL for filters
-if (isset($_REQUEST['filter'])) {
-  $strFilters = '';
-  foreach (@$_REQUEST['filter'] as $filter => $value) {
-    $filter = "filter[$filter]";
-    $strFilters .= "&$filter=$value";
-  }
-  $smarty->assign('FILTERS', $strFilters);
-}
 $smarty->assign('CONTENT', 'default.tpl');
 ?>

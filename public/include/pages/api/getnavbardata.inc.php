@@ -28,14 +28,27 @@ if ($bitcoin->can_connect() === true) {
 
 // Some settings
 if ( ! $interval = $setting->getValue('statistics_ajax_data_interval')) $interval = 300;
-if ( ! $dPoolHashrateModifier = $setting->getValue('statistics_pool_hashrate_modifier') ) $dPoolHashrateModifier = 1;
-if ( ! $dNetworkHashrateModifier = $setting->getValue('statistics_network_hashrate_modifier') ) $dNetworkHashrateModifier = 1;
 
-// Fetch raw data
-$statistics->setGetCache(false);
+// Fetch cached data maintained by cronjobs-py.
 $dPoolHashrate = $statistics->getCurrentHashrate($interval);
 if ($dPoolHashrate > $dNetworkHashrate) $dNetworkHashrate = $dPoolHashrate;
-$statistics->setGetCache(true);
+
+// Pool/network hashrate modifiers: prefer the operator-pinned setting
+// when present, otherwise auto-pick to match smarty_globals.inc.php so
+// the AJAX-refresh value the navbar gauge gets back stays in the same
+// unit the page rendered the gauge label with. Inline the auto-pick
+// rather than including smarty_globals.inc.php — that file has heavy
+// DB side effects and is intentionally skipped for API pages.
+$_navbar_auto_modifier = function($dKHs) {
+  if ($dKHs >= 1e9) return 0.000000001;
+  if ($dKHs >= 1e6) return 0.000001;
+  if ($dKHs >= 1e3) return 0.001;
+  return 1;
+};
+$dPoolPinApi    = $setting->getValue('statistics_pool_hashrate_modifier');
+$dNetworkPinApi = $setting->getValue('statistics_network_hashrate_modifier');
+$dPoolHashrateModifier    = $dPoolPinApi    ? (float)$dPoolPinApi    : $_navbar_auto_modifier($dPoolHashrate);
+$dNetworkHashrateModifier = $dNetworkPinApi ? (float)$dNetworkPinApi : $_navbar_auto_modifier($dNetworkHashrate / 1000);
 
 // Apply pool modifiers
 $dPoolHashrateAdjusted = $dPoolHashrate * $dPoolHashrateModifier;

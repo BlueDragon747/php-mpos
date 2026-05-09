@@ -19,8 +19,22 @@ $config['skip_config_tests'] = true;
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-defines--salts
  */
 $config['DEBUG'] = 0;
-$config['SALT'] = 'PLEASEMAKEMESOMETHINGRANDOM';
-$config['SALTY'] = 'THISSHOULDALSOBERRAANNDDOOM'; 
+// SECURITY: These MUST be replaced with two long random strings
+// before the pool accepts any real user. Password/PIN/api-key hashes
+// are sha256(value + SALT) — if SALT is the shipped default, every
+// MPOS install on the planet shares the same hash space and rainbow
+// tables are trivial.
+//
+// Operators MUST override these in global.inc.php. The deploy bundle
+// renders random hex into global.inc.php at install time. This file
+// (dist) runs FIRST, so global.inc.php's overrides take precedence.
+// The placeholder die-guard that used to live here was removed
+// because it fires before global.inc.php has a chance to provide the
+// real values; the post-load guard now lives in shared.inc.php
+// (cron entry) and public/include/bootstrap.php (web entry).
+$config['SALT']  = 'CHANGE_ME_BEFORE_DEPLOY_SALT_GENERATE_RANDOM_48CHARS';
+$config['SALTY'] = 'CHANGE_ME_BEFORE_DEPLOY_SALTY_GENERATE_RANDOM_48CHARS';
+
 
 /**
   * Coin Algorithm
@@ -45,33 +59,36 @@ $config['db']['name'] = 'mpos';
  *  RPC configuration for your daemon/wallet
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-local-wallet-rpc
  **/
+// Mainnet defaults. All passwords MUST be overridden per-install with the
+// real `rpcpassword=` value from each coin's .conf. Usernames align with
+// the rpcuser= values operators typically use.
 $config['wallet']['type'] = 'http';
-$config['wallet']['host'] = 'localhost:8772';
-$config['wallet']['username'] = 'linux1';
+$config['wallet']['host'] = 'localhost:8772';       // Blakecoin mainnet RPC
+$config['wallet']['username'] = 'blakecoin';
 $config['wallet']['password'] = 'x';
 
 $config['wallet_mm']['type'] = 'http';
-$config['wallet_mm']['host'] = 'localhost:8494';
-$config['wallet_mm']['username'] = 'pho1';
+$config['wallet_mm']['host'] = 'localhost:8984';    // Photon mainnet RPC
+$config['wallet_mm']['username'] = 'photon';
 $config['wallet_mm']['password'] = 'x';
 
 $config['wallet_mm1']['type'] = 'http';
-$config['wallet_mm1']['host'] = '127.0.0.1:243';
+$config['wallet_mm1']['host'] = 'localhost:8243';   // BlakeBitcoin mainnet RPC
 $config['wallet_mm1']['username'] = 'blakebitcoin';
 $config['wallet_mm1']['password'] = 'x';
 
 $config['wallet_mm2']['type'] = 'http';
-$config['wallet_mm2']['host'] = 'localhost:42024';
-$config['wallet_mm2']['username'] = 'dirac';
+$config['wallet_mm2']['host'] = 'localhost:12000';  // Lithium mainnet RPC
+$config['wallet_mm2']['username'] = 'lithium';
 $config['wallet_mm2']['password'] = 'x';
 
 $config['wallet_mm3']['type'] = 'http';
-$config['wallet_mm3']['host'] = 'localhost:6852';
+$config['wallet_mm3']['host'] = 'localhost:6852';   // Electron-ELT mainnet RPC
 $config['wallet_mm3']['username'] = 'electron';
 $config['wallet_mm3']['password'] = 'x';
 
 $config['wallet_mm4']['type'] = 'http';
-$config['wallet_mm4']['host'] = 'localhost:6852';
+$config['wallet_mm4']['host'] = 'localhost:5921';   // Universalmolecule mainnet RPC
 $config['wallet_mm4']['username'] = 'umo';
 $config['wallet_mm4']['password'] = 'x';
 
@@ -161,12 +178,12 @@ $config['accounts']['invitations']['count'] = 5;
  *  Shorthand name for the currency
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-currency
  */
-$config['currency'] = 'BLC';
-$config['currency_mm'] = 'PHO';
-$config['currency_mm1'] = '&#x0243+';
-$config['currency_mm2'] = 'Dirac';
-$config['currency_mm3'] = 'ELT';
-$config['currency_mm4'] = 'UMO';
+$config['currency']     = 'BLC';
+$config['currency_mm']  = 'PHO';   // Photon
+$config['currency_mm1'] = 'BBTC';  // BlakeBitcoin (was HTML entity; plain ticker is safer)
+$config['currency_mm2'] = 'LIT';   // Lithium (was Dirac — no longer shipped)
+$config['currency_mm3'] = 'ELT';   // Electron
+$config['currency_mm4'] = 'UMO';   // Universalmolecule
 $config['currency_mm5'] = 'unused1';
 $config['currency_mm6'] = 'unused2';
 
@@ -186,9 +203,21 @@ $config['currency_mm6'] = 'unused2';
  *   - devnet  HRP  'dblk'  P2PKH 65     P2SH 120
  * Default ships mainnet + testnet only; add others as needed.
  */
-$config['segwit_hrps']         = array('blc', 'tblc');
-$config['address_versions']    = array(25, 26, 142);
-$config['address_versions_p2sh'] = array(22, 170);
+// Production default is mainnet-only. Add 'tblc' for testnet, 'rblc' for
+// regtest, 'dblk' for devnet in the dev instance's own global.inc.php as
+// needed. Keeping mainnet narrow here so a copy-paste install can't
+// accidentally accept a testnet address as a payout destination.
+$config['segwit_hrps']         = array('blc');
+$config['address_versions']    = array(25, 26);     // Blakecoin mainnet P2PKH
+$config['address_versions_p2sh'] = array(22);       // Blakecoin mainnet P2SH
+$config['segwit_hrps_by_slot'] = array(
+  ''    => array('blc'),   // Blakecoin
+  'mm'  => array('pho'),   // Photon
+  'mm1' => array('bbtc'),  // BlakeBitcoin
+  'mm3' => array('elt'),   // Electron
+  'mm4' => array('umo'),   // Universalmolecule
+  'mm5' => array('lit'),   // Lithium
+);
 
 
 /**
@@ -302,12 +331,18 @@ $config['difficulty'] = 21;
  * Block Reward
  *  Block reward configuration details
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-reward-settings
- **/
+ *
+ * `reward_type = 'block'` tells findblock.php to read the actual coinbase
+ * value from the daemon ($aData['amount']) — this is correct across
+ * halvings. `reward` below is only the fallback when reward_type is not
+ * 'block'. Keep it aligned with the current mainnet-era reward so a
+ * misconfig still credits miners at a sane rate.
+ */
 $config['reward_type'] = 'block';
-$config['reward'] = 25;
+$config['reward'] = 50;
 $config['reward_mm'] = 32768;
 $config['reward_mm1'] = 50;
-$config['reward_mm2'] = 8;
+$config['reward_mm2'] = 50;
 $config['reward_mm3'] = 20;
 $config['reward_mm4'] = 2;
 $config['reward_mm5'] = 50;
@@ -369,6 +404,7 @@ $config['memcache']['force']['contrib_shares'] = true;
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-cookies
  **/
 $config['cookie']['duration'] = '1440';
+$config['cookie']['name'] = '';
 $config['cookie']['domain'] = '';
 $config['cookie']['path'] = '/';
 $config['cookie']['httponly'] = true;
@@ -387,6 +423,6 @@ $config['smarty']['cache_lifetime'] = 30;
  *  Disable some calls when high system load
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-system-load
  **/
-$config['system']['load']['max'] = 10.0;
+$config['system']['load']['max'] = 100.0;
 
 ?>

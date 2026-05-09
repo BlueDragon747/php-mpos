@@ -36,10 +36,10 @@ Requirements
 This setup has been tested on Ubuntu 12.04, It should also work on any related distribution 
 (Ubuntu 13.04, CentOS, RHEL, Debian).
 
-Be aware that `MPOS` is **only** for pooled mining. Solo Mining is not
-supported. They will never match an upstream share, solo miners do not create
-any shares, only blocks. Expect weird behavior if trying to mix them. See #299
-for full information.
+Be aware that `MPOS` is **only** for pooled mining. Solo mining is not
+supported because MPOS accounting depends on submitted pool shares; solo miners
+create blocks directly and do not create the share records MPOS needs for reward
+tracking.
 
 * 64 bit system
  * Otherwise some coins will display wrong network hashrates
@@ -108,7 +108,30 @@ The following feature have been implemented so far:
 Installation
 ============
 
-Please take a look at the [Quick Start Guide](https://github.com/TheSerapher/php-mpos/wiki/Quick-Start-Guide). This will give you an idea how to setup `MPOS`.
+For the Blakestream mainnet deployment path, use this fork and the
+automated deploy bundle:
+
+```bash
+git clone https://github.com/SidGrip/php-mpos.git php-mpos
+
+cd php-mpos
+export MPOS_DOMAIN=pool.example.com
+export MPOS_ADMIN_EMAIL=admin@example.com
+
+bash deploy-bundle/deploy-mainnet.sh root@your-vps
+```
+
+The deploy pulls the six coin daemon images directly from Docker Hub as
+`sidgrip/<coin>:latest` by default. Override with `MPOS_DOCKER_HUB` or
+`MPOS_IMAGE_TAG` when testing another image namespace or tag.
+
+Eliopool is cloned automatically from
+`https://github.com/SidGrip/eloipool_Blakecoin.git` branch `master`
+unless you set `ELIOPOOL_TREE` to a local checkout.
+
+See [deploy-bundle/README.md](deploy-bundle/README.md) for deploy details.
+
+The older upstream [Quick Start Guide](https://github.com/TheSerapher/php-mpos/wiki/Quick-Start-Guide) describes the legacy manual MPOS flow and is not the Blakestream mainnet deploy path.
 
 Customization
 =============

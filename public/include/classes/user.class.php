@@ -6,12 +6,92 @@ require_once(INCLUDE_DIR . "/lib/bech32.php");
 class User extends Base {
   protected $table = 'accounts';
   private $userID = false;
-  private $user = array();
+  protected $bitcoinBySlot = array();
+  // PHP 8 disallows narrowing visibility from `protected $user` (Base)
+  // to private here; keep it protected to match the parent.
+  protected $user = array();
+
+  public function setBitcoinSlots($bitcoinBySlot) {
+    $this->bitcoinBySlot = is_array($bitcoinBySlot) ? $bitcoinBySlot : array();
+  }
 
   // get and set methods
+
+  /**
+   * Legacy hash used by every pre-bcrypt-migration row in this DB.
+   * Kept ONLY so checkUserPassword / checkPin can verify old hashes
+   * during the transparent migration to password_hash(). New writes
+   * go through _hashSecret() below.
+   */
   private function getHash($string) {
     return hash('sha256', $string.$this->salt);
   }
+
+  /**
+   * Modern secret hash. Used for password and PIN storage going
+   * forward. PASSWORD_BCRYPT is widely available across PHP versions
+   * we care about; PASSWORD_DEFAULT could change in a major PHP
+   * release, which is fine in isolation but harder to reason about
+   * during a long-running migration.
+   */
+  private function _hashSecret($plain) {
+    return password_hash((string)$plain, PASSWORD_BCRYPT);
+  }
+
+  /**
+   * Verify a plaintext secret (password or PIN) against a stored
+   * hash. Accepts both:
+   *   - new hashes (bcrypt: $2y$… 60-char) via password_verify()
+   *   - legacy hashes (sha256+salt: 64-char hex) via getHash()
+   *
+   * Returns true on match. The caller is responsible for triggering
+   * a rehash via _rehashIfNeeded() after a successful verify.
+   */
+  private function _verifySecret($plain, $stored) {
+    if (!is_string($stored) || $stored === '') return false;
+    $info = password_get_info($stored);
+    if (isset($info['algo']) && $info['algo']) {
+      // Modern bcrypt (or other password_hash output).
+      return password_verify((string)$plain, $stored);
+    }
+    // Legacy: 64-char hex sha256+salt. Constant-time comparison.
+    return hash_equals($stored, $this->getHash($plain));
+  }
+
+  /**
+   * If the stored hash is legacy (sha256+salt), regenerate via
+   * password_hash() and persist it. Called after a successful
+   * legacy login so users transition transparently.
+   *
+   * Returns true if a rehash happened.
+   */
+  private function _rehashIfNeeded($accountId, $column, $plain, $stored) {
+    if (!is_string($stored) || $stored === '') return false;
+    $info = password_get_info($stored);
+    if (isset($info['algo']) && $info['algo']) return false; // already modern
+    if (!in_array($column, array('pass', 'pin'), true)) return false;
+    $new = $this->_hashSecret($plain);
+    $stmt = $this->mysqli->prepare(
+      "UPDATE $this->table SET $column = ? WHERE id = ?"
+    );
+    if ($this->checkStmt($stmt)
+        && $stmt->bind_param('si', $new, $accountId)
+        && $stmt->execute()) {
+      $this->log->log('info', "Rehashed legacy $column for account $accountId");
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Generate a random API key. Per-user secret, NOT derived from
+   * username — a deterministic api_key = sha256(username . salt) was
+   * predictable if the salt ever leaked.
+   */
+  private function _generateApiKey() {
+    return bin2hex(random_bytes(32));
+  }
+
   public function getUserName($id) {
     return $this->getSingle($id, 'username', 'id');
   }
@@ -125,7 +205,7 @@ class User extends Base {
    **/
   public function checkLogin($username, $password) {
     $this->debug->append("STA " . __METHOD__, 4);
-    $this->debug->append("Checking login for $username with password $password", 2);
+    $this->debug->append("Checking login for $username", 2);
     if (empty($username) || empty($password)) {
       $this->setErrorMessage("Invalid username or password.");
       return false;
@@ -208,15 +288,21 @@ class User extends Base {
    **/
   public function checkPin($userId, $pin=false) {
     $this->debug->append("STA " . __METHOD__, 4);
-    $this->debug->append("Confirming PIN for $userId and pin $pin", 2);
-    $stmt = $this->mysqli->prepare("SELECT pin FROM $this->table WHERE id=? AND pin=? LIMIT 1");
-    $pin_hash = $this->getHash($pin);
-    if ($stmt->bind_param('is', $userId, $pin_hash) && $stmt->execute() && $stmt->bind_result($row_pin) && $stmt->fetch()) {
-      $stmt->close(); // Close the statement before calling another query
-      $this->setUserPinFailed($userId, 0);
-      return ($pin_hash === $row_pin);
+    $this->debug->append("Confirming PIN for $userId", 2);
+    // Same migration-aware verify as checkUserPassword: pull stored
+    // hash, verify in PHP, rehash legacy on success.
+    $stmt = $this->mysqli->prepare("SELECT pin FROM $this->table WHERE id=? LIMIT 1");
+    if ($stmt->bind_param('i', $userId) && $stmt->execute()
+        && $stmt->bind_result($row_pin) && $stmt->fetch()) {
+      $stmt->close();
+      if ($row_pin !== null && $this->_verifySecret($pin, $row_pin)) {
+        $this->setUserPinFailed($userId, 0);
+        $this->_rehashIfNeeded($userId, 'pin', $pin, $row_pin);
+        return true;
+      }
+    } else {
+      $stmt->close();
     }
-    $stmt->close(); // Close on failure too
     $this->log->log('info', $this->getUserName($userId).' incorrect pin');
     $this->incUserPinFailed($userId);
     // Check if this account should be locked
@@ -240,15 +326,21 @@ class User extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     $username = $this->getUserName($userID);
     $email = $this->getUserEmail($username);
-    $current = $this->getHash($current);
+    // Migration-aware: load stored password hash, verify in PHP
+    // (handles bcrypt + legacy sha256), refuse if invalid.
+    $row = $this->getSingle($userID, 'pass', 'id', 'i');
+    if (!$row || !$this->_verifySecret($current, $row)) {
+      $this->setErrorMessage('Invalid password');
+      return false;
+    }
     $newpin = intval( '0' . rand(1,9) . rand(0,9) . rand(0,9) . rand(0,9) );
     $aData['username'] = $username;
     $aData['email'] = $email;
     $aData['pin'] = $newpin;
-    $newpin = $this->getHash($newpin);
+    $newpin_hash = $this->_hashSecret($newpin);
     $aData['subject'] = 'PIN Reset Request';
-    $stmt = $this->mysqli->prepare("UPDATE $this->table SET pin = ? WHERE ( id = ? AND pass = ? )");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('sis', $newpin, $userID, $current) && $stmt->execute()) {
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET pin = ? WHERE id = ?");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('si', $newpin_hash, $userID) && $stmt->execute()) {
       if ($stmt->errno == 0 && $stmt->affected_rows === 1) {
         if ($this->mail->sendMail('pin/reset', $aData)) {
           $this->log->log("info", "$username was sent a pin reset e-mail");
@@ -304,6 +396,60 @@ class User extends Base {
   public function existsCoinAddress($address) {
     $this->debug->append("STA " . __METHOD__, 4);
     return $this->getSingle($address, 'coin_address', 'coin_address') === $address;
+  }
+
+  private function getSegwitHrpsForSlot($slot) {
+    if (isset($this->config['segwit_hrps_by_slot']) && is_array($this->config['segwit_hrps_by_slot'])) {
+      if (isset($this->config['segwit_hrps_by_slot'][$slot]) && is_array($this->config['segwit_hrps_by_slot'][$slot])) {
+        return $this->config['segwit_hrps_by_slot'][$slot];
+      }
+    }
+    if ($slot === '' && isset($this->config['segwit_hrps']) && is_array($this->config['segwit_hrps'])) {
+      return $this->config['segwit_hrps'];
+    }
+    return array();
+  }
+
+  private function looksLikeBech32($address) {
+    return is_string($address)
+      && strtolower($address) === $address
+      && ($onepos = strrpos($address, '1')) !== false
+      && $onepos > 0;
+  }
+
+  private function validatePayoutAddress($userID, $address, $slot, $label, $currentPrimaryAddress = null) {
+    $address = is_string($address) ? trim($address) : '';
+    if ($address === '') return NULL;
+
+    if ($slot === '' && $address != $currentPrimaryAddress && $this->existsCoinAddress($address)) {
+      $this->setErrorMessage('Address is already in use');
+      return false;
+    }
+
+    $hrps = $this->getSegwitHrpsForSlot($slot);
+    if (!empty($hrps) && $this->looksLikeBech32($address)) {
+      $hrp = substr($address, 0, strrpos($address, '1'));
+      $isValidBech32ForHrp = Bech32::isValid(array($hrp), $address);
+      if ($isValidBech32ForHrp && !in_array($hrp, $hrps, true)) {
+        $this->setErrorMessage('Invalid ' . $label . ' coin address');
+        return false;
+      }
+      if (in_array($hrp, $hrps, true) && !$isValidBech32ForHrp) {
+        $this->setErrorMessage('Invalid ' . $label . ' coin address');
+        return false;
+      }
+    }
+
+    $bitcoin = isset($this->bitcoinBySlot[$slot]) ? $this->bitcoinBySlot[$slot] : null;
+    if (!is_object($bitcoin) || !method_exists($bitcoin, 'validateaddress')) {
+      $this->setErrorMessage('Unable to validate ' . $label . ' coin address: RPC client is not configured');
+      return false;
+    }
+    if (!$bitcoin->validateaddress($address)) {
+      $this->setErrorMessage('Invalid ' . $label . ' coin address');
+      return false;
+    }
+    return $address;
   }
 
   /**
@@ -378,14 +524,20 @@ class User extends Base {
       $this->setErrorMessage( 'New password is too short, please use more than 8 chars' );
       return false;
     }
-    $current = $this->getHash($current);
-    $new = $this->getHash($new1);
+    // Migration-aware verify of the current password (handles bcrypt
+    // and legacy sha256). Refuse if it doesn't match.
+    $row = $this->getSingle($userID, 'pass', 'id', 'i');
+    if (!$row || !$this->_verifySecret($current, $row)) {
+      $this->log->log("warn", $this->getUserName($userID)." incorrect password update attempt");
+      $this->setErrorMessage('Unable to update password, current password wrong?');
+      return false;
+    }
+    $new_hash = $this->_hashSecret($new1);
     if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['changepw']) {
       $tValid = $this->token->isTokenValid($userID, $strToken, 6);
       if ($tValid) {
         if ($this->token->deleteToken($strToken)) {
           $this->log->log("info", $this->getUserName($userID)." deleted change password token");
-          // token deleted, continue
         } else {
           $this->log->log("warn", $this->getUserName($userID)." failed to delete the change password token");
           $this->setErrorMessage('Token deletion failed');
@@ -397,9 +549,9 @@ class User extends Base {
         return false;
       }
     }
-    $stmt = $this->mysqli->prepare("UPDATE $this->table SET pass = ? WHERE ( id = ? AND pass = ? )");
+    $stmt = $this->mysqli->prepare("UPDATE $this->table SET pass = ? WHERE id = ?");
     if ($this->checkStmt($stmt)) {
-      $stmt->bind_param('sis', $new, $userID, $current);
+      $stmt->bind_param('si', $new_hash, $userID);
       $stmt->execute();
       if ($stmt->errno == 0 && $stmt->affected_rows === 1) {
         $this->log->log("info", $this->getUserName($userID)." updated password");
@@ -407,8 +559,7 @@ class User extends Base {
       }
       $stmt->close();
     }
-    $this->log->log("warn", $this->getUserName($userID)." incorrect password update attempt");
-    $this->setErrorMessage( 'Unable to update password, current password wrong?' );
+    $this->setErrorMessage('Unable to update password');
     return false;
   }
   
@@ -474,54 +625,19 @@ class User extends Base {
       $this->setErrorMessage('Invalid email address');
       return false;
     }
-    if (!empty($address)) {
-      if ($address != $this->getCoinAddress($userID) && $this->existsCoinAddress($address)) {
-        $this->setErrorMessage('Address is already in use');
-        return false;
-      }
-      // Defence-in-depth: if the string *looks* like bech32 for one of our
-      // configured HRPs, validate it locally via BIP173 before hitting the
-      // daemon. Non-bech32 strings (legacy base58) fall through to the
-      // daemon's validateaddress, which handles the Blake-256 checksum that
-      // PHP can't compute natively.
-      $hrps = isset($this->config['segwit_hrps']) && is_array($this->config['segwit_hrps'])
-        ? $this->config['segwit_hrps']
-        : array('blc', 'tblc');
-      if (strtolower($address) === $address && ($onepos = strrpos($address, '1')) !== false && $onepos > 0) {
-        $hrp = substr($address, 0, $onepos);
-        if (in_array($hrp, $hrps, true) && !Bech32::isValid($hrps, $address)) {
-          $this->setErrorMessage('Invalid coin address');
-          return false;
-        }
-      }
-      if ($this->bitcoin->can_connect() === true) {
-        if (!$this->bitcoin->validateaddress($address)) {
-          $this->setErrorMessage('Invalid coin address');
-          return false;
-        }
-      } else {
-        $this->setErrorMessage('Unable to connect to RPC server for coin address validation');
-        return false;
-      }
-    } else {
-      $address = NULL;
-    }
-
-    if (empty($address_mm)) {
-    	$address_mm = NULL;
-    }
-    if (empty($address_mm1)) {
-    	$address_mm1 = NULL;
-    }
-    if (empty($address_mm3)) {
-    	$address_mm3 = NULL;
-    }
-    if (empty($address_mm4)) {
-    	$address_mm4 = NULL;
-    }
-    if (empty($address_mm5)) {
-    	$address_mm5 = NULL;
-    }
+    $currentPrimaryAddress = $this->getCoinAddress($userID);
+    $address = $this->validatePayoutAddress($userID, $address, '', 'BLC', $currentPrimaryAddress);
+    if ($address === false) return false;
+    $address_mm = $this->validatePayoutAddress($userID, $address_mm, 'mm', 'PHO');
+    if ($address_mm === false) return false;
+    $address_mm1 = $this->validatePayoutAddress($userID, $address_mm1, 'mm1', 'BBTC');
+    if ($address_mm1 === false) return false;
+    $address_mm3 = $this->validatePayoutAddress($userID, $address_mm3, 'mm3', 'ELT');
+    if ($address_mm3 === false) return false;
+    $address_mm4 = $this->validatePayoutAddress($userID, $address_mm4, 'mm4', 'UMO');
+    if ($address_mm4 === false) return false;
+    $address_mm5 = $this->validatePayoutAddress($userID, $address_mm5, 'mm5', 'LIT');
+    if ($address_mm5 === false) return false;
 
 
     // Number sanitizer, just in case we fall through above
@@ -590,14 +706,33 @@ class User extends Base {
    **/
   private function checkUserPassword($username, $password) {
     $this->debug->append("STA " . __METHOD__, 4);
-    $user = array();
-    $password_hash = $this->getHash($password);
-    $stmt = $this->mysqli->prepare("SELECT username, id, is_admin FROM $this->table WHERE LOWER(username) = LOWER(?) AND pass = ? LIMIT 1");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('ss', $username, $password_hash) && $stmt->execute() && $stmt->bind_result($row_username, $row_id, $row_admin)) {
+    // Pull the stored hash (whatever format it's in) and verify in
+    // PHP — needed because bcrypt hashes embed a per-row salt and
+    // can't be matched by SQL equality. Legacy sha256+salt hashes
+    // verify here too via _verifySecret().
+    $stmt = $this->mysqli->prepare(
+      "SELECT username, id, is_admin, pass FROM $this->table "
+      . "WHERE LOWER(username) = LOWER(?) LIMIT 1"
+    );
+    if ($this->checkStmt($stmt)
+        && $stmt->bind_param('s', $username)
+        && $stmt->execute()
+        && $stmt->bind_result($row_username, $row_id, $row_admin, $row_pass)) {
       $stmt->fetch();
       $stmt->close();
-      // Store the basic login information
-      $this->user = array('username' => $row_username, 'id' => $row_id, 'is_admin' => $row_admin);
+      if ($row_username === null) {
+        return false;
+      }
+      if (!$this->_verifySecret($password, $row_pass)) {
+        return false;
+      }
+      // Successful login. Transparently upgrade legacy sha256 hashes
+      // to bcrypt the first time the user authenticates after the
+      // migration ships.
+      $this->_rehashIfNeeded($row_id, 'pass', $password, $row_pass);
+      $this->user = array(
+        'username' => $row_username, 'id' => $row_id, 'is_admin' => $row_admin
+      );
       return strtolower($username) === strtolower($row_username);
     }
     return $this->sqlError();
@@ -804,10 +939,11 @@ class User extends Base {
         ");
     }
 
-    // Create hashed strings using original string and salt
-    $password_hash = $this->getHash($password1);
-    $pin_hash = $this->getHash($pin);
-    $apikey_hash = $this->getHash($username);
+    // Modern password / PIN hashing via password_hash() (bcrypt).
+    // Random per-user API key (no longer derived from username).
+    $password_hash = $this->_hashSecret($password1);
+    $pin_hash = $this->_hashSecret($pin);
+    $apikey_hash = $this->_generateApiKey();
     $username_clean = strip_tags($username);
     $signup_time = time();
 
@@ -858,7 +994,7 @@ class User extends Base {
         $this->setErrorMessage( 'New password is too short, please use more than 8 chars' );
         return false;
       }
-      $new_hash = $this->getHash($new1);
+      $new_hash = $this->_hashSecret($new1);
       $stmt = $this->mysqli->prepare("UPDATE $this->table SET pass = ? WHERE id = ?");
       if ($this->checkStmt($stmt) && $stmt->bind_param('si', $new_hash, $aToken['account_id']) && $stmt->execute() && $stmt->affected_rows === 1) {
         if ($this->token->deleteToken($aToken['token'])) {
@@ -988,5 +1124,13 @@ $user->setConfig($config);
 $user->setMail($mail);
 $user->setToken($oToken);
 $user->setBitcoin($bitcoin);
+$user->setBitcoinSlots(array(
+  ''    => isset($bitcoin)     ? $bitcoin     : null,
+  'mm'  => isset($bitcoin_mm)  ? $bitcoin_mm  : null,
+  'mm1' => isset($bitcoin_mm1) ? $bitcoin_mm1 : null,
+  'mm3' => isset($bitcoin_mm3) ? $bitcoin_mm3 : null,
+  'mm4' => isset($bitcoin_mm4) ? $bitcoin_mm4 : null,
+  'mm5' => isset($bitcoin_mm5) ? $bitcoin_mm5 : null,
+));
 $user->setSetting($setting);
 $user->setErrorCodes($aErrorCodes);

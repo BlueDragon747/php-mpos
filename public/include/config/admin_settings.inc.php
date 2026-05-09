@@ -243,6 +243,18 @@ $aSettings['acl'][] = array(
   'name' => 'acl_block_statistics', 'value' => $setting->getValue('acl_block_statistics'),
   'tooltip' => 'Make the block statistics page private (users only) or public.'
 );
+// Inline-attached toggle: rendered next to the Block Statistics row's
+// tooltip in the admin settings UI (settings/default.tpl handles the
+// inline placement when 'inline_with' is set). Hide the coin filter
+// and Older/Newer pager from non-admin viewers (admin always sees
+// them). On by default.
+$aSettings['acl'][] = array(
+  'display' => 'Block Navigation for Non-Admin', 'type' => 'select',
+  'options' => array( 0 => 'Show', 1 => 'Hide'),
+  'default' => 1,
+  'name' => 'acl_block_statistics_hide_nav', 'value' => $setting->getValue('acl_block_statistics_hide_nav'),
+  'inline_with' => 'acl_block_statistics',
+);
 $aSettings['acl'][] = array(
   'display' => 'Round Statistics', 'type' => 'select',
   'options' => array( 0 => 'Private', 1 => 'Public'),
@@ -270,6 +282,13 @@ $aSettings['system'][] = array(
   'default' => 'test@example.com',
   'name' => 'system_error_email', 'value' => $setting->getValue('system_error_email'),
   'tooltip' => 'The email address for system errors notifications, like cronjobs failures.'
+);
+$aSettings['system'][] = array(
+  'display' => 'Daily Backups', 'type' => 'select',
+  'options' => array( 1 => 'Enabled', 0 => 'Disabled' ),
+  'default' => 1,
+  'name' => 'backups_enabled', 'value' => $setting->getValue('backups_enabled'),
+  'tooltip' => 'Enable or disable the daily DB + wallet backup.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable e-mail confirmations', 'type' => 'select',

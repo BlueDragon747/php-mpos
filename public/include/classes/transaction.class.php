@@ -251,9 +251,36 @@ class Transaction extends Base {
   }
 
   /**
+   * Derive the slot string from $this->table.
+   *   transactions      -> ''      (parent)
+   *   transactions_mm   -> 'mm'    (aux)
+   *   transactions_mm3  -> 'mm3'
+   * Used to filter the transactions_outbox JOIN by slot so a payout
+   * txid in one slot can't be confused with a (theoretically
+   * colliding) txid in another.
+   */
+  private function _slotFromTable() {
+    $prefix = 'transactions_';
+    if ($this->table === 'transactions') return '';
+    if (strncmp($this->table, $prefix, strlen($prefix)) === 0) {
+      return substr($this->table, strlen($prefix));
+    }
+    return '';
+  }
+
+  /**
    * Get an accounts total balance, ignore archived entries
    * @param account_id int Account ID
-   * @return data float Credit - Debit - Fees - Donation
+   * @return data array {confirmed, unconfirmed, orphaned, inflight}
+   *
+   * `inflight` is the absolute amount of Debit_AP/Debit_MP/TXFee rows
+   * whose matching transactions_outbox row is in 'broadcast' state —
+   * i.e. the payout left the wallet but hasn't yet cleared
+   * reconcile_min_confirmations on chain. The same rows are EXCLUDED
+   * from the confirmed total so the dashboard shows a clean
+   * `confirmed: 0 / inflight: X` instead of a confusing negative.
+   * Once reconcile_payouts archives them (Wave 2), they fall out of
+   * both buckets and confirmed normalises.
    **/
   public function getBalance($account_id) {
     $this->debug->append("STA " . __METHOD__, 4);
@@ -261,9 +288,17 @@ class Transaction extends Base {
       SELECT
         IFNULL(ROUND((
           SUM( IF( ( t.type IN ('Credit','Bonus') AND b.confirmations >= ? ) OR t.type = 'Credit_PPS', t.amount, 0 ) ) -
-          SUM( IF( t.type IN ('Debit_MP', 'Debit_AP'), t.amount, 0 ) ) -
-          SUM( IF( ( t.type IN ('Donation','Fee') AND b.confirmations >= ? ) OR ( t.type IN ('Donation_PPS', 'Fee_PPS', 'TXFee') ), t.amount, 0 ) )
+          SUM( IF( t.type IN ('Debit_MP', 'Debit_AP') AND ( o.status IS NULL OR o.status != 'broadcast' ), t.amount, 0 ) ) -
+          SUM( IF(
+                ( t.type IN ('Donation','Fee') AND b.confirmations >= ? )
+                OR ( t.type IN ('Donation_PPS', 'Fee_PPS') )
+                OR ( t.type = 'TXFee' AND ( o.status IS NULL OR o.status != 'broadcast' ) ),
+                t.amount, 0
+              ) )
         ), 8), 0) AS confirmed,
+        IFNULL(ROUND((
+          SUM( IF( t.type IN ('Debit_MP','Debit_AP','TXFee') AND o.status = 'broadcast', t.amount, 0 ) )
+        ), 8), 0) AS inflight,
         IFNULL(ROUND((
           SUM( IF( t.type IN ('Credit','Bonus') AND b.confirmations < ? AND b.confirmations >= 0, t.amount, 0 ) ) -
           SUM( IF( t.type IN ('Donation','Fee') AND b.confirmations < ? AND b.confirmations >= 0, t.amount, 0 ) )
@@ -274,11 +309,22 @@ class Transaction extends Base {
         ), 8), 0) AS orphaned
       FROM $this->table AS t
       LEFT JOIN " . $this->block->getTableName() . " AS b
-      ON t.block_id = b.id
+        ON t.block_id = b.id
+      LEFT JOIN transactions_outbox AS o
+        ON t.txid = o.txid AND o.slot = ?
       WHERE t.account_id = ?
-      AND archived = 0
+        AND archived = 0
       ");
-    if ($this->checkStmt($stmt) && $stmt->bind_param("iiiii", $this->config['confirmations'], $this->config['confirmations'], $this->config['confirmations'], $this->config['confirmations'], $account_id) && $stmt->execute() && $result = $stmt->get_result())
+    $slot = $this->_slotFromTable();
+    if ($this->checkStmt($stmt) && $stmt->bind_param(
+          "iiiisi",
+          $this->config['confirmations'],
+          $this->config['confirmations'],
+          $this->config['confirmations'],
+          $this->config['confirmations'],
+          $slot,
+          $account_id
+        ) && $stmt->execute() && $result = $stmt->get_result())
       return $result->fetch_assoc();
     return $this->sqlError();
   }
