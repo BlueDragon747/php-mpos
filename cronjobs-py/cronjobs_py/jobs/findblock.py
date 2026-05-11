@@ -147,10 +147,16 @@ class FindBlock:
         # Use block.time from the daemon (authoritative) over the row's time
         # column, which gets stamped at insert and may drift.
         block_time = int(info.get("time") or block.get("time") or 0)
+        # Only the parent slot (BLC) requires upstream_result='Y' (the
+        # share also had to win the parent chain). Aux slots match any
+        # valid pool share, since the merge-mined aux solve is carried
+        # alongside the share's normal PoW work.
+        require_upstream = (self.slot == "")
         share = db.find_upstream_share(
             blockhash=block["blockhash"],
             prev_share_id=prev_share_id,
             block_time=block_time,
+            require_upstream=require_upstream,
         )
 
         if share is None:
@@ -183,6 +189,7 @@ class FindBlock:
                     prev_share_id=prev_share_id,
                     block_time=block_time,
                     exclude_ids=tried,
+                    require_upstream=require_upstream,
                 )
                 if alt is None:
                     break

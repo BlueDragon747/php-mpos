@@ -272,28 +272,45 @@ class Db:
     # ---- share table helpers (parent only for now) ----
 
     def get_last_share_id(self, slot: str = "") -> int:
-        b = self.get_last_block(slot)
-        if not b or b.get("share_id") is None:
-            return 0
-        return int(b["share_id"])
+        # The last *accounted* block in this slot — i.e., the most
+        # recent one with share_id already set. `get_last_block`
+        # returns the highest-height row regardless of share_id,
+        # which means as soon as the next unaccounted block is
+        # inserted (still NULL share_id) this would return 0 and the
+        # caller would count round-shares against "since pool start"
+        # instead of "since the previous block".
+        row = self.fetchone(
+            f"SELECT share_id FROM {self._blocks_table(slot)} "
+            f"WHERE share_id IS NOT NULL ORDER BY share_id DESC LIMIT 1"
+        )
+        return int(row["share_id"]) if row and row.get("share_id") is not None else 0
 
     def find_upstream_share(self, *, blockhash: str, prev_share_id: int,
                             block_time: int | None = None,
-                            exclude_ids: list[int] | None = None) -> dict | None:
+                            exclude_ids: list[int] | None = None,
+                            require_upstream: bool = True) -> dict | None:
         """Find the parent-stream pool share that produced this block.
 
-        MPOS's PHP findUpstreamShare tries four strategies; only the
-        time-window one (`upstream_result='Y' AND id > last AND time
-        within ±60s of block.time`) matches for our pool. We implement
-        that one against a UNION of the live `shares` table and the
-        `shares_archive` table — aux findblock often runs against blocks
-        whose parent shares were already archived by an earlier
-        pplns_payout tick.
+        MPOS's PHP findUpstreamShare tries four strategies; the
+        time-window one (`id > last AND time within ±60s of block.time`)
+        is what matches for our pool. We implement that against a UNION
+        of the live `shares` table and the `shares_archive` table —
+        aux findblock often runs against blocks whose parent shares
+        were already archived by an earlier pplns_payout tick.
+
+        `require_upstream` controls the row filter:
+          - True  → `upstream_result='Y'`. Right for the parent (BLC)
+            slot: only BLC-winning shares can BE the BLC block.
+          - False → `our_result='Y'`. Right for aux slots: an aux block
+            can be produced by ANY valid pool share carrying the aux
+            merkle commitment, regardless of whether that share also
+            happened to win the parent chain.
 
         Returns the share row dict, or None if no match.
         """
         if block_time is None:
             return None
+        result_col = "upstream_result" if require_upstream else "our_result"
         params: list[Any] = [
             prev_share_id, block_time, block_time,
             prev_share_id, block_time, block_time,
@@ -302,13 +319,13 @@ class Db:
             "SELECT id, username, our_result, upstream_result FROM ("
             "  SELECT id, username, our_result, upstream_result, time "
             "  FROM shares "
-            "  WHERE upstream_result = 'Y' AND id > %s "
+            f"  WHERE {result_col} = 'Y' AND id > %s "
             "    AND UNIX_TIMESTAMP(time) >= %s - 60 "
             "    AND UNIX_TIMESTAMP(time) <= %s + 60"
             "  UNION ALL "
             "  SELECT share_id AS id, username, our_result, upstream_result, time "
             "  FROM shares_archive "
-            "  WHERE upstream_result = 'Y' AND share_id > %s "
+            f"  WHERE {result_col} = 'Y' AND share_id > %s "
             "    AND UNIX_TIMESTAMP(time) >= %s - 60 "
             "    AND UNIX_TIMESTAMP(time) <= %s + 60"
             ") u"
