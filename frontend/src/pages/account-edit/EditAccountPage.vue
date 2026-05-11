@@ -82,13 +82,6 @@ function pinReady(coinKey: string): boolean {
   return /^\d{4}$/.test(form.value.cashOutPin[coinKey] || '');
 }
 
-// Per-coin pending-payout state. Seeded from server-rendered initial
-// state and updated locally when an AJAX cashOut succeeds — that
-// flips the header to a clickable "Pending payout" label and lets
-// the operator open the details view (requestedAt + txid). The
-// header only reverts to balance + Cash Out when this becomes false
-// again, which today happens on a fresh page load (server sees the
-// payouts row gone or completed).
 type PendingPayout = {
   active: boolean;
   requestedAt: string | null;
@@ -97,32 +90,22 @@ type PendingPayout = {
   kind: 'manual' | 'auto' | null;
 };
 
-// Header-button label that distinguishes auto-payouts from manual
-// cash-outs at a glance. Matches the user-facing terminology in the
-// Auto-Payout Threshold field below.
 function pendingLabel(kind: 'manual' | 'auto' | null | undefined): string {
   if (kind === 'auto')   return 'Auto - Pending payout';
   if (kind === 'manual') return 'Manual - Pending payout';
   return 'Pending payout';
 }
 
-// Strip the seconds component off a "YYYY-MM-DD HH:MM:SS" string for
-// the inline-details readout — operators don't need second-level
-// precision when the broadcast itself takes ~minute(s) to land.
+// Trim seconds off "YYYY-MM-DD HH:MM:SS" for the inline-details readout.
 function fmtRequestedAt(s: string | null | undefined): string {
   if (!s) return '—';
-  // Match the leading 16 chars of "YYYY-MM-DD HH:MM:SS"; if the
-  // server gave us an ISO "T" form, accept that too.
   return s.slice(0, 16).replace('T', ' ');
 }
+
 const pendingPayout = ref<Record<string, PendingPayout>>(
   Object.fromEntries(i.coins.map(c => [c.key, { ...c.pendingPayout }])) as Record<string, PendingPayout>
 );
 
-// Per-coin body view: 'fields' (default) | 'msg' (cashOut just-submitted
-// success/error) | 'details' (operator clicked Pending payout). One
-// active state per card; switching between them animates via the same
-// <Transition name="bsx-flip"> wrapper.
 type BodyView = 'fields' | 'msg' | 'details';
 const bodyView = ref<Record<string, BodyView>>(
   Object.fromEntries(i.coins.map(c => [c.key, 'fields' as BodyView])) as Record<string, BodyView>
@@ -131,56 +114,29 @@ function setBodyView(coinKey: string, view: BodyView) {
   bodyView.value = { ...bodyView.value, [coinKey]: view };
 }
 
-// Per-coin cash-out popup. PHP tags every cashOut popup (success,
-// error, info) with COIN=<slot.key>; we surface those inline on the
-// matching payout card body (replacing address+threshold with a
-// centered confirmation) instead of routing them to the page-top
-// popup strip. Success popups stay until the operator clicks Close;
-// non-success popups (insufficient-funds, address-missing, csrf,
-// already-active, etc.) auto-dismiss after 4 seconds so the card
-// flips back to the address+threshold view automatically.
-//
-// `popups` is reactive and seeded from the server-rendered initial
-// state. AJAX cashOut submissions push their response popups into
-// this same list, so the inline-flip + auto-dismiss logic below
-// works the same whether the popup arrived via full-page render or
-// via fetch().
 const AUTO_DISMISS_MS = 4000;
 const popups = ref<PopupMessage[]>([...i.popups]);
 const dismissedCoinPopups = ref<Set<string>>(new Set());
 
 function cashOutPopupForCoin(coinKey: string) {
   if (dismissedCoinPopups.value.has(coinKey)) return null;
-  // Walk in reverse so the most-recent popup for this coin wins —
-  // the AJAX submit appends, so the last entry matching `coinKey`
-  // is the freshest result.
+  // Reverse-walk: AJAX appends, so the freshest popup for this coin is the last match.
   for (let idx = popups.value.length - 1; idx >= 0; idx--) {
     if (popups.value[idx].coin === coinKey) return popups.value[idx];
   }
   return null;
 }
 function dismissCoinPopup(coinKey: string) {
-  // Use a fresh Set so Vue tracks the change.
   const next = new Set(dismissedCoinPopups.value);
   next.add(coinKey);
   dismissedCoinPopups.value = next;
-  // The Close button on the cashOut message also flips the body back
-  // to its default (fields) view, unless the operator was looking at
-  // the pending-payout details — in which case `bodyView` will already
-  // be 'fields' here so this is a no-op.
   if (bodyView.value[coinKey] === 'msg') setBodyView(coinKey, 'fields');
 }
 function scheduleAutoDismiss(coinKey: string, type: PopupMessage['type']) {
-  if (type === 'success') return;     // success stays until manual Close
+  // Success popups stay until manual Close; errors / info auto-flip back.
+  if (type === 'success') return;
   window.setTimeout(() => dismissCoinPopup(coinKey), AUTO_DISMISS_MS);
 }
-// Auto-dismiss timers for any non-success per-coin popup rendered on
-// first paint. We do this once on mount instead of in the template
-// render so we don't accidentally start a timer per re-render (which
-// would leak handles or compete with manual dismiss). Also flip any
-// pre-rendered popup-bearing card body into the message view so the
-// page looks the same after a non-AJAX redirect-style POST as after
-// the AJAX path.
 onMounted(() => {
   for (const p of popups.value) {
     if (p.coin) {
@@ -190,28 +146,16 @@ onMounted(() => {
   }
 });
 
-// AJAX cash-out: intercept the form, POST with _ajax=1, push the
-// returned popup into `popups`, and let the inline-flip render
-// itself. Mirrors admin/templates.inc.php's _ajax pattern — the
-// server returns JSON and we never reload the page.
 async function submitCashOut(coinKey: string, ev: Event) {
   ev.preventDefault();
   const form = ev.target as HTMLFormElement;
   const fd = new FormData(form);
-  // The form's action attribute is the page URL; append _ajax=1.
   const url = i.formAction + (i.formAction.includes('?') ? '&' : '?') + '_ajax=1';
-  // Operator clicked Cash Out: clear any previous dismiss for this
-  // coin so the new result actually flips into view (otherwise a
-  // second click after dismissing would no-op).
   if (dismissedCoinPopups.value.has(coinKey)) {
     const next = new Set(dismissedCoinPopups.value);
     next.delete(coinKey);
     dismissedCoinPopups.value = next;
   }
-  // Flip the body to the cashOut message view immediately. Even if
-  // the network call hasn't returned yet, the body is in the right
-  // visual lane to receive the result; on the success path we'll
-  // also flip the header to "Pending payout" once the popup arrives.
   setBodyView(coinKey, 'msg');
   try {
     const res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
@@ -221,10 +165,6 @@ async function submitCashOut(coinKey: string, ev: Event) {
         popups.value.push(p);
         if (p.coin) {
           if (p.type === 'success') {
-            // Flip the header to "Pending payout" — the txid + amount
-            // land later (cronjobs-py fills them in on the next page
-            // load); for the immediate UI we just record the
-            // requestedAt and leave the rest null.
             pendingPayout.value = {
               ...pendingPayout.value,
               [p.coin]: {
@@ -232,8 +172,6 @@ async function submitCashOut(coinKey: string, ev: Event) {
                 requestedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
                 txid: null,
                 amount: null,
-                // The AJAX path is hit only via the manual Cash Out
-                // form, so this is always a manual request.
                 kind: 'manual',
               },
             };
@@ -243,9 +181,6 @@ async function submitCashOut(coinKey: string, ev: Event) {
       }
     }
   } catch (err) {
-    // Surface a generic error inline on the same card so the operator
-    // sees something happened. Real PHP failures already come back as
-    // JSON popups; this branch is for transport-level failures.
     popups.value.push({
       content: 'Cash out request failed; please retry.',
       type: 'errormsg',
@@ -253,14 +188,10 @@ async function submitCashOut(coinKey: string, ev: Event) {
     });
     scheduleAutoDismiss(coinKey, 'errormsg');
   }
-  // Wipe the just-used PIN so the form requires a fresh one for any
-  // subsequent submit (matches the legacy full-page-reload behaviour).
   form.reset();
   form.querySelector<HTMLInputElement>('input[name="authPin"]')?.focus();
 }
 
-// Page-top popup list excludes per-coin cashOut popups — those render
-// inline on their card, not at the top.
 const topPopups = computed(() => popups.value.filter(p => !p.coin));
 
 // Live password strength display (legacy template referenced #pw_strength
@@ -1411,40 +1342,38 @@ async function copyApiKey() {
 }
 .cashout-detail-line {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;         /* +2px from previous 12px */
   color: #cdd;
   display: flex;
   gap: 6px;
   align-items: baseline;
   justify-content: center;
-  flex-wrap: nowrap;       /* keep label + value on one line */
-  line-height: 1.3;
-  /* leave room on the right so the absolutely-positioned Close
-     button (bottom-left) doesn't visually crowd the txid line */
+  flex-wrap: wrap;         /* allow long txid to wrap to next line */
+  line-height: 1.2;        /* tighter to claw back the +2px height */
   max-width: 100%;
 }
 .cashout-detail-line .muted   { color: #99a; }
 .cashout-detail-line strong   { color: #e0f0fa; font-weight: 600; }
 .cashout-detail-txid {
-  /* Long hex doesn't fit on narrow cards; truncate with ellipsis and
-     give the operator the full value via the title attribute. */
-  display: inline-block;
-  max-width: 60ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Full hex on one row when it fits, otherwise word-break-all
+     wraps cleanly without ellipsis. Operator wants the whole txid
+     readable, not truncated. */
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: 13px;         /* +2px from previous 11px */
+  word-break: break-all;
+  white-space: normal;
+  max-width: 100%;
 }
 /* Details body uses tighter line-spacing than the success/error
-   message block so two info rows fit the same height as the two
-   .kv field rows (~28px each, 12px gap). No Close button here —
-   the header's "Pending payout" toggle dismisses this view — so
-   the absolute-Close padding reservation that .cashout-msg-block
-   normally has gets zeroed out. */
+   message block so two info rows fit the same vertical envelope as
+   the two .kv field rows. No Close button here — the header's
+   "Pending payout" toggle dismisses this view — and the parent
+   .bsx-card-body's 14/16 padding plus min-height keeps the card
+   from growing relative to the address+threshold view. */
 .cashout-details-block {
-  gap: 2px;
+  gap: 4px;
   padding-bottom: 0;
+  min-height: 70px;
 }
 .cashout-details-block .cashout-detail-line:first-of-type { margin-top: 0; }
 
