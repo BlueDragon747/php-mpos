@@ -55,12 +55,10 @@ class Statistics:
         target_bits = int(cfg.raw.get("target_bits", 32))
         difficulty_const = int(cfg.raw.get("difficulty", 32))
         # Rolling window: admin-editable via the Settings page
-        # (`hashrate_window_seconds`). Fresh read every tick so an
-        # operator change is picked up within ≤ 60 s without a
-        # service restart. Defaults to 600 (10 min); floor of 60 s
-        # guards against an accidental sub-minute value.
+        # (`hashrate_window_seconds`). Fresh read every tick. Default
+        # 300s, floor 60s.
         interval = db.get_setting_int(
-            "hashrate_window_seconds", default=600, floor=60
+            "hashrate_window_seconds", default=300, floor=60
         )
 
         # 1. Current pool hashrate (kH/s)

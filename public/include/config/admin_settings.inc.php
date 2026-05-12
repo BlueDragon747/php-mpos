@@ -21,9 +21,9 @@ $aSettings['website'][] = array(
 $aSettings['website'][] = array(
   'display' => 'Hashrate Window (seconds)', 'type' => 'text',
   'size' => 6,
-  'default' => 600,
+  'default' => 300,
   'name' => 'hashrate_window_seconds', 'value' => $setting->getValue('hashrate_window_seconds'),
-  'tooltip' => 'Rolling time window used to compute the displayed pool and per-user hashrate. Larger values smooth out short-term variance but lag real changes; smaller values react faster but swing more on low share rates. Default 600 (10 minutes). Minimum enforced floor is 60 seconds.'
+  'tooltip' => 'Rolling window for the displayed pool/user hashrate. Larger = smoother, smaller = more responsive. Default 300, minimum 60.'
 );
 $aSettings['website'][] = array(
   'display' => 'Website Name', 'type' => 'text',

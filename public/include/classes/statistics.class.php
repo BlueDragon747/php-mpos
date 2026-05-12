@@ -19,15 +19,13 @@ class Statistics extends Base {
     return $this->getcache;
   }
 
-  // Rolling-window for hashrate/sharerate aggregations. Resolves a
-  // caller-supplied interval first; otherwise reads the admin-editable
-  // `hashrate_window_seconds` row from the settings table. Falls back
-  // to 600 (10 min) and enforces a 60-second floor so an admin typo
-  // can't crater the SQL with a 1-second divisor.
+  // Rolling-window for hashrate/sharerate aggregations. Reads the
+  // admin-editable `hashrate_window_seconds` setting; falls back to
+  // 300s with a 60s floor.
   private function resolveWindow($interval=null) {
     if ($interval !== null && (int)$interval > 0) return (int)$interval;
     $v = isset($this->setting) ? (int)$this->setting->getValue('hashrate_window_seconds') : 0;
-    if ($v <= 0) $v = 600;
+    if ($v <= 0) $v = 300;
     return max(60, $v);
   }
 
