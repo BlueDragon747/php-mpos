@@ -132,22 +132,33 @@ if (!empty($backup_status['wallets'])) {
 }
 
 // ---- Daemon block heights -------------------------------------------
+// Direct JSON-RPC via the existing $bitcoin* globals. The previous
+// `docker exec` approach required www-data to have Docker socket
+// access; the daemons' RPC ports are already reachable on localhost
+// with the wallet credentials in $config['wallet*'].
 $daemon_rows = array();
 $daemons = array(
-  'BLC'  => array('container' => 'blc',  'cli' => 'blakecoin-cli'),
-  'PHO'  => array('container' => 'pho',  'cli' => 'photon-cli'),
-  'BBTC' => array('container' => 'bbtc', 'cli' => 'blakebitcoin-cli'),
-  'ELT'  => array('container' => 'elt',  'cli' => 'electron-cli'),
-  'UMO'  => array('container' => 'umo',  'cli' => 'universalmolecule-cli'),
-  'LIT'  => array('container' => 'lit',  'cli' => 'lithium-cli'),
+  'BLC'  => isset($bitcoin)     ? $bitcoin     : null,
+  'PHO'  => isset($bitcoin_mm)  ? $bitcoin_mm  : null,
+  'BBTC' => isset($bitcoin_mm1) ? $bitcoin_mm1 : null,
+  'ELT'  => isset($bitcoin_mm3) ? $bitcoin_mm3 : null,
+  'UMO'  => isset($bitcoin_mm4) ? $bitcoin_mm4 : null,
+  'LIT'  => isset($bitcoin_mm5) ? $bitcoin_mm5 : null,
 );
-foreach ($daemons as $sym => $d) {
-  $info = _system_run('docker exec ' . escapeshellarg($d['container']) . ' '
-    . escapeshellarg($d['cli']) . ' getblockchaininfo 2>/dev/null', 2048);
+foreach ($daemons as $sym => $btc) {
   $blocks = ''; $headers = ''; $chain = '';
-  if ($info && preg_match('/"blocks":\s*(\d+)/', $info, $m))   $blocks  = $m[1];
-  if ($info && preg_match('/"headers":\s*(\d+)/', $info, $m))  $headers = $m[1];
-  if ($info && preg_match('/"chain":\s*"([^"]+)"/', $info, $m)) $chain = $m[1];
+  if ($btc) {
+    try {
+      $info = $btc->getblockchaininfo();
+      if (is_array($info)) {
+        if (isset($info['blocks']))  $blocks  = (string)$info['blocks'];
+        if (isset($info['headers'])) $headers = (string)$info['headers'];
+        if (isset($info['chain']))   $chain   = (string)$info['chain'];
+      }
+    } catch (Exception $e) {
+      // Leave the row blank — UI renders "UNREACHABLE".
+    }
+  }
   $daemon_rows[] = array(
     'sym'     => $sym,
     'chain'   => $chain ?: '?',
