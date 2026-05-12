@@ -135,6 +135,29 @@ class Db:
             cur.execute(sql, params)
             return cur.rowcount
 
+    def get_setting_int(self, name: str, *, default: int, floor: int = 0) -> int:
+        """Read an integer-valued row from the MPOS `settings` table.
+
+        Used by cron jobs that need to react in real time to admin
+        edits on the Settings page — the row is queried fresh every
+        call, no caching. Returns `default` if the row is missing or
+        the stored value isn't a positive integer; clamps the result
+        to at least `floor` so an admin typo (e.g. `1`) can't crater
+        a SQL window divisor.
+        """
+        try:
+            row = self.fetchone(
+                "SELECT value FROM settings WHERE name = %s LIMIT 1",
+                (name,),
+            )
+            if row and row.get("value") is not None:
+                v = int(row["value"])
+                if v > 0:
+                    return max(floor, v)
+        except Exception:
+            pass
+        return max(floor, default)
+
     @contextmanager
     def transaction(self) -> Iterator[pymysql.cursors.DictCursor]:
         """Multi-statement transaction with autocommit toggled off.

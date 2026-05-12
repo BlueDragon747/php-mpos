@@ -19,6 +19,13 @@ $aSettings['website'][] = array(
   'tooltip' => 'Display a message of the day as information popup if set.'
 );
 $aSettings['website'][] = array(
+  'display' => 'Hashrate Window (seconds)', 'type' => 'text',
+  'size' => 6,
+  'default' => 600,
+  'name' => 'hashrate_window_seconds', 'value' => $setting->getValue('hashrate_window_seconds'),
+  'tooltip' => 'Rolling time window used to compute the displayed pool and per-user hashrate. Larger values smooth out short-term variance but lag real changes; smaller values react faster but swing more on low share rates. Default 600 (10 minutes). Minimum enforced floor is 60 seconds.'
+);
+$aSettings['website'][] = array(
   'display' => 'Website Name', 'type' => 'text',
   'size' => 25,
   'default' => 'The Pool',
