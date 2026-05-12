@@ -37,14 +37,21 @@ log = get(__name__)
 
 STATISTICS_ALL_USER_SHARES = "STATISTICS_ALL_USER_SHARES"
 STATISTICS_ALL_USER_HASHRATES = "STATISTICS_ALL_USER_HASHRATES"
+STATISTICS_ALL_WORKER_HASHRATES = "STATISTICS_ALL_WORKER_HASHRATES"
 TOP_CONTRIBUTORS_HASHES_15 = "getTopContributorshashes15"
-# Memcache key holding the EMA running state (value + timestamp) so
+# Memcache keys holding the EMA running state (value + timestamp) so
 # successive ticks can blend the new sample with the previous estimate.
 HASHRATE_EMA_STATE = "getCurrentHashrate_ema_state"
 HASHRATE_USER_EMA_STATE = "getCurrentUserHashrate_ema_state"
+HASHRATE_WORKER_EMA_STATE = "getCurrentWorkerHashrate_ema_state"
 
 
-def _ema_step(prev_value, prev_ts, sample, now_ts, tau):
+_EMA_FAST_RESPONSE_THRESHOLD = 0.20   # |sample - prev_ema| / prev_ema > 0.20
+_EMA_FAST_RESPONSE_DIVISOR = 5         # effective tau on big change = tau / 5
+_WORKER_STALE_SECONDS = 120            # no shares in this many sec → "going dormant"
+
+
+def _ema_step(prev_value, prev_ts, sample, now_ts, tau, *, force_fast=False):
     """One step of a time-aware exponential moving average.
 
     `tau` is the time constant in seconds — the EMA decays toward `sample`
@@ -52,12 +59,30 @@ def _ema_step(prev_value, prev_ts, sample, now_ts, tau):
     the sample so the display doesn't start at zero. Time-aware alpha
     means a cron stall (large dt) catches up correctly instead of
     underweighting the recovered sample.
+
+    Symmetric fast-response: when the new sample diverges from the
+    previous EMA by more than _EMA_FAST_RESPONSE_THRESHOLD in either
+    direction, use a tau divided by _EMA_FAST_RESPONSE_DIVISOR for
+    this tick. Real load changes (drop or rise) converge in a fraction
+    of the configured half-life; steady-state noise within the
+    threshold keeps the configured tau for smoothness.
+
+    `force_fast=True` skips the threshold check and always uses the
+    short tau — used by the stale-worker decay path so a worker whose
+    miner just disconnected drops in 2-3 ticks instead of waiting for
+    the sample window to drain its old shares.
     """
     if prev_value is None or prev_ts is None:
         return float(sample)
     dt = max(1.0, float(now_ts) - float(prev_ts))
-    alpha = 1.0 - math.exp(-dt / max(1.0, float(tau)))
-    return alpha * float(sample) + (1.0 - alpha) * float(prev_value)
+    prev_f = float(prev_value)
+    rel_change = abs(float(sample) - prev_f) / max(1.0, prev_f)
+    if force_fast or rel_change > _EMA_FAST_RESPONSE_THRESHOLD:
+        effective_tau = max(60.0, float(tau) / _EMA_FAST_RESPONSE_DIVISOR)
+    else:
+        effective_tau = max(1.0, float(tau))
+    alpha = 1.0 - math.exp(-dt / effective_tau)
+    return alpha * float(sample) + (1.0 - alpha) * prev_f
 
 
 @dataclass
@@ -88,31 +113,13 @@ class Statistics:
             "hashrate_ema_tau_seconds", default=300, floor=60
         )
 
-        # 1. Current pool hashrate (kH/s)
-        try:
-            sample = db.stats_current_hashrate(
-                target_bits=target_bits,
-                difficulty_const=difficulty_const,
-                interval=interval,
-            )
-        except Exception as exc:
-            raise Skip(f"current_hashrate query failed: {exc}")
-
+        # 1. Reserved for the pool hashrate write — done at the END of
+        # this tick after per-worker EMAs are computed, so the pool
+        # value is sum(worker EMAs). That way a single worker going
+        # dormant via the stale-detection path cascades into the pool
+        # chart on the same tick rather than waiting ~10 min for the
+        # 900s pool-wide sample window to drain its old shares.
         now_ts = time.time()
-        prev = cache.get_static(HASHRATE_EMA_STATE) if cache else None
-        prev_value = prev.get("value") if isinstance(prev, dict) else None
-        prev_ts = prev.get("ts") if isinstance(prev, dict) else None
-        hashrate = _ema_step(prev_value, prev_ts, sample, now_ts, tau)
-        log.info(
-            "[%s] pool hashrate: sample=%.0f ema=%.0f kH/s (tau=%ds)",
-            self.name, sample, hashrate, tau,
-        )
-        if cache:
-            cache.set_static(
-                HASHRATE_EMA_STATE,
-                {"value": float(hashrate), "ts": float(now_ts)},
-            )
-            cache.set_static("getCurrentHashrate", hashrate)
 
         # 2. Per-user share counts for the current round.
         try:
@@ -139,10 +146,11 @@ class Statistics:
             )
         log.info("[%s] %d users with share rows", self.name, len(user_shares))
 
-        # 3. Per-user mining stats (recent-window hashrate). Each user's
-        # hashrate is EMA-smoothed with the same tau as the pool value
-        # so the dashboard reads stable for steady miners and converges
-        # to the new rate over a few minutes when load actually shifts.
+        # 3. Per-user mining stats. We still query the SQL aggregate
+        # for sharerate / avgsharediff / id+username, but the displayed
+        # `hashrate` is overwritten further down with sum(this-user's
+        # worker EMAs) so the personal-hashrate gauge inherits the same
+        # fast-drop + stale behaviour as the worker table and pool chart.
         try:
             user_mining = db.stats_per_user_mining(
                 target_bits=target_bits,
@@ -153,26 +161,120 @@ class Statistics:
             log.warning("[%s] per_user_mining query failed: %s",
                         self.name, exc)
             user_mining = []
-        prev_user = cache.get_static(HASHRATE_USER_EMA_STATE) if cache else None
-        prev_user_map = prev_user.get("data") if isinstance(prev_user, dict) else None
-        prev_user_ts = prev_user.get("ts") if isinstance(prev_user, dict) else None
+
+        # 3b. Per-worker EMA-smoothed hashrate. Keyed by the literal
+        # `account.workername` string from the shares table so the
+        # dashboard worker table can substitute these for the raw
+        # per-window values it would otherwise compute via SQL.
+        try:
+            worker_mining = db.stats_per_worker_mining(
+                target_bits=target_bits,
+                difficulty_const=difficulty_const,
+                interval=interval,
+            )
+        except Exception as exc:
+            log.warning("[%s] per_worker_mining query failed: %s",
+                        self.name, exc)
+            worker_mining = []
+        prev_w = cache.get_static(HASHRATE_WORKER_EMA_STATE) if cache else None
+        prev_w_map = prev_w.get("data") if isinstance(prev_w, dict) else None
+        prev_w_ts = prev_w.get("ts") if isinstance(prev_w, dict) else None
+        smoothed_worker_map = {}
+        # Workers visible in the current sampling window keyed by name.
+        mining_by_worker = {r["worker"]: r for r in worker_mining}
+        # Workers we need to update an EMA for: anyone in the current
+        # window OR anyone in the previous cache (so a worker that just
+        # disappeared from the window still gets a decay tick).
+        all_workers = set(mining_by_worker.keys())
+        if prev_w_map:
+            all_workers.update(prev_w_map.keys())
+        for wname in all_workers:
+            row = mining_by_worker.get(wname)
+            if row is not None:
+                sample = float(row.get("hashrate") or 0.0)
+                last_share_age = int(row.get("last_share_age_sec") or 0)
+                stale = last_share_age > _WORKER_STALE_SECONDS
+            else:
+                # Worker dropped out of the window entirely.
+                sample = 0.0
+                last_share_age = -1
+                stale = True
+            if stale:
+                # Force the sample to 0 and use the short tau so a
+                # disconnected miner's EMA falls in 2-3 ticks instead
+                # of waiting for the sample window to drain.
+                sample_for_ema = 0.0
+                force_fast = True
+            else:
+                sample_for_ema = sample
+                force_fast = False
+            prev_v = (prev_w_map or {}).get(wname) if prev_w_map else None
+            new_ema = _ema_step(
+                prev_v, prev_w_ts, sample_for_ema, now_ts, tau,
+                force_fast=force_fast,
+            )
+            smoothed_worker_map[wname] = new_ema
+            if row is not None:
+                row["hashrate"] = new_ema
+        if cache:
+            cache.set_static(
+                HASHRATE_WORKER_EMA_STATE,
+                {"data": smoothed_worker_map, "ts": float(now_ts)},
+            )
+            cache.set_static(
+                STATISTICS_ALL_WORKER_HASHRATES,
+                {"data": smoothed_worker_map},
+                expire=600,
+            )
+
+        # 3b. Per-user hashrate = sum of that user's worker EMAs.
+        # Replaces what was previously a separately-EMA-smoothed user
+        # value. Inherits the worker-level fast-drop + stale path so a
+        # user whose miners just disconnected sees their hashrate
+        # collapse on the same tick instead of waiting for the sample
+        # window to drain.
         smoothed_user_map = {}
         for row in user_mining:
             uid = int(row["id"])
-            sample = float(row.get("hashrate") or 0.0)
-            prev_v = (prev_user_map or {}).get(uid) if prev_user_map else None
-            row["hashrate"] = _ema_step(prev_v, prev_user_ts, sample, now_ts, tau)
-            smoothed_user_map[uid] = row["hashrate"]
+            account = str(row.get("account") or "")
+            # `account.workername` for each worker — match the prefix.
+            user_total = 0.0
+            for wname, wval in smoothed_worker_map.items():
+                if wname.split(".", 1)[0] == account:
+                    user_total += float(wval)
+            row["hashrate"] = user_total
+            smoothed_user_map[uid] = user_total
         if cache:
-            cache.set_static(
-                HASHRATE_USER_EMA_STATE,
-                {"data": smoothed_user_map, "ts": float(now_ts)},
-            )
             cache.set_static(
                 STATISTICS_ALL_USER_HASHRATES,
                 {"data": {int(row["id"]): row for row in user_mining}},
                 expire=600,
             )
+
+        # 1b. Pool hashrate = sum of per-worker EMAs.
+        # Sourced from the just-computed smoothed_worker_map so the
+        # pool chart inherits the worker-level fast-drop and stale
+        # behaviour. The chart and worker table can't disagree.
+        pool_hashrate = float(sum(smoothed_worker_map.values()))
+        # Pool sample for the log — sum of raw per-worker samples in
+        # the current window (or 0 for stale workers). Helps debug
+        # cases where the chart looks off.
+        pool_sample = float(sum(
+            (r.get("hashrate") or 0.0)
+            for r in worker_mining
+        ))
+        log.info(
+            "[%s] pool hashrate: sample=%.0f ema=%.0f kH/s "
+            "(workers=%d, tau=%ds)",
+            self.name, pool_sample, pool_hashrate,
+            len(smoothed_worker_map), tau,
+        )
+        if cache:
+            cache.set_static(
+                HASHRATE_EMA_STATE,
+                {"value": pool_hashrate, "ts": float(now_ts)},
+            )
+            cache.set_static("getCurrentHashrate", pool_hashrate)
 
         # 4. Top contributors leaderboard (hashrate ordered)
         try:

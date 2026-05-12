@@ -1093,6 +1093,43 @@ class Db:
             r["is_anonymous"] = int(r.get("is_anonymous") or 0)
         return rows
 
+    def stats_per_worker_mining(self, *, target_bits: int, difficulty_const: int,
+                                interval: int = 180) -> list[dict]:
+        """Per-WORKER hashrate (keyed by full `account.workername`).
+
+        Returns one row per worker that has at least one share in the
+        window, with `hashrate` (kH/s sampled over the window) and
+        `last_share_age_sec` (seconds since their most recent share).
+        The age field lets the cron detect "going dormant" workers —
+        ones whose shares are still inside the window but who stopped
+        submitting recently — so their EMA can be decayed aggressively
+        instead of waiting for the window to drain.
+        """
+        sql = (
+            f"SELECT u.username AS worker, "
+            f"       IFNULL(ROUND(SUM(u.difficulty) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate, "
+            f"       TIMESTAMPDIFF(SECOND, MAX(u.time), NOW()) AS last_share_age_sec "
+            f"FROM ("
+            f"  SELECT id, IF(difficulty = 0, POW(2, ({difficulty_const} - 16)), difficulty) AS difficulty, username, time "
+            f"  FROM shares "
+            f"  WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) AND our_result = 'Y' "
+            f"  UNION ALL "
+            f"  SELECT share_id, IF(difficulty = 0, POW(2, ({difficulty_const} - 16)), difficulty) AS difficulty, username, time "
+            f"  FROM shares_archive "
+            f"  WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) AND our_result = 'Y'"
+            f") u "
+            f"GROUP BY u.username"
+        )
+        rows = self.fetchall(sql, (interval, interval, interval))
+        out = []
+        for r in rows:
+            out.append({
+                "worker": str(r.get("worker") or ""),
+                "hashrate": float(r.get("hashrate") or 0.0),
+                "last_share_age_sec": int(r.get("last_share_age_sec") or 0),
+            })
+        return out
+
     def stats_per_user_mining(self, *, target_bits: int, difficulty_const: int,
                               interval: int = 180) -> list[dict]:
         """Per-user hashrate, sharerate and average difficulty."""
