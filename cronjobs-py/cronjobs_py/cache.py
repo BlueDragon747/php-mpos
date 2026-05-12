@@ -32,10 +32,21 @@ from .errors import Transient
 
 log = logging.getLogger(__name__)
 
-# PHP `memcached` extension uses these flag bits when storing
-# serialized payloads. Matches `MEMC_VAL_IS_SERIALIZED = 1`
-# in `php-memcached`'s C source.
-PHP_MEMCACHED_FLAG_SERIALIZED = 1
+# PHP `memcached` extension flag bits (php-memcached, NOT legacy
+# php-memcache — different conventions). From php-memcached's
+# php_memcached.h:
+#   MEMC_VAL_IS_STRING     0
+#   MEMC_VAL_IS_LONG       1
+#   MEMC_VAL_IS_DOUBLE     2
+#   MEMC_VAL_IS_BOOL       3
+#   MEMC_VAL_IS_SERIALIZED 4   <-- this one for PHP serialize()
+#   MEMC_VAL_IS_IGBINARY   5
+#   MEMC_VAL_IS_JSON       6
+#   MEMC_VAL_IS_MSGPACK    7
+# A wrong flag (e.g. 1 = LONG) makes PHP parse our phpserialize bytes
+# via strtol, get 0, treat the entry as a cache miss, and rewrite the
+# slot with its own SQL fall-through — clobbering pre-computed values.
+PHP_MEMCACHED_FLAG_SERIALIZED = 4
 
 
 def _php_serialize(key: bytes, value: Any) -> tuple[bytes, int]:
