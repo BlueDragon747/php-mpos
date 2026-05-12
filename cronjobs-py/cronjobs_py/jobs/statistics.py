@@ -78,13 +78,14 @@ class Statistics:
         difficulty_const = int(cfg.raw.get("difficulty", 32))
         # Sampling window for each raw hashrate read.
         interval = db.get_setting_int(
-            "hashrate_window_seconds", default=300, floor=60
+            "hashrate_window_seconds", default=900, floor=60
         )
-        # EMA time constant. Half-life ≈ 0.693 * tau. Default 900s
-        # (~10 min half-life) gives a stable display with a few-minute
-        # response to real changes.
+        # EMA time constant. Half-life ≈ 0.693 * tau. Default 300s
+        # (~3.5 min half-life) gives quick response to load changes
+        # with most of the sample noise already smoothed out by the
+        # wider 900s sampling window above.
         tau = db.get_setting_int(
-            "hashrate_ema_tau_seconds", default=900, floor=60
+            "hashrate_ema_tau_seconds", default=300, floor=60
         )
 
         # 1. Current pool hashrate (kH/s)

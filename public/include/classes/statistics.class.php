@@ -21,11 +21,11 @@ class Statistics extends Base {
 
   // Rolling-window for hashrate/sharerate aggregations. Reads the
   // admin-editable `hashrate_window_seconds` setting; falls back to
-  // 300s with a 60s floor.
+  // 900s with a 60s floor.
   private function resolveWindow($interval=null) {
     if ($interval !== null && (int)$interval > 0) return (int)$interval;
     $v = isset($this->setting) ? (int)$this->setting->getValue('hashrate_window_seconds') : 0;
-    if ($v <= 0) $v = 300;
+    if ($v <= 0) $v = 900;
     return max(60, $v);
   }
 

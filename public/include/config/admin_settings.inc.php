@@ -21,16 +21,16 @@ $aSettings['website'][] = array(
 $aSettings['website'][] = array(
   'display' => 'Hashrate Window (seconds)', 'type' => 'text',
   'size' => 6,
-  'default' => 300,
+  'default' => 900,
   'name' => 'hashrate_window_seconds', 'value' => $setting->getValue('hashrate_window_seconds'),
-  'tooltip' => 'Per-tick sampling window the cron uses to read raw hashrate before EMA smoothing. Default 300, minimum 60.'
+  'tooltip' => 'Per-tick sampling window the cron uses to read raw hashrate before EMA smoothing. Default 900, minimum 60.'
 );
 $aSettings['website'][] = array(
   'display' => 'Hashrate Smoothing (seconds)', 'type' => 'text',
   'size' => 6,
-  'default' => 900,
+  'default' => 300,
   'name' => 'hashrate_ema_tau_seconds', 'value' => $setting->getValue('hashrate_ema_tau_seconds'),
-  'tooltip' => 'EMA time constant for the displayed hashrate. Half-life ≈ 0.7 × this value. Larger = steadier number that lags real changes; smaller = jumpier number that reacts faster. Default 900 (~10 min half-life), minimum 60.'
+  'tooltip' => 'EMA time constant for the displayed hashrate. Half-life ≈ 0.7 × this value. Larger = steadier number that lags real changes; smaller = jumpier number that reacts faster. Default 300 (~3.5 min half-life), minimum 60.'
 );
 $aSettings['website'][] = array(
   'display' => 'Website Name', 'type' => 'text',
