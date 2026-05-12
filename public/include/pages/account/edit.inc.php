@@ -117,7 +117,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'main');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'main');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'main');
         	  }
         	}
         	break;
@@ -146,7 +146,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm');
         	  }
         	}
         	break;
@@ -175,7 +175,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm1'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm1'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
         	  }
         	}
         	break;
@@ -205,7 +205,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm3'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm3'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
         	  }
         	}
         	break;
@@ -234,7 +234,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm4'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm4'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
         	  }
         	}
         	break;
@@ -263,7 +263,7 @@ if ($user->isAuthenticated()) {
         	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
         	    }
         	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'Insufficient funds, you need more than ' . $config['txfee_manual'] . ' ' . $config['currency_mm5'] . ' to cover transaction fees', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
+        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm5'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
         	  }
         	}
         	break;

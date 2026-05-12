@@ -90,12 +90,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -116,12 +116,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -142,12 +142,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -169,12 +169,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -194,12 +194,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -219,12 +219,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }

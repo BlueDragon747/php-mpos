@@ -78,6 +78,39 @@ const form = ref({
   cashOutPin: Object.fromEntries(i.coins.map(c => [c.key, ''])) as Record<string, string>,
 });
 
+// Snapshot of the initial form state. Used to decide whether the
+// "Update Account" button glows amber: if any field that posts via
+// form="account-details-form" diverges from its pristine value, the
+// account section is "dirty" and the user has unsaved changes.
+const initialAccount = {
+  email: i.email,
+  donatePercent: String(i.donatePercent),
+  isAnonymous: i.isAnonymous,
+  coinAddress: { ...Object.fromEntries(i.coins.map(c => [c.key, c.address])) } as Record<string, string>,
+  coinThreshold: { ...Object.fromEntries(i.coins.map(c => [c.key, String(c.threshold)])) } as Record<string, string>,
+};
+// Numeric compare: <input type="number"> v-models flip the bound
+// value's type from "string" (our String(...) seed) to "number" the
+// first time the user touches the field, so `"50" !== 50` would
+// otherwise keep the button glowing even after a revert. NaN === NaN
+// is treated as equal so both-empty fields don't read as dirty.
+function numEqual(a: unknown, b: unknown): boolean {
+  const na = Number(a), nb = Number(b);
+  if (Number.isNaN(na) && Number.isNaN(nb)) return true;
+  return na === nb;
+}
+const accountDirty = computed(() => {
+  const f = form.value;
+  if (f.email !== initialAccount.email) return true;
+  if (!numEqual(f.donatePercent, initialAccount.donatePercent)) return true;
+  if (f.isAnonymous !== initialAccount.isAnonymous) return true;
+  for (const k of Object.keys(initialAccount.coinAddress)) {
+    if (f.coinAddress[k] !== initialAccount.coinAddress[k]) return true;
+    if (!numEqual(f.coinThreshold[k], initialAccount.coinThreshold[k])) return true;
+  }
+  return false;
+});
+
 function pinReady(coinKey: string): boolean {
   return /^\d{4}$/.test(form.value.cashOutPin[coinKey] || '');
 }
@@ -278,7 +311,58 @@ async function copyApiKey() {
          this section, all reference the form via the HTML5 `form="…"`
          attribute, so submit still posts every editable field together. -->
     <section class="bsx-section">
-      <header class="bsx-section-head"><h2>Account</h2></header>
+      <header class="bsx-section-head bsx-section-head-row">
+        <h2>Account</h2>
+        <!-- Update Account controls promoted into the section header.
+             The PIN input and submit button both use form="account-
+             details-form" so they post the (legally far-away) Account
+             Information + Account Details fields when clicked. -->
+        <div class="bsx-section-actions">
+          <input
+            id="authPinDetails"
+            form="account-details-form"
+            type="password"
+            name="authPin"
+            placeholder="PIN"
+            title="4-digit Account PIN. Use Reset PIN below if you forgot it."
+            :disabled="detailsLocked"
+            maxlength="4"
+            size="4"
+            autocomplete="current-password"
+            required
+            class="bsx-pin-input"
+          >
+          <template v-if="i.twoFactor.enabled && i.twoFactor.details">
+            <button
+              v-if="!i.twoFactor.detailsSent && !i.twoFactor.detailsUnlocked"
+              form="account-details-form"
+              type="submit"
+              name="unlock"
+              value="1"
+              class="bsx-btn bsx-btn-secondary bsx-btn-small"
+            >
+              Unlock by E-mail
+            </button>
+            <button
+              v-else
+              form="account-details-form"
+              type="submit"
+              :class="['bsx-btn', 'bsx-btn-primary', 'bsx-btn-small', { 'bsx-btn-dirty': accountDirty }]"
+              :disabled="!i.twoFactor.detailsUnlocked"
+            >
+              Update Account
+            </button>
+          </template>
+          <button
+            v-else
+            form="account-details-form"
+            type="submit"
+            :class="['bsx-btn', 'bsx-btn-primary', 'bsx-btn-small', { 'bsx-btn-dirty': accountDirty }]"
+          >
+            Update Account
+          </button>
+        </div>
+      </header>
 
       <form
         id="account-details-form"
@@ -386,70 +470,10 @@ async function copyApiKey() {
         </div>
       </form>
 
-      <!-- ACCOUNT ACTIONS row inside Section 1 (3-up: Confirm | Change PW | Reset PIN). -->
-      <div class="bsx-section-grid bsx-section-grid-3 bsx-actions-row">
-
-        <!-- CONFIRM — submits Account Details via form="account-details-form".
-             Submit button lives in the header (right side); body holds
-             only the PIN input. -->
-        <article class="bsx-card">
-          <header>
-            <h3>Confirm</h3>
-            <div class="bsx-card-actions">
-              <!-- Two-factor unlock branch. If 2FA is required for details
-                   edits and the token isn't unlocked, "Unlock by E-mail"
-                   replaces Save — clicking sends a confirmation email;
-                   the user follows the link and comes back, the form
-                   re-renders with the token consumed. -->
-              <template v-if="i.twoFactor.enabled && i.twoFactor.details">
-                <button
-                  v-if="!i.twoFactor.detailsSent && !i.twoFactor.detailsUnlocked"
-                  form="account-details-form"
-                  type="submit"
-                  name="unlock"
-                  value="1"
-                  class="bsx-btn bsx-btn-secondary bsx-btn-small"
-                >
-                  Unlock by E-mail
-                </button>
-                <button
-                  v-else
-                  form="account-details-form"
-                  type="submit"
-                  class="bsx-btn bsx-btn-primary bsx-btn-small"
-                  :disabled="!i.twoFactor.detailsUnlocked"
-                >
-                  Update Account
-                </button>
-              </template>
-              <button
-                v-else
-                form="account-details-form"
-                type="submit"
-                class="bsx-btn bsx-btn-primary bsx-btn-small"
-              >
-                Update Account
-              </button>
-            </div>
-          </header>
-          <div class="bsx-card-body">
-            <div class="kv">
-              <label for="authPinDetails">Account PIN</label>
-              <input
-                id="authPinDetails"
-                form="account-details-form"
-                type="password"
-                name="authPin"
-                :disabled="detailsLocked"
-                maxlength="4"
-                size="4"
-                autocomplete="current-password"
-                required
-              >
-              <small class="kv-hint">4-digit PIN. Use Reset PIN if you forgot it.</small>
-            </div>
-          </div>
-        </article>
+      <!-- ACCOUNT ACTIONS row inside Section 1 (2-up: Change PW | Reset PIN).
+           The "Confirm" card collapsed into the section header above,
+           which now hosts the Account PIN + Update Account button. -->
+      <div class="bsx-section-grid bsx-section-grid-2 bsx-actions-row">
 
         <!-- CHANGE PASSWORD (do=updatePassword) — own form, own card. -->
         <form :action="i.formAction" method="post" class="bsx-form">
@@ -490,7 +514,11 @@ async function copyApiKey() {
                 </button>
               </div>
             </header>
-            <div class="bsx-card-body">
+            <!-- 2-column body: row 1 = Current Password | Account PIN,
+                 row 2 = New Password | Confirm New Password.
+                 Grid-laid so a row's two fields stay aligned and the
+                 strength + match hints sit under their own input. -->
+            <div class="bsx-card-body bsx-pw-grid">
               <div class="kv">
                 <label for="currentPassword">Current Password</label>
                 <input
@@ -498,6 +526,19 @@ async function copyApiKey() {
                   type="password"
                   name="currentPassword"
                   :disabled="passwordLocked"
+                  autocomplete="current-password"
+                  required
+                >
+              </div>
+              <div class="kv">
+                <label for="authPinPassword">Account PIN</label>
+                <input
+                  id="authPinPassword"
+                  type="password"
+                  name="authPin"
+                  :disabled="passwordLocked"
+                  maxlength="4"
+                  size="4"
                   autocomplete="current-password"
                   required
                 >
@@ -531,19 +572,6 @@ async function copyApiKey() {
                 <small v-if="pwMatch !== null" class="kv-hint" :class="pwMatch ? 'pw-match-ok' : 'pw-match-bad'">
                   {{ pwMatch ? 'Passwords match.' : 'Passwords do not match.' }}
                 </small>
-              </div>
-              <div class="kv">
-                <label for="authPinPassword">Account PIN</label>
-                <input
-                  id="authPinPassword"
-                  type="password"
-                  name="authPin"
-                  :disabled="passwordLocked"
-                  maxlength="4"
-                  size="4"
-                  autocomplete="current-password"
-                  required
-                >
               </div>
             </div>
           </article>
@@ -682,29 +710,78 @@ async function copyApiKey() {
               </form>
             </div>
           </header>
-          <div class="bsx-card-body">
-            <!-- When a successful cashOut just landed for THIS coin, the
-                 server-rendered popup carries COIN=<slot.key>. We swap
-                 the address+threshold rows for a centered confirmation
-                 with a Close button; the inputs stay alive in the DOM
-                 (kept out of view via v-show) so their form="" links
-                 to account-details-form aren't broken. -->
+          <div class="bsx-card-body cashout-body-stack">
+            <!-- Fields are ALWAYS rendered (v-show, not v-if) so their
+                 form="account-details-form" inputs stay in the DOM and
+                 submit with Update Account even while the pending-
+                 payout details or cash-out message overlay is shown.
+                 If we unmount them, the threshold/address field would
+                 be missing from $_POST and PHP's `?? 0` default would
+                 zero out the value on save. -->
+            <div
+              class="cashout-fields"
+              v-show="bodyView[coin.key] === 'fields'"
+            >
+              <div class="kv">
+                <label :for="`addr-${coin.key}`">Coin Address</label>
+                <div class="kv-input-with-hint">
+                  <input
+                    :id="`addr-${coin.key}`"
+                    form="account-details-form"
+                    type="text"
+                    :name="coin.addressField"
+                    v-model="form.coinAddress[coin.key]"
+                    :disabled="detailsLocked"
+                    maxlength="90"
+                    size="70"
+                    spellcheck="false"
+                    autocomplete="off"
+                  >
+                  <span
+                    v-if="classifyAddress(form.coinAddress[coin.key])"
+                    :class="['addr-type-pill',
+                             `addr-type-${classifyAddress(form.coinAddress[coin.key])}`]"
+                    :data-tooltip="ADDR_TYPE_TOOLTIP[classifyAddress(form.coinAddress[coin.key])]"
+                    :aria-label="ADDR_TYPE_TOOLTIP[classifyAddress(form.coinAddress[coin.key])]"
+                    tabindex="0"
+                  >{{ classifyAddress(form.coinAddress[coin.key]) }}</span>
+                </div>
+              </div>
+              <div class="kv">
+                <label :for="`thr-${coin.key}`">Auto-Payout Threshold</label>
+                <!-- Smaller input + range hint inline to its right, same
+                     pattern as Donation % so the cell stays single-line. -->
+                <div class="kv-input-with-hint">
+                  <input
+                    :id="`thr-${coin.key}`"
+                    class="kv-input-narrow"
+                    form="account-details-form"
+                    type="number"
+                    :name="coin.thresholdField"
+                    v-model="form.coinThreshold[coin.key]"
+                    :min="coin.thresholdMin"
+                    :max="coin.thresholdMax"
+                    step="0.00000001"
+                    :disabled="detailsLocked"
+                  >
+                  <small class="kv-hint">
+                    {{ coin.thresholdMin }}–{{ coin.thresholdMax }} {{ coin.currency }}, or 0 to disable.
+                  </small>
+                </div>
+              </div>
+            </div>
+            <!-- Overlay: pending-payout details or cash-out msg, sat on
+                 top of the (hidden) fields. Flip animation preserved
+                 via Transition. -->
             <Transition name="bsx-flip" mode="out-in">
               <!-- Pending-payout details (operator clicked the
-                   "Pending payout" header). Falls through to the
-                   message view if a popup is also pending — but the
-                   click pathway only opens this when no popup is
-                   currently in the message lane. -->
+                   "Pending payout" header). -->
               <div
                 v-if="bodyView[coin.key] === 'details' && pendingPayout[coin.key]?.active"
                 :key="`details-${coin.key}`"
-                class="cashout-msg-block cashout-msg-info cashout-details-block"
+                class="cashout-msg-block cashout-msg-info cashout-details-block cashout-overlay"
                 role="status"
               >
-                <!-- Header already says "Pending payout" and toggles
-                     this view, so no Close button here. Two compact
-                     rows fit the same height as the 2-row fields
-                     view, keeping the card height stable. -->
                 <p class="cashout-detail-line">
                   <span class="muted">Requested:</span>
                   <strong>{{ fmtRequestedAt(pendingPayout[coin.key]?.requestedAt) }}</strong>
@@ -725,7 +802,7 @@ async function copyApiKey() {
               <div
                 v-else-if="bodyView[coin.key] === 'msg' && cashOutPopupForCoin(coin.key)"
                 :key="`success-${coin.key}`"
-                :class="['cashout-msg-block',
+                :class="['cashout-msg-block', 'cashout-overlay',
                          `cashout-msg-${cashOutPopupForCoin(coin.key)!.type}`]"
                 :role="cashOutPopupForCoin(coin.key)!.type === 'errormsg' ? 'alert' : 'status'"
               >
@@ -737,56 +814,6 @@ async function copyApiKey() {
                 >
                   Close
                 </button>
-              </div>
-              <!-- Default body: address + threshold inputs. -->
-              <div v-else :key="`fields-${coin.key}`" class="cashout-fields">
-                <div class="kv">
-                  <label :for="`addr-${coin.key}`">Coin Address</label>
-                  <div class="kv-input-with-hint">
-                    <input
-                      :id="`addr-${coin.key}`"
-                      form="account-details-form"
-                      type="text"
-                      :name="coin.addressField"
-                      v-model="form.coinAddress[coin.key]"
-                      :disabled="detailsLocked"
-                      maxlength="90"
-                      size="70"
-                      spellcheck="false"
-                      autocomplete="off"
-                    >
-                    <span
-                      v-if="classifyAddress(form.coinAddress[coin.key])"
-                      :class="['addr-type-pill',
-                               `addr-type-${classifyAddress(form.coinAddress[coin.key])}`]"
-                      :data-tooltip="ADDR_TYPE_TOOLTIP[classifyAddress(form.coinAddress[coin.key])]"
-                      :aria-label="ADDR_TYPE_TOOLTIP[classifyAddress(form.coinAddress[coin.key])]"
-                      tabindex="0"
-                    >{{ classifyAddress(form.coinAddress[coin.key]) }}</span>
-                  </div>
-                </div>
-                <div class="kv">
-                  <label :for="`thr-${coin.key}`">Auto-Payout Threshold</label>
-                  <!-- Smaller input + range hint inline to its right, same
-                       pattern as Donation % so the cell stays single-line. -->
-                  <div class="kv-input-with-hint">
-                    <input
-                      :id="`thr-${coin.key}`"
-                      class="kv-input-narrow"
-                      form="account-details-form"
-                      type="number"
-                      :name="coin.thresholdField"
-                      v-model="form.coinThreshold[coin.key]"
-                      :min="coin.thresholdMin"
-                      :max="coin.thresholdMax"
-                      step="0.00000001"
-                      :disabled="detailsLocked"
-                    >
-                    <small class="kv-hint">
-                      {{ coin.thresholdMin }}–{{ coin.thresholdMax }} {{ coin.currency }}, or 0 to disable.
-                    </small>
-                  </div>
-                </div>
               </div>
             </Transition>
           </div>
@@ -821,6 +848,57 @@ async function copyApiKey() {
   letter-spacing: 0.10em;
   color: #4fc3f7;
   font-weight: 700;
+}
+.bsx-section-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsx-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bsx-pin-input {
+  padding: 4px 8px;
+  text-align: center;
+  letter-spacing: 0.20em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  width: 90px;
+}
+.bsx-btn-dirty {
+  box-shadow:
+    0 0 0 1px rgba(255, 184, 28, 0.65),
+    0 0 10px rgba(255, 184, 28, 0.45);
+  border-color: rgba(255, 184, 28, 0.75) !important;
+  animation: bsx-dirty-pulse 1.8s ease-in-out infinite;
+}
+@keyframes bsx-dirty-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 184, 28, 0.55),
+      0 0 8px  rgba(255, 184, 28, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 184, 28, 0.85),
+      0 0 14px rgba(255, 184, 28, 0.60);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bsx-btn-dirty { animation: none; }
+}
+/* Compound selector outranks the base .bsx-card-body flex rule below. */
+.bsx-card-body.bsx-pw-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+  row-gap: 12px;
+}
+@media (max-width: 720px) {
+  .bsx-card-body.bsx-pw-grid { grid-template-columns: 1fr; }
 }
 .bsx-section-note {
   margin: -4px 0 12px;
@@ -1061,12 +1139,7 @@ async function copyApiKey() {
   align-items: center;
   padding-left: 38px; /* icon (33) + 5 px gap to coin name */
 }
-/* Per-coin cards: drop the header's left padding so the absolute
-   coin icon hugs the card's left edge, mirroring how the
-   .bsx-card-actions cluster (PIN + Cash Out) hugs the right edge.
-   `position: relative` anchors the icon's absolute placement to
-   the outer <header> bar so its vertical centre matches the
-   bar's centre and its size doesn't push the bar taller. */
+/* Drop header padding so the absolute coin icon hugs the left edge. */
 .payout-coin-card > header {
   padding-left: 0;
   position: relative;
@@ -1299,12 +1372,6 @@ async function copyApiKey() {
   }
 }
 
-/* Cash-out result swap. After every cashOut attempt (success, error,
-   info) the PHP popup carries COIN=<slot.key>; the card body swaps
-   from the address+threshold rows to a centered message with a Close
-   button. Non-success popups also auto-dismiss after AUTO_DISMISS_MS
-   (handled by the page's onMounted setup). The swap animates via the
-   <Transition name="bsx-flip"> wrapper. */
 .cashout-msg-block {
   position: relative;
   display: flex;
@@ -1313,12 +1380,6 @@ async function copyApiKey() {
   justify-content: center;
   text-align: center;
   gap: 6px;
-  /* No extra padding here — the parent .bsx-card-body already has
-     14px/16px. The two .kv rows (~28px each with 12px gap) are the
-     natural body height; match it so the card doesn't grow when the
-     message replaces the fields. The bottom padding leaves room for
-     the absolutely-positioned Close button so it never overlaps the
-     centered message. */
   min-height: 68px;
   padding-bottom: 28px;
 }
@@ -1327,14 +1388,10 @@ async function copyApiKey() {
   font-size: 14px;
   font-weight: 600;
 }
-.cashout-msg-success .cashout-msg-text  { color: #b5e7a0; }   /* green */
-.cashout-msg-errormsg .cashout-msg-text { color: #f5cba7; }   /* orange */
-.cashout-msg-info .cashout-msg-text     { color: #4fc3f7; }   /* cyan */
+.cashout-msg-success .cashout-msg-text  { color: #b5e7a0; }
+.cashout-msg-errormsg .cashout-msg-text { color: #f5cba7; }
+.cashout-msg-info .cashout-msg-text     { color: #4fc3f7; }
 .cashout-msg-close {
-  /* Anchor at bottom-left of the message block, away from the
-     centered message; absolute positioning keeps it from pulling the
-     centered text off-axis. Slightly wider than .bsx-btn-small so
-     "Close" reads as a deliberate dismiss, not a coin-side button. */
   position: absolute;
   left: 0;
   bottom: 0;
@@ -1342,34 +1399,25 @@ async function copyApiKey() {
 }
 .cashout-detail-line {
   margin: 0;
-  font-size: 14px;         /* +2px from previous 12px */
+  font-size: 14px;
   color: #cdd;
   display: flex;
   gap: 6px;
   align-items: baseline;
   justify-content: center;
-  flex-wrap: wrap;         /* allow long txid to wrap to next line */
-  line-height: 1.2;        /* tighter to claw back the +2px height */
+  flex-wrap: wrap;
+  line-height: 1.2;
   max-width: 100%;
 }
 .cashout-detail-line .muted   { color: #99a; }
 .cashout-detail-line strong   { color: #e0f0fa; font-weight: 600; }
 .cashout-detail-txid {
-  /* Full hex on one row when it fits, otherwise word-break-all
-     wraps cleanly without ellipsis. Operator wants the whole txid
-     readable, not truncated. */
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;         /* +2px from previous 11px */
+  font-size: 13px;
   word-break: break-all;
   white-space: normal;
   max-width: 100%;
 }
-/* Details body uses tighter line-spacing than the success/error
-   message block so two info rows fit the same vertical envelope as
-   the two .kv field rows. No Close button here — the header's
-   "Pending payout" toggle dismisses this view — and the parent
-   .bsx-card-body's 14/16 padding plus min-height keeps the card
-   from growing relative to the address+threshold view. */
 .cashout-details-block {
   gap: 4px;
   padding-bottom: 0;
@@ -1377,8 +1425,6 @@ async function copyApiKey() {
 }
 .cashout-details-block .cashout-detail-line:first-of-type { margin-top: 0; }
 
-/* Header: "Pending payout" label that swaps in for balance + Cash
-   Out while a payout is in flight. Click flips the body to details. */
 .cashout-pending-label {
   appearance: none;
   background: rgba(79, 195, 247, 0.10);
@@ -1399,10 +1445,7 @@ async function copyApiKey() {
 .cashout-pending-label:hover {
   background: rgba(79, 195, 247, 0.18);
 }
-.cashout-fields {
-  /* Wrapper so the Transition crossfade has a single child. */
-  display: contents;
-}
+.cashout-fields { display: contents; }
 .bsx-flip-enter-active,
 .bsx-flip-leave-active {
   transition: opacity 180ms ease, transform 180ms ease;

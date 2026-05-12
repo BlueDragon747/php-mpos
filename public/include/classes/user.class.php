@@ -577,48 +577,67 @@ class User extends Base {
     $bUser = false;
     $donate = round($donate, 2);
     // number validation checks
+    // Per-coin threshold validation. Each branch reports the coin's
+    // ticker and the full min–max range so the user can fix the value
+    // in one go instead of bouncing between "below min" and "above
+    // max" attempts.
+    $_ap_range_msg = function($coin, $min, $max) {
+      return "Auto-payout threshold for $coin must be between $min and $max, or 0 to disable.";
+    };
     if (!is_numeric($threshold)) {
-      $this->setErrorMessage('Invalid input for auto-payout');
+      $this->setErrorMessage('Auto-payout threshold must be a number.');
       return false;
-    } else if ($threshold < $this->config['ap_threshold']['min'] && $threshold != 0) {
-      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold']['min']);
+    } else if (($threshold < $this->config['ap_threshold']['min'] && $threshold != 0)
+            || $threshold > $this->config['ap_threshold']['max']) {
+      $this->setErrorMessage($_ap_range_msg(
+        isset($this->config['currency']) ? $this->config['currency'] : 'BLC',
+        $this->config['ap_threshold']['min'],
+        $this->config['ap_threshold']['max']));
       return false;
-    } else if ($threshold > $this->config['ap_threshold']['max']) {
-      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold']['max']);
+    } else if (($threshold_mm < $this->config['ap_threshold_mm']['min'] && $threshold_mm != 0)
+            || $threshold_mm > $this->config['ap_threshold_mm']['max']) {
+      $this->setErrorMessage($_ap_range_msg(
+        isset($this->config['currency_mm']) ? $this->config['currency_mm'] : 'PHO',
+        $this->config['ap_threshold_mm']['min'],
+        $this->config['ap_threshold_mm']['max']));
       return false;
-    } else if ($threshold_mm < $this->config['ap_threshold_mm']['min'] && $threshold_mm != 0) {
-      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold_mm']['min']);
+    } else if (($threshold_mm1 < $this->config['ap_threshold_mm1']['min'] && $threshold_mm1 != 0)
+            || $threshold_mm1 > $this->config['ap_threshold_mm1']['max']) {
+      $this->setErrorMessage($_ap_range_msg(
+        isset($this->config['currency_mm1']) ? $this->config['currency_mm1'] : 'BBTC',
+        $this->config['ap_threshold_mm1']['min'],
+        $this->config['ap_threshold_mm1']['max']));
       return false;
-    } else if ($threshold_mm > $this->config['ap_threshold_mm']['max']) {
-      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm']['max']);
+    } else if (($threshold_mm3 < $this->config['ap_threshold_mm3']['min'] && $threshold_mm3 != 0)
+            || $threshold_mm3 > $this->config['ap_threshold_mm3']['max']) {
+      $this->setErrorMessage($_ap_range_msg(
+        isset($this->config['currency_mm3']) ? $this->config['currency_mm3'] : 'ELT',
+        $this->config['ap_threshold_mm3']['min'],
+        $this->config['ap_threshold_mm3']['max']));
       return false;
-    } else if ($threshold_mm1 < $this->config['ap_threshold_mm1']['min'] && $threshold_mm1 != 0) {
-      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold_mm1']['min']);
+    } else if ($threshold_mm4 > $this->config['ap_threshold_mm4']['max']
+            || ($threshold_mm4 < $this->config['ap_threshold_mm4']['min'] && $threshold_mm4 != 0)) {
+      $this->setErrorMessage($_ap_range_msg(
+        isset($this->config['currency_mm4']) ? $this->config['currency_mm4'] : 'UMO',
+        $this->config['ap_threshold_mm4']['min'],
+        $this->config['ap_threshold_mm4']['max']));
       return false;
-    } else if ($threshold_mm1 > $this->config['ap_threshold_mm1']['max']) {
-      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm1']['max']);
-      return false;
-    } else if ($threshold_mm3 < $this->config['ap_threshold_mm3']['min'] && $threshold_mm3 != 0) {
-      $this->setErrorMessage('Threshold below configured minimum of ' . $this->config['ap_threshold_mm3']['min']);
-      return false;
-    } else if ($threshold_mm3 > $this->config['ap_threshold_mm3']['max']) {
-      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm3']['max']);
-      return false;
-    } else if ($threshold_mm4 > $this->config['ap_threshold_mm4']['max']) {
-      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm4']['max']);
-      return false;
-    } else if ($threshold_mm5 > $this->config['ap_threshold_mm5']['max']) {
-      $this->setErrorMessage('Threshold above configured maximum of ' . $this->config['ap_threshold_mm5']['max']);
+    } else if ($threshold_mm5 > $this->config['ap_threshold_mm5']['max']
+            || ($threshold_mm5 < $this->config['ap_threshold_mm5']['min'] && $threshold_mm5 != 0)) {
+      $this->setErrorMessage($_ap_range_msg(
+        isset($this->config['currency_mm5']) ? $this->config['currency_mm5'] : 'LIT',
+        $this->config['ap_threshold_mm5']['min'],
+        $this->config['ap_threshold_mm5']['max']));
       return false;
     }
     if (!is_numeric($donate)) {
-      $this->setErrorMessage('Invalid input for donation');
+      $this->setErrorMessage('Donation must be a number.');
       return false;
     } else if ($donate < $this->config['donate_threshold']['min'] && $donate != 0) {
-      $this->setErrorMessage('Donation below allowed ' . $this->config['donate_threshold']['min'] . '% limit');
+      $this->setErrorMessage('Donation must be at least ' . $this->config['donate_threshold']['min'] . '%, or 0 to disable.');
       return false;
     } else if ($donate > 100) {
-      $this->setErrorMessage('Donation above allowed 100% limit');
+      $this->setErrorMessage('Donation can be at most 100%.');
       return false;
     }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -701,9 +720,14 @@ class User extends Base {
       $this->log->log("info", $this->getUserName($userID)." updated their account details");
       return true;
     }
-    // Catchall
-    $this->setErrorMessage('Failed to update your account:'.$address.' | '.$address_mm.' | '.$address_mm1.' | '.$address_mm3.' | '.$address_mm4.' | '.$address_mm5.' | '. $this->mysqli->error);
-    $this->debug->append('Account update failed: ' . $this->mysqli->error);
+    // The SQL error + the user's addresses are logged for the operator
+    // to debug, but the popup the user sees is a generic retry hint so
+    // we don't leak SQL state or a row of payout addresses into chat /
+    // screenshots.
+    $this->setErrorMessage("Couldn't save your account. Please reload the page and try again — if it keeps happening, contact the pool operator.");
+    $this->debug->append('Account update failed: ' . $this->mysqli->error
+      . ' | addr: ' . $address . ' | ' . $address_mm . ' | ' . $address_mm1
+      . ' | ' . $address_mm3 . ' | ' . $address_mm4 . ' | ' . $address_mm5);
     return false;
   }
 
