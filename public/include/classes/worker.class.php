@@ -117,6 +117,17 @@ class Worker extends Base {
    **/
   public function getWorkers($account_id, $interval=600) {
     $this->debug->append("STA " . __METHOD__, 4);
+    // Pull the cron-precomputed EMA-smoothed per-worker hashrates so
+    // the dashboard worker table tracks the same smoothing curve as
+    // the pool-level chart. Fall through to the raw SQL aggregate if
+    // memcache is empty (cron just started, restart, etc.).
+    $smoothed_workers = array();
+    if (isset($this->memcache)
+        && $data = $this->memcache->getStatic(STATISTICS_ALL_WORKER_HASHRATES)) {
+      if (is_array($data) && isset($data['data']) && is_array($data['data'])) {
+        $smoothed_workers = $data['data'];
+      }
+    }
     $stmt = $this->mysqli->prepare("
       SELECT id, username, password, monitor,
        ( SELECT COUNT(id) FROM " . $this->share->getTableName() . " WHERE username = w.username AND time > DATE_SUB(now(), INTERVAL ? SECOND)) AS count_all,
@@ -149,8 +160,22 @@ class Worker extends Base {
       ) AS difficulty
       FROM $this->table AS w
       WHERE account_id = ?");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('iiiiiiiii', $interval, $interval, $interval, $interval, $interval, $interval, $interval, $interval, $account_id) && $stmt->execute() && $result = $stmt->get_result())
-      return $result->fetch_all(MYSQLI_ASSOC);
+    if ($this->checkStmt($stmt) && $stmt->bind_param('iiiiiiiii', $interval, $interval, $interval, $interval, $interval, $interval, $interval, $interval, $account_id) && $stmt->execute() && $result = $stmt->get_result()) {
+      $rows = $result->fetch_all(MYSQLI_ASSOC);
+      // Substitute EMA-smoothed hashrate when the cron has cached one
+      // for this exact worker username; raw SQL value stays for any
+      // workers absent from the cache (new worker, cron lag, etc.).
+      if (!empty($smoothed_workers)) {
+        foreach ($rows as &$r) {
+          $u = isset($r['username']) ? (string)$r['username'] : '';
+          if ($u !== '' && isset($smoothed_workers[$u])) {
+            $r['hashrate'] = (float)$smoothed_workers[$u];
+          }
+        }
+        unset($r);
+      }
+      return $rows;
+    }
     return $this->sqlError('E0056');
   }
 
