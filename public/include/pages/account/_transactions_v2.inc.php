@@ -35,13 +35,20 @@ if (file_exists($_tx_manifest_path)) {
   }
 }
 
-// Confirmations threshold + explorer URL — same across coins, sourced
-// from $config / $GLOBAL (set by smarty_globals.inc.php earlier).
+// Confirmations threshold + explorer URL.
+// Read the Setting rows directly: smarty_globals.inc.php runs AFTER
+// page controllers in index.php, so $aGlobal isn't populated yet when
+// this file executes. The configured URL may contain `{coin}` —
+// substituted with the lowercase ticker of the current slot so one
+// settings row covers all 6 coins. Matches the round-page pattern in
+// templates/mpos/statistics/round/default.tpl (deep-link into the
+// BlakeStream Explorer's per-coin dashboard via a query param).
 $_tx_confirmations_threshold = isset($GLOBAL['confirmations']) ? (int)$GLOBAL['confirmations'] : 6;
-$_tx_explorer_disabled = !empty($config['website']['transactionexplorer']['disabled']);
-$_tx_explorer_url = $_tx_explorer_disabled
-  ? ''
-  : (isset($config['website']['transactionexplorer']['url']) ? (string)$config['website']['transactionexplorer']['url'] : '');
+$_tx_explorer_disabled = !empty($setting->getValue('website_transactionexplorer_disabled'));
+$_tx_explorer_url = $_tx_explorer_disabled ? '' : (string)$setting->getValue('website_transactionexplorer_url');
+if ($_tx_explorer_url !== '' && strpos($_tx_explorer_url, '{coin}') !== false) {
+  $_tx_explorer_url = str_replace('{coin}', strtolower((string)$tx_v2_currency), $_tx_explorer_url);
+}
 
 // Status derivation mirrors the legacy templates/mpos/account/transactions/
 // default.tpl logic so the SPA doesn't have to re-port it.

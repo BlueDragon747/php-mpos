@@ -414,11 +414,6 @@ function formatDate(iso: string): string {
         />
       </div>
 
-      <p class="footnote">
-        Refresh interval: {{ props.refreshMs / 1000 }} seconds. Hashrate based on shares submitted in the past 5 minutes. ·
-        Payout system: <code>{{ props.payoutSystem }}</code>
-      </p>
-
     </template>
   </div>
 </template>
@@ -771,18 +766,6 @@ function formatDate(iso: string): string {
 .banner { font-size: 13px; color: #cdd; margin: 0 0 12px; line-height: 1.4; }
 .banner .fees { color: #f5cba7; font-weight: 700; }
 .banner .donate { color: #b5e7a0; font-weight: 700; }
-
-.footnote {
-  text-align: center;
-  opacity: 0.55;
-  font-size: 0.85em;
-  margin-top: 1.2em;
-}
-.footnote code {
-  background: rgba(0,0,0,.3);
-  padding: 0 4px;
-  border-radius: 2px;
-}
 
 /* Light-mode pool-message overrides — when the gauges flip to show
    pool messages, the title chip + body text need dark colours so
