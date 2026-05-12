@@ -625,6 +625,34 @@ class User extends Base {
       $this->setErrorMessage('Invalid email address');
       return false;
     }
+    // Reject if the same address is used for more than one coin slot.
+    // Each chain has distinct address derivation (BLC vs PHO vs BBTC
+    // etc.), so sharing one address across slots means sends to the
+    // "wrong" address — funds end up in someone else's wallet or are
+    // unspendable depending on the chains' prefix overlap. Empty slots
+    // are excluded from the check; trim + lowercase so trailing space
+    // / case typos still trip the duplicate detector.
+    $ae_slot_addrs = array(
+      'BLC'  => trim((string)$address),
+      'PHO'  => trim((string)$address_mm),
+      'BBTC' => trim((string)$address_mm1),
+      'ELT'  => trim((string)$address_mm3),
+      'UMO'  => trim((string)$address_mm4),
+      'LIT'  => trim((string)$address_mm5),
+    );
+    $ae_seen = array();
+    foreach ($ae_slot_addrs as $ae_coin => $ae_addr) {
+      if ($ae_addr === '') continue;
+      $ae_key = strtolower($ae_addr);
+      if (isset($ae_seen[$ae_key])) {
+        $this->setErrorMessage(sprintf(
+          'The same payout address is set for %s and %s. Each coin must use its own unique address.',
+          $ae_seen[$ae_key], $ae_coin
+        ));
+        return false;
+      }
+      $ae_seen[$ae_key] = $ae_coin;
+    }
     $currentPrimaryAddress = $this->getCoinAddress($userID);
     $address = $this->validatePayoutAddress($userID, $address, '', 'BLC', $currentPrimaryAddress);
     if ($address === false) return false;
