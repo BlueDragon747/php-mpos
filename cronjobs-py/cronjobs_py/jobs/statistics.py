@@ -182,6 +182,14 @@ class Statistics:
         smoothed_worker_map = {}
         # Workers visible in the current sampling window keyed by name.
         mining_by_worker = {r["worker"]: r for r in worker_mining}
+        # Snapshot raw per-worker samples before the EMA loop mutates
+        # each row's "hashrate" field in place. Used for the pool-tick
+        # log line so we can report "raw sample vs smoothed EMA"
+        # honestly instead of two identical numbers.
+        raw_worker_samples = {
+            w: float(r.get("hashrate") or 0.0)
+            for w, r in mining_by_worker.items()
+        }
         # Workers we need to update an EMA for: anyone in the current
         # window OR anyone in the previous cache (so a worker that just
         # disappeared from the window still gets a decay tick).
@@ -256,13 +264,11 @@ class Statistics:
         # pool chart inherits the worker-level fast-drop and stale
         # behaviour. The chart and worker table can't disagree.
         pool_hashrate = float(sum(smoothed_worker_map.values()))
-        # Pool sample for the log — sum of raw per-worker samples in
-        # the current window (or 0 for stale workers). Helps debug
-        # cases where the chart looks off.
-        pool_sample = float(sum(
-            (r.get("hashrate") or 0.0)
-            for r in worker_mining
-        ))
+        # Pool sample for the log — sum of raw per-worker samples
+        # (the SQL-aggregate "hashrate" field BEFORE the EMA mutation
+        # on the row). mining_by_worker rows have been mutated in
+        # place above, so use the cached raw samples we captured.
+        pool_sample = float(sum(raw_worker_samples.values()))
         log.info(
             "[%s] pool hashrate: sample=%.0f ema=%.0f kH/s "
             "(workers=%d, tau=%ds)",
