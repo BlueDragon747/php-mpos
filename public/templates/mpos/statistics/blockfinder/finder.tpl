@@ -3,6 +3,19 @@
   <article class="bsx-card finder-account-card">
     <header>
       <h3>Top 25 Blockfinders</h3>
+      {if $ROUND_COIN_LIST|default:false}
+      <nav class="chain-pill-rail" aria-label="Switch coin">
+        {foreach from=$ROUND_COIN_LIST item=t}
+          {if $t == $ROUND_COIN}
+            <span class="chain-pill chain-{$t|escape|lower} is-active" aria-current="page" title="Viewing {$t|escape}">{$t|escape}</span>
+          {else}
+            <a class="chain-pill chain-{$t|escape|lower}"
+               href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$t|escape|lower}"
+               title="Switch to {$t|escape}">{$t|escape}</a>
+          {/if}
+        {/foreach}
+      </nav>
+      {/if}
       <span class="card-meta">{$BLOCKSSOLVEDBYACCOUNT|@count|default:0} accounts</span>
     </header>
     <div class="bsx-card-body finder-table-wrap">
@@ -125,6 +138,50 @@
     margin-left: auto;
   }
   .stats-blockfinder-v2 .bsx-card-body { padding: 0; }
+
+  .stats-blockfinder-v2 .chain-pill-rail {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .stats-blockfinder-v2 .chain-pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid rgba(79, 195, 247, 0.40);
+    background: rgba(79, 195, 247, 0.10);
+    color: #4fc3f7;
+  }
+  .stats-blockfinder-v2 .chain-pill.chain-bbtc { color: #ea4335; border-color: rgba(234,67,53,.40);  background: rgba(234,67,53,.10);  }
+  .stats-blockfinder-v2 .chain-pill.chain-blc  { color: #ff9800; border-color: rgba(255,152,0,.40);  background: rgba(255,152,0,.10);  }
+  .stats-blockfinder-v2 .chain-pill.chain-elt  { color: #34a853; border-color: rgba(52,168,83,.40);  background: rgba(52,168,83,.10);  }
+  .stats-blockfinder-v2 .chain-pill.chain-lit  { color: #fbbc04; border-color: rgba(251,188,4,.40);  background: rgba(251,188,4,.10);  }
+  .stats-blockfinder-v2 .chain-pill.chain-pho  { color: #4285f4; border-color: rgba(66,133,244,.40); background: rgba(66,133,244,.10); }
+  .stats-blockfinder-v2 .chain-pill.chain-umo  { color: #7b61ff; border-color: rgba(123,97,255,.40); background: rgba(123,97,255,.10); }
+  [data-theme="light"] .stats-blockfinder-v2 .chain-pill.chain-bbtc { color: #c5221f; border-color: rgba(197,34,31,.55);  background: rgba(197,34,31,.18);  }
+  [data-theme="light"] .stats-blockfinder-v2 .chain-pill.chain-blc  { color: #e65100; border-color: rgba(230,81,0,.55);   background: rgba(230,81,0,.18);   }
+  [data-theme="light"] .stats-blockfinder-v2 .chain-pill.chain-elt  { color: #2e7d32; border-color: rgba(46,125,50,.55);  background: rgba(46,125,50,.18);  }
+  [data-theme="light"] .stats-blockfinder-v2 .chain-pill.chain-lit  { color: #f57c00; border-color: rgba(245,124,0,.55);  background: rgba(245,124,0,.18);  }
+  [data-theme="light"] .stats-blockfinder-v2 .chain-pill.chain-pho  { color: #1565c0; border-color: rgba(21,101,192,.55); background: rgba(21,101,192,.18); }
+  [data-theme="light"] .stats-blockfinder-v2 .chain-pill.chain-umo  { color: #5e35b1; border-color: rgba(94,53,177,.55);  background: rgba(94,53,177,.18);  }
+  .stats-blockfinder-v2 a.chain-pill {
+    text-decoration: none;
+    opacity: 0.55;
+    transition: opacity 150ms ease, transform 100ms ease;
+  }
+  .stats-blockfinder-v2 a.chain-pill:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+  .stats-blockfinder-v2 .chain-pill.is-active {
+    opacity: 1;
+    box-shadow: 0 0 0 1px currentColor inset;
+  }
 
   /* Table */
   .stats-blockfinder-v2 .finder-table-wrap { overflow-x: auto; }

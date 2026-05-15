@@ -3,7 +3,22 @@
   <!-- ROW 1: Round Statistics (merged block + pplns details + search) -->
   <article class="bsx-card round-stats-card">
     <header>
-      <h3>{if $GLOBAL.config.payout_system == 'pplns'}Round Statistics{else}Block Statistics{/if}{if $ROUND_COIN|default:""} <span class="chain-pill chain-{$ROUND_COIN|escape|lower}">{$ROUND_COIN|escape}</span>{/if}</h3>
+      <h3>{if $GLOBAL.config.payout_system == 'pplns'}Round Statistics{else}Block Statistics{/if}</h3>
+      {if $ROUND_COIN_LIST|default:false}
+      <nav class="chain-pill-rail" aria-label="Switch coin">
+        {foreach from=$ROUND_COIN_LIST item=t}
+          {if $t == $ROUND_COIN}
+            <span class="chain-pill chain-{$t|escape|lower} is-active" aria-current="page" title="Viewing {$t|escape} rounds">{$t|escape}</span>
+          {else}
+            <a class="chain-pill chain-{$t|escape|lower}"
+               href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$t|escape|lower}"
+               title="Switch to {$t|escape} latest round">{$t|escape}</a>
+          {/if}
+        {/foreach}
+      </nav>
+      {else if $ROUND_COIN|default:""}
+        <span class="chain-pill chain-{$ROUND_COIN|escape|lower}">{$ROUND_COIN|escape}</span>
+      {/if}
       <form action="{$smarty.server.SCRIPT_NAME}" method="POST" class="round-search-form">
         <input type="hidden" name="page"   value="{$smarty.request.page|escape}">
         <input type="hidden" name="action" value="{$smarty.request.action|escape}">
@@ -276,9 +291,6 @@
     gap: 8px;
   }
 
-  /* Chain ticker pill in the Round Statistics header — same palette
-     as the blocks page so the visual identity carries through when
-     drilling from one to the other. */
   .stats-round-v2 .chain-pill {
     display: inline-block;
     padding: 1px 7px;
@@ -291,14 +303,31 @@
     background: rgba(79, 195, 247, 0.10);
     color: #4fc3f7;
   }
+  .stats-round-v2 .chain-pill-rail {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .stats-round-v2 a.chain-pill {
+    text-decoration: none;
+    opacity: 0.55;
+    transition: opacity 150ms ease, transform 100ms ease;
+  }
+  .stats-round-v2 a.chain-pill:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+  .stats-round-v2 .chain-pill.is-active {
+    opacity: 1;
+    box-shadow: 0 0 0 1px currentColor inset;
+  }
   .stats-round-v2 .chain-pill.chain-bbtc { color: #ea4335; border-color: rgba(234,67,53,.40);  background: rgba(234,67,53,.10);  }
   .stats-round-v2 .chain-pill.chain-blc  { color: #ff9800; border-color: rgba(255,152,0,.40);  background: rgba(255,152,0,.10);  }
   .stats-round-v2 .chain-pill.chain-elt  { color: #34a853; border-color: rgba(52,168,83,.40);  background: rgba(52,168,83,.10);  }
   .stats-round-v2 .chain-pill.chain-lit  { color: #fbbc04; border-color: rgba(251,188,4,.40);  background: rgba(251,188,4,.10);  }
   .stats-round-v2 .chain-pill.chain-pho  { color: #4285f4; border-color: rgba(66,133,244,.40); background: rgba(66,133,244,.10); }
   .stats-round-v2 .chain-pill.chain-umo  { color: #7b61ff; border-color: rgba(123,97,255,.40); background: rgba(123,97,255,.10); }
-  /* Light-mode chip overrides — darker hex + bumped saturation so
-     each coin's chip reads on a white surface. */
   [data-theme="light"] .stats-round-v2 .chain-pill.chain-bbtc { color: #c5221f; border-color: rgba(197,34,31,.55);  background: rgba(197,34,31,.18);  }
   [data-theme="light"] .stats-round-v2 .chain-pill.chain-blc  { color: #e65100; border-color: rgba(230,81,0,.55);   background: rgba(230,81,0,.18);   }
   [data-theme="light"] .stats-round-v2 .chain-pill.chain-elt  { color: #2e7d32; border-color: rgba(46,125,50,.55);  background: rgba(46,125,50,.18);  }
@@ -315,7 +344,6 @@
   }
   .stats-round-v2 .bsx-card-body { padding: 0; }
 
-  /* Search form + pager in the Round Statistics header */
   .stats-round-v2 .round-search-form {
     display: inline-flex;
     align-items: center;
@@ -362,7 +390,6 @@
     border-color: rgba(79, 195, 247, 0.55);
   }
 
-  /* Round Statistics dl */
   .stats-round-v2 .round-kv {
     margin: 0;
     display: grid;
@@ -446,7 +473,6 @@
     font-style: italic;
   }
 
-  /* Side-by-side row for Round Shares + PPLNS Round Shares */
   .stats-round-v2 .round-shares-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

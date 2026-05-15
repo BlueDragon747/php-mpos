@@ -24,6 +24,7 @@ require_once(INCLUDE_DIR . '/config/admin_settings.inc.php');
 
 // Load onto the template
 $smarty->assign("SETTINGS", $aSettings);
+$smarty->assign("SETTINGS_TAB_LABELS", $aSettingsTabLabels);
 
 // Tempalte specifics
 $smarty->assign("CONTENT", "default.tpl");

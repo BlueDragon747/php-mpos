@@ -225,6 +225,11 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $smarty->assign('ROUNDSHARES', $aRoundShareStats);
   $smarty->assign("ROUNDTRANSACTIONS", $aUserRoundTransactions);
   $smarty->assign("ROUND_COIN", $sRoundCoin);
+  // Ordered list of every configured ticker (parent first, then aux
+  // slots in mm/mm1…mm6 order, skipping 'unused*' placeholders) — the
+  // template renders one chip per entry so the operator can flip
+  // between coins without leaving the round view.
+  $smarty->assign("ROUND_COIN_LIST", array_values($aSlotMap));
 } else {
   $debug->append('Using cached page', 3);
 }

@@ -174,9 +174,64 @@ $config['donate_threshold']['min'] = 1;
 $config['accounts']['invitations']['count'] = 5;
 
 /**
- * Currency
- *  Shorthand name for the currency
- *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-currency
+ * Currency / merged-mining slots
+ * ------------------------------------------------------------------
+ *
+ * Per-coin ticker for the parent chain (`currency`) and each of the
+ * up to seven aux slots (`currency_mm` … `currency_mm6`). These
+ * strings drive several things across the pool, so they have to stay
+ * in sync with the rest of the config:
+ *
+ *   1. **Coin chip rails.** The Statistics → Round Statistics and
+ *      Statistics → BlockFinder pages auto-build a coloured chip
+ *      rail per coin by reading these keys in order:
+ *        - `currency`          → parent (first chip)
+ *        - `currency_mm`       → second chip
+ *        - `currency_mm1` … 6  → subsequent chips
+ *      Add a real ticker here and the chip appears on the next page
+ *      load — no template change required.
+ *
+ *   2. **'unused*' sentinel.** Any slot whose value contains
+ *      `unused` (case-insensitive) is *hidden* from the chip rails
+ *      and treated as a free slot. Use `unused1`, `unused2`, etc.
+ *      to keep slot indices stable while still leaving room to wire
+ *      a coin up later. Do NOT delete the row — the surrounding
+ *      `wallet_mm*` / `ap_threshold_mm*` rows must keep their slot
+ *      index for the existing coins to address the right tables.
+ *
+ *   3. **Wallet RPC.** Each non-`unused` slot needs a matching
+ *      `$config['wallet_mm*']` block above (host/username/password)
+ *      so the pool can reach that coin's daemon. Without it the
+ *      slot's chip will render but every page that hits the daemon
+ *      will fall over.
+ *
+ *   4. **Per-slot DB tables.** The slot suffix maps to MySQL tables
+ *      `blocks_<slot>`, `transactions_<slot>`, `shares_<slot>`,
+ *      `shares_archive_<slot>` (e.g. `blocks_mm3` for the
+ *      `currency_mm3` slot). These get created by the SQL migrations
+ *      in `sql/old/`. The parent uses the unsuffixed `blocks`,
+ *      `transactions`, etc.
+ *
+ *   5. **Per-slot PHP classes.** Each slot has its own
+ *      `Statistics_mm*`, `Block_mm*`, `Transaction_mm*` subclass
+ *      under `include/classes/`, instantiated as
+ *      `$statistics_mm*` / `$block_mm*` / `$transaction_mm*`. These
+ *      are loaded by `include/init.inc.php` regardless of whether
+ *      the slot is in use, so wiring up an `unused*` slot later is
+ *      a config-only change.
+ *
+ *   6. **Auto-payout thresholds.** Each non-`unused` slot also wants
+ *      a matching `ap_threshold_mm*` block below so the auto-payout
+ *      cron can drain user balances on that coin.
+ *
+ *   7. **Per-coin tooling.** The Eloipool stratum and merged-mine
+ *      proxy ALSO need to know which aux chain lives in which slot —
+ *      that's a separate set of config files outside MPOS. Changing
+ *      `currency_mm*` here without updating the proxy will lead to
+ *      shares being credited to the wrong slot's table.
+ *
+ * See `https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-currency`
+ * for the upstream wiki page (predates the chip rails).
  */
 $config['currency']     = 'BLC';
 $config['currency_mm']  = 'PHO';   // Photon
@@ -184,8 +239,8 @@ $config['currency_mm1'] = 'BBTC';  // BlakeBitcoin (was HTML entity; plain ticke
 $config['currency_mm2'] = 'LIT';   // Lithium (was Dirac — no longer shipped)
 $config['currency_mm3'] = 'ELT';   // Electron
 $config['currency_mm4'] = 'UMO';   // Universalmolecule
-$config['currency_mm5'] = 'unused1';
-$config['currency_mm6'] = 'unused2';
+$config['currency_mm5'] = 'unused1';  // free slot — see header for re-use checklist
+$config['currency_mm6'] = 'unused2';  // free slot — see header for re-use checklist
 
 
 /**

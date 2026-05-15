@@ -479,3 +479,20 @@ $aSettings['notifications'][] = array(
   'name' => 'notifications_disable_block', 'value' => $setting->getValue('notifications_disable_block'),
   'tooltip' => 'Enable/Disable block notifications globally. Will remove the user option too.'
 );
+
+// Tab labels for the admin Settings page. The template falls back to
+// the array key (capitalised) when a tab isn't listed here — so any
+// future tab added to $aSettings still renders, just without a custom
+// display name. Acronyms (ACL, reCAPTCHA) read better than the
+// default `{$TAB|capitalize}` output.
+$aSettingsTabLabels = array(
+  'website'       => 'Website',
+  'blockchain'    => 'Blockchain',
+  'wallet'        => 'Wallet',
+  'statistics'    => 'Statistics',
+  'acl'           => 'ACL',
+  'system'        => 'System',
+  'recaptcha'     => 'reCAPTCHA',
+  'monitoring'    => 'Monitoring',
+  'notifications' => 'Notifications',
+);
