@@ -87,10 +87,13 @@ function fmtTime(t: string): string {
             class="setting-row"
           >
             <label class="bsx-toggle-wrap" :for="`n-${s.type}`">
-              <!-- Active checkbox: when checked, posts data[<type>]=1.
-                   Unchecked checkboxes are omitted from POST, which
-                   is what $notification->updateSettings() expects
-                   (missing key = inactive). -->
+              <!-- Hidden 0 sibling guarantees the server always
+                   receives a value for this notification type. Without
+                   it, unchecked checkboxes are omitted from POST and
+                   updateSettings() never zeros the previous "active=1"
+                   row. The checkbox below shares the same name; when
+                   it's checked, "1" overrides the hidden "0" on POST. -->
+              <input type="hidden" :name="`data[${s.type}]`" value="0">
               <input
                 :id="`n-${s.type}`"
                 type="checkbox"
@@ -148,10 +151,6 @@ function fmtTime(t: string): string {
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
-/* Two-column layout: Settings (narrow left, ~1fr) + History (wide
-   right, ~2fr). Each form/article uses display: contents so its child
-   <article> becomes a direct grid item of .notifications-grid.
-   Collapses to single column on narrow viewports. */
 .notifications-grid {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
@@ -162,11 +161,8 @@ function fmtTime(t: string): string {
   .notifications-grid { grid-template-columns: 1fr; }
 }
 
-/* Forms become layout-transparent so their child article reads as a
-   direct grid child (mirrors Edit Account/Workers). */
 .bsx-form { display: contents; }
 
-/* Card chrome — same as Edit Account / Workers / Transactions. */
 .bsx-card {
   background: rgba(255,255,255,.03);
   border: 1px solid rgba(255,255,255,.06);
@@ -197,9 +193,6 @@ function fmtTime(t: string): string {
 }
 .bsx-card-body { padding: 12px 14px; }
 
-/* Settings list — one row per notification type. Toggle on the left,
-   label to its right. Compact rows; no extra borders since the toggle
-   group reads naturally as a list. */
 .settings-list {
   display: flex;
   flex-direction: column;
@@ -217,7 +210,6 @@ function fmtTime(t: string): string {
   letter-spacing: 0.02em;
 }
 
-/* Toggle pill — same look as Edit Account / Workers. */
 .bsx-toggle-wrap {
   cursor: pointer;
   display: inline-flex;
@@ -268,8 +260,6 @@ function fmtTime(t: string): string {
   outline-offset: 2px;
 }
 
-/* Inline header pop-ups (auto-fade after 4 s). Same pattern as the
-   Workers page so the visual treatment is consistent. */
 .bsx-head-popups {
   flex: 1 1 auto;
   display: flex;
@@ -309,7 +299,6 @@ function fmtTime(t: string): string {
   color: #f9e3d2;
 }
 
-/* History table. */
 .history-table-wrap { overflow-x: auto; }
 .history-table {
   width: 100%;
@@ -358,7 +347,6 @@ function fmtTime(t: string): string {
 .active-dot.is-yes { background: #b5e7a0; box-shadow: 0 0 0 2px rgba(181,231,160,0.18); }
 .active-dot.is-no  { background: #555;    box-shadow: 0 0 0 2px rgba(255,255,255,0.06); }
 
-/* Buttons — same as the rest of v2. */
 .bsx-btn {
   font: inherit;
   font-size: 13px;

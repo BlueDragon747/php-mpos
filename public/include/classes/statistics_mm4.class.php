@@ -25,7 +25,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getFirstBlockFound() {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT IFNULL(MIN(time), 0) AS time FROM " . $this->block->getTableName());
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
@@ -38,7 +38,7 @@ class Statistics_mm4 extends Base {
    **/
   function getLastBlocksbyTime() {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         COUNT(id) AS Total,
@@ -85,7 +85,7 @@ class Statistics_mm4 extends Base {
         IFNULL(SUM(IF(confirmations > -1 AND FROM_UNIXTIME(time) >= DATE_SUB(now(), INTERVAL 29030400 SECOND), amount, 0)), 0) AS 12MonthAmount
       FROM " . $this->block->getTableName());
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
-    	return $this->memcache->setCache(__FUNCTION__, $result->fetch_assoc());
+    	return $this->memcache->setCache(get_class($this) . __FUNCTION__, $result->fetch_assoc());
     return $this->sqlError();
   }
 
@@ -96,7 +96,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getBlocksFound($limit=10) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $limit)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         b.id,
@@ -116,7 +116,7 @@ class Statistics_mm4 extends Base {
       ON b.account_id = a.id
       ORDER BY height DESC LIMIT ?");
     if ($this->checkStmt($stmt) && $stmt->bind_param("i", $limit) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
 
@@ -127,7 +127,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getBlocksFoundHeight($iHeight=0, $limit=10) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $iHeight . $limit)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $iHeight . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         b.id,
@@ -148,7 +148,7 @@ class Statistics_mm4 extends Base {
       WHERE b.height <= ?
       ORDER BY height DESC LIMIT ?");
     if ($this->checkStmt($stmt) && $stmt->bind_param("ii", $iHeight, $limit) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $iHeight . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $iHeight . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
 
@@ -159,7 +159,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getBlocksSolvedbyAccount($limit=25) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $limit)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         a.id AS account_id,
@@ -174,7 +174,7 @@ class Statistics_mm4 extends Base {
       GROUP BY a.id, a.username, a.is_anonymous
       ORDER BY solvedblocks DESC LIMIT ?");
     if ($this->checkStmt($stmt) && $stmt->bind_param("i", $limit) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
   
@@ -185,7 +185,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getBlocksSolvedbyWorker($account_id, $limit=25) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $account_id . $limit)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
       	worker_name AS finder,
@@ -196,7 +196,7 @@ class Statistics_mm4 extends Base {
       GROUP BY finder
       ORDER BY solvedblocks DESC LIMIT ?");
     if ($this->checkStmt($stmt) && $stmt->bind_param("ii", $account_id, $limit) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $account_id . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
   
@@ -232,7 +232,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getCurrentHashrate($interval=180) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($this->getGetCache() && $data = $this->memcache->getStatic(__FUNCTION__)) return $data;
+    if ($this->getGetCache() && $data = $this->memcache->getStatic(get_class($this) . __FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
       (
@@ -249,7 +249,7 @@ class Statistics_mm4 extends Base {
         )
       ) AS hashrate
       FROM DUAL");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('iiii', $interval, $interval, $interval, $interval) && $stmt->execute() && $result = $stmt->get_result() ) return $this->memcache->setStaticCache(__FUNCTION__, $result->fetch_object()->hashrate);
+    if ($this->checkStmt($stmt) && $stmt->bind_param('iiii', $interval, $interval, $interval, $interval) && $stmt->execute() && $result = $stmt->get_result() ) return $this->memcache->setStaticCache(get_class($this) . __FUNCTION__, $result->fetch_object()->hashrate);
     return $this->sqlError();
   }
 
@@ -260,7 +260,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getCurrentShareRate($interval=180) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->getStatic(__FUNCTION__)) return $data;
+    if ($data = $this->memcache->getStatic(get_class($this) . __FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
       (
@@ -277,7 +277,7 @@ class Statistics_mm4 extends Base {
         )
       ) AS sharerate
       FROM DUAL");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('iiii', $interval, $interval, $interval, $interval) && $stmt->execute() && $result = $stmt->get_result() ) return $this->memcache->setStaticCache(__FUNCTION__, $result->fetch_object()->sharerate);
+    if ($this->checkStmt($stmt) && $stmt->bind_param('iiii', $interval, $interval, $interval, $interval) && $stmt->execute() && $result = $stmt->get_result() ) return $this->memcache->setStaticCache(get_class($this) . __FUNCTION__, $result->fetch_object()->sharerate);
     return $this->sqlError();
   }
 
@@ -376,7 +376,7 @@ class Statistics_mm4 extends Base {
       // We have no cached value, we return defaults
       return array('valid' => 0, 'invalid' => 0, 'donate_percent' => 0, 'is_anonymous' => 0);
     }
-    if ($data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS valid,
@@ -386,7 +386,7 @@ class Statistics_mm4 extends Base {
         AND UNIX_TIMESTAMP(time) >IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b),0)");  
     $username = $username . ".%";   
    if ($stmt && $stmt->bind_param("s", $username) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $account_id, $result->fetch_assoc());
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, $result->fetch_assoc());
     return $this->sqlError();
   }
 
@@ -520,7 +520,7 @@ class Statistics_mm4 extends Base {
       // We have no cached value, we return defaults
       return 0;
     }
-    if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->getGetCache() && $data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         IFNULL(IF(our_result='Y', ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0), 0) AS hashrate
@@ -542,13 +542,13 @@ class Statistics_mm4 extends Base {
           AND our_result = 'Y') AS temp");   
     $username = $username . ".%";
     if ($this->checkStmt($stmt) && $stmt->bind_param("isisi", $interval, $username, $interval, $username, $interval) && $stmt->execute() && $result = $stmt->get_result() )
-      return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->hashrate);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, (float)$result->fetch_object()->hashrate);
     return $this->sqlError();
   }
 
   public function getUserUnpaidPPSShares($username, $account_id=NULL, $last_paid_pps_id) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->getGetCache() && $data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         ROUND(IFNULL(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS total
@@ -558,7 +558,7 @@ class Statistics_mm4 extends Base {
       AND our_result = 'Y'");
     $username = $username . ".%";
     if ($this->checkStmt($stmt) && $stmt->bind_param("si", $username, $last_paid_pps_id) && $stmt->execute() && $result = $stmt->get_result() )
-      return $this->memcache->setCache(__FUNCTION__ . $account_id, $result->fetch_object()->total);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, $result->fetch_object()->total);
     return $this->sqlError();
   }
 
@@ -578,7 +578,7 @@ class Statistics_mm4 extends Base {
       // We have no cached value, we return defaults
       return 0;
     }
-    if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->getGetCache() && $data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         IFNULL(AVG(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)), 0) AS avgsharediff,
@@ -590,7 +590,7 @@ class Statistics_mm4 extends Base {
 	  ");
     $username = $username . ".%";
     if ($this->checkStmt($stmt) && $stmt->bind_param("si", $username, $interval) && $stmt->execute() && $result = $stmt->get_result() )
-      return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->avgsharediff);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, (float)$result->fetch_object()->avgsharediff);
     return $this->sqlError();
   }
 
@@ -609,7 +609,7 @@ class Statistics_mm4 extends Base {
       // We have no cached value, we return defaults
       return 0;
     }
-    if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->getGetCache() && $data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         IFNULL(COUNT(*) / ?, 0) AS sharerate
@@ -632,7 +632,7 @@ class Statistics_mm4 extends Base {
       ) AS temp");
     $username = $username . ".%";
     if ($this->checkStmt($stmt) && $stmt->bind_param("isisi", $interval, $username, $interval, $username, $interval) && $stmt->execute() && $result = $stmt->get_result() )
-      return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->sharerate);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, (float)$result->fetch_object()->sharerate);
     return $this->sqlError();
   }
 
@@ -643,7 +643,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getWorkerHashrate($workername, $worker_id=NULL, $interval=180) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $worker_id)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $worker_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT IFNULL(ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 600 / 1000), 0) AS hashrate
       FROM " . $this->share->getTableName() . " AS
@@ -651,7 +651,7 @@ class Statistics_mm4 extends Base {
         AND our_result = 'Y'
         AND time > DATE_SUB(now(), INTERVAL ? SECOND)");
     if ($this->checkStmt($stmt) && $stmt->bind_param("si", $workername, $interval) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $worker_id, (float)$result->fetch_object()->hashrate);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $worker_id, (float)$result->fetch_object()->hashrate);
     return $this->sqlError();
   }
 
@@ -665,7 +665,7 @@ class Statistics_mm4 extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     switch ($type) {
     case 'shares':
-      if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $type . $limit)) return $data;
+      if ($this->getGetCache() && $data = $this->memcache->get(get_class($this) . __FUNCTION__ . $type . $limit)) return $data;
       if ($data = $this->memcache->get(STATISTICS_ALL_USER_SHARES)) {
         // Use global cache to build data, if we have any data there
         if (!empty($data['data']) && is_array($data['data'])) {
@@ -703,12 +703,12 @@ class Statistics_mm4 extends Base {
         ORDER BY shares DESC
         LIMIT ?");
       if ($this->checkStmt($stmt) && $stmt->bind_param("i", $limit) && $stmt->execute() && $result = $stmt->get_result())
-        return $this->memcache->setCache(__FUNCTION__ . $type . $limit, $result->fetch_all(MYSQLI_ASSOC));
+        return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $type . $limit, $result->fetch_all(MYSQLI_ASSOC));
       return $this->sqlError();
       break;
 
     case 'hashes':
-      if ($this->getGetCache() && $data = $this->memcache->getStatic(__FUNCTION__ . $type . $limit)) return $data;
+      if ($this->getGetCache() && $data = $this->memcache->getStatic(get_class($this) . __FUNCTION__ . $type . $limit)) return $data;
       $stmt = $this->mysqli->prepare("
          SELECT
           a.username AS account,
@@ -726,7 +726,7 @@ class Statistics_mm4 extends Base {
         GROUP BY account
         ORDER BY hashrate DESC LIMIT ?");
       if ($this->checkStmt($stmt) && $stmt->bind_param("i", $limit) && $stmt->execute() && $result = $stmt->get_result())
-        return $this->memcache->setStaticCache(__FUNCTION__ . $type . $limit, $result->fetch_all(MYSQLI_ASSOC));
+        return $this->memcache->setStaticCache(get_class($this) . __FUNCTION__ . $type . $limit, $result->fetch_all(MYSQLI_ASSOC));
       return $this->sqlError();
       break;
     }
@@ -740,7 +740,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getHourlyHashrateByAccount($username, $account_id=NULL) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         id,
@@ -770,7 +770,7 @@ class Statistics_mm4 extends Base {
       for ($i = 0; $i < 24; $i++) $aData[($iStartHour + $i) % 24] = 0;
       // Fill data
       while ($row = $result->fetch_assoc()) $aData[$row['hour']] += $row['hashrate'];
-      return $this->memcache->setCache(__FUNCTION__ . $account_id, $aData);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, $aData);
     }
     return $this->sqlError();
   }
@@ -782,7 +782,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getHourlyHashrateByPool() {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__)) return $data;
+    if ($this->getGetCache() && $data = $this->memcache->get(get_class($this) . __FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
         id,
@@ -809,7 +809,7 @@ class Statistics_mm4 extends Base {
       for ($i = 0; $i < 24; $i++) $aData[($iStartHour + $i) % 24] = 0;
       // Fill data
       while ($row = $result->fetch_assoc()) $aData[$row['hour']] += (int) $row['hashrate'];
-      return $this->memcache->setCache(__FUNCTION__, $aData);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__, $aData);
     }
     return $this->sqlError();
   }
@@ -867,7 +867,7 @@ class Statistics_mm4 extends Base {
    **/
   public function getPoolStatsHours($hour=24) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__ . $hour)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $hour)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT 
       IFNULL(COUNT(id), 0) as count, 
@@ -879,7 +879,7 @@ class Statistics_mm4 extends Base {
       WHERE FROM_UNIXTIME(time) > DATE_SUB(now(), INTERVAL ? HOUR)
       AND confirmations >= 1");
     if ($this->checkStmt($stmt) && $stmt->bind_param("i", $hour) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__ . $hour, $result->fetch_assoc());
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $hour, $result->fetch_assoc());
     return $this->sqlError();
   }
 
@@ -898,7 +898,7 @@ class Statistics_mm4 extends Base {
    */
   public function getNetworkExpectedTimePerBlock_mm4(){
     // Create unique cache key based on bitcoin wrapper instance
-    $cacheKey = __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
+    $cacheKey = get_class($this) . __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
     
     // Check cache - if negative, delete and recalculate
     if ($data = $this->memcache->get($cacheKey)) {
@@ -953,7 +953,7 @@ class Statistics_mm4 extends Base {
    * @return difficulty double Next difficulty
    **/
   public function getExpectedNextDifficulty_mm4(){
-    $cacheKey = __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
+    $cacheKey = get_class($this) . __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
     if ($data = $this->memcache->get($cacheKey)) return $data;
 
     if ($this->bitcoin->can_connect() === true) {
@@ -970,7 +970,7 @@ class Statistics_mm4 extends Base {
    * @return blocks int blocks until difficulty change
    **/
   public function getBlocksUntilDiffChange_mm4(){
-    $cacheKey = __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
+    $cacheKey = get_class($this) . __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
     if ($data = $this->memcache->get($cacheKey)) return $data;
 
     if ($this->bitcoin->can_connect() === true) {
@@ -1042,14 +1042,14 @@ class Statistics_mm4 extends Base {
    **/
   public function getCountAllActiveUsers($interval=120) {
     $this->debug->append("STA " . __METHOD__, 4);
-    if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    if ($data = $this->memcache->get(get_class($this) . __FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT COUNT(DISTINCT(SUBSTRING_INDEX( `username` , '.', 1 ))) AS total
       FROM "  . $this->share->getTableName() . "
       WHERE our_result = 'Y'
       AND time > DATE_SUB(now(), INTERVAL ? SECOND)");
     if ($this->checkStmt($stmt) && $stmt->bind_param('i', $interval) && $stmt->execute() && $result = $stmt->get_result())
-      return $this->memcache->setCache(__FUNCTION__, $result->fetch_object()->total);
+      return $this->memcache->setCache(get_class($this) . __FUNCTION__, $result->fetch_object()->total);
     return $this->sqlError();
   }
 }

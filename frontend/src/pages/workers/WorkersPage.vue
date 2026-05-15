@@ -114,12 +114,26 @@ async function onUpdateWorkers(e: Event) {
   applyServerState(state);
 }
 
-// Delete: legacy controller reads $_GET['id'], so we keep this on
-// the GET path. Confirm first, then fetch with _ajax=1 to skip the
-// HTML render.
-async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
+// Inline "Are you sure?" state — id of the worker whose delete-X is
+// currently in confirm mode (or null when nothing is pending). Only
+// one row can be confirming at a time; clicking X on a different row
+// just moves the prompt.
+const pendingDeleteId = ref<number | null>(null);
+
+function onDeleteClick(e: MouseEvent, id: number) {
   e.preventDefault();
-  if (!window.confirm(`Delete worker ${name}?`)) return;
+  pendingDeleteId.value = id;
+}
+function cancelDelete() {
+  pendingDeleteId.value = null;
+}
+
+// Delete: legacy controller reads $_GET['id'], so we keep this on
+// the GET path. The inline "Are you sure?" widget has already been
+// confirmed by the time we get here; fetch with _ajax=1 to skip the
+// HTML render.
+async function onDeleteWorker(id: number) {
+  pendingDeleteId.value = null;
   const url = `${i.formAction}&do=delete&id=${id}&_ajax=1`;
   try {
     const res = await fetch(url, { credentials: 'same-origin' });
@@ -297,14 +311,26 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
                   <td class="td-hashrate">{{ fmtHashrate(w.hashrate) }}</td>
                   <td class="td-diff">{{ fmtDifficulty(w.difficulty) }}</td>
                   <td class="td-action">
-                    <!-- Delete is a separate GET (do=delete&id=N), not part
-                         of the bulk Update form. Confirm via native
-                         dialog so users don't fat-finger the trash. -->
+                    <!-- Delete is a separate GET (do=delete&id=N), not
+                         part of the bulk Update form. First click shows
+                         an inline Are-You-Sure overlay anchored to the
+                         right edge of this 32px cell so it extends left
+                         without changing the table layout. -->
+                    <template v-if="pendingDeleteId === w.id">
+                      <div class="delete-confirm" role="alertdialog" :aria-label="`Confirm delete ${w.username}`">
+                        <span class="delete-confirm-text">Are you sure?</span>
+                        <button type="button" class="btn-confirm-yes"
+                                @click="onDeleteWorker(w.id)">Yes</button>
+                        <button type="button" class="btn-confirm-no"
+                                @click="cancelDelete">No</button>
+                      </div>
+                    </template>
                     <a
+                      v-else
                       :href="`${i.formAction}&do=delete&id=${w.id}`"
                       class="btn-icon btn-trash"
                       :title="`Delete ${w.username}`"
-                      @click="(e) => onDeleteWorker(e, w.id, w.username)"
+                      @click="(e) => onDeleteClick(e, w.id)"
                     >
                       ×
                     </a>
@@ -329,9 +355,6 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   gap: 16px;
 }
 
-/* Inline header pop-ups: a compact pill that sits centered between
-   the card title and the action button. Auto-fade is driven by the
-   `.is-fading` class added 4 s after mount (see script setup). */
 .bsx-head-popups {
   flex: 1 1 auto;
   display: flex;
@@ -371,11 +394,10 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   color: #f9e3d2;
 }
 
-/* Forms become layout-transparent so their child article reads as a
-   direct grid child (mirrors Edit Account's pattern). */
+/* Forms are layout-transparent so the child article becomes a direct
+   grid item. */
 .bsx-form { display: contents; }
 
-/* Card chrome — same as Edit Account. */
 .bsx-card {
   background: rgba(255,255,255,.03);
   border: 1px solid rgba(255,255,255,.06);
@@ -406,12 +428,7 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
 }
 .bsx-card-body { padding: 12px 14px; }
 
-/* Workers table. */
-.workers-table-wrap {
-  /* Allow the table to scroll horizontally on very narrow viewports
-     instead of breaking the layout. */
-  overflow-x: auto;
-}
+.workers-table-wrap { overflow-x: auto; }
 .workers-table {
   width: 100%;
   border-collapse: collapse;
@@ -424,7 +441,7 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 .workers-table thead th {
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #99a;
@@ -440,7 +457,6 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   padding: 14px 0;
 }
 
-/* Status dot column. */
 .th-status, .td-status { width: 24px; text-align: center; padding-left: 4px; padding-right: 0; }
 .status-dot {
   display: inline-block;
@@ -452,7 +468,6 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
 .status-dot.is-up   { background: #b5e7a0; box-shadow: 0 0 0 2px rgba(181,231,160,0.18); }
 .status-dot.is-down { background: #555;    box-shadow: 0 0 0 2px rgba(255,255,255,0.06); }
 
-/* Worker name cell — parent prefix as plain text + editable suffix. */
 .td-name { white-space: nowrap; }
 .parent-prefix {
   color: #99a;
@@ -473,7 +488,10 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
 }
 .td-pw input { width: 130px; }
 
-/* Numeric columns right-aligned + monospace for column alignment. */
+.th-pw, .td-pw { padding-right: 0; }
+.th-monitor, .td-monitor { padding-left: 0; }
+.td-pw input { width: 126px; }
+
 .th-hashrate, .td-hashrate,
 .th-diff,     .td-diff {
   text-align: right;
@@ -485,7 +503,6 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   color: #cdd;
 }
 
-/* Monitor toggle column — uses .bsx-toggle classes shared with Edit Account. */
 .th-monitor, .td-monitor { width: 56px; text-align: center; }
 
 .bsx-toggle-wrap {
@@ -539,8 +556,22 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   outline-offset: 2px;
 }
 
-/* Trash / delete column. */
-.th-action, .td-action { width: 32px; text-align: center; padding-right: 4px; }
+.th-action, .td-action {
+  width: 32px;
+  text-align: center;
+  padding-right: 4px;
+  position: relative;
+}
+/* ::before reserves the X button's outer height (24px = 22px content
+   + 1px border × 2) so the row doesn't collapse during confirm mode
+   when the X is unmounted in favour of the absolute-positioned
+   .delete-confirm overlay. */
+.td-action::before {
+  content: '';
+  display: inline-block;
+  vertical-align: middle;
+  height: 24px;
+}
 .btn-icon {
   display: inline-flex;
   align-items: center;
@@ -561,10 +592,51 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   border-color: rgba(245, 203, 167, 0.4);
   color: #f5cba7;
 }
+/* Anchored to the right edge of the 32px action cell and extends
+   leftward into the Difficulty column while visible. */
+.delete-confirm {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid rgba(245, 203, 167, 0.55);
+  background: rgba(40, 28, 16, 0.95);
+  border-radius: 4px;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1;
+  z-index: 4;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.delete-confirm-text { color: #f5cba7; font-weight: 600; }
+.delete-confirm .btn-confirm-yes,
+.delete-confirm .btn-confirm-no {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cdd;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1;
+}
+.delete-confirm .btn-confirm-yes:hover {
+  background: rgba(229, 115, 115, 0.20);
+  border-color: rgba(229, 115, 115, 0.55);
+  color: #e57373;
+}
+.delete-confirm .btn-confirm-no:hover {
+  background: rgba(79, 195, 247, 0.16);
+  border-color: rgba(79, 195, 247, 0.45);
+  color: #4fc3f7;
+}
 
-/* Two-column layout: Add Worker (narrow left) + Worker Configuration
-   (wide right). 1fr / 3fr keeps the table area generous; the add-form
-   column is narrow enough that we stack its label-above-input. */
 .workers-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(0, 3fr);
@@ -575,8 +647,6 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
   .workers-grid { grid-template-columns: 1fr; }
 }
 
-/* Add Worker form: stacked label-above-input so the inputs use the
-   full narrow column width. */
 .add-worker-row {
   display: flex;
   flex-direction: column;
@@ -626,7 +696,6 @@ async function onDeleteWorker(e: MouseEvent, id: number, name: string) {
 .parent-input > input { flex: 1 1 auto; min-width: 0; }
 .parent-input > .parent-prefix { flex: 0 0 auto; }
 
-/* Buttons (mirror Edit Account). */
 .bsx-btn {
   font: inherit;
   font-size: 13px;

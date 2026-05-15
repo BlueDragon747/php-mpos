@@ -14,6 +14,16 @@ const i = props.initial;
 // what makes the URL bookmarkable / shareable.
 const filterType = ref(i.filter.type);
 const filterStatus = ref(i.filter.status);
+
+// GET-form submission discards the action URL's query string and
+// rebuilds it from the form's name/value pairs, so the page/action
+// must travel as hidden inputs. Parse them out of i.formAction —
+// which the PHP side encodes per-slot (e.g. transactions_mm1 for
+// the BBTC admin view) — so the filter stays on the same coin and
+// same context (admin vs. account) instead of falling back to BLC.
+const _formActionParams = new URLSearchParams(i.formAction.replace(/^\?/, ''));
+const formPage = _formActionParams.get('page') || 'account';
+const formActionName = _formActionParams.get('action') || 'transactions';
 // Admin-only filters (match `filter[account]` and `filter[address]`
 // in the legacy admin page). Carried through pagination so URLs
 // survive Next/Prev.
@@ -136,8 +146,8 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
           :action="i.formAction"
           class="tx-filter-form"
         >
-          <input type="hidden" name="page" value="account">
-          <input type="hidden" name="action" value="transactions">
+          <input type="hidden" name="page" :value="formPage">
+          <input type="hidden" name="action" :value="formActionName">
           <select name="filter[type]" v-model="filterType" class="tx-filter-select">
             <option
               v-for="(label, key) in i.transactionTypes"
@@ -273,11 +283,7 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   flex-direction: column;
   gap: 16px;
 }
-/* Summary card header: 3-column grid so "Transaction Summary" sits
-   on the left, the coin name is true-centered (col 2 sized to content,
-   1fr columns on either side push it to the middle), and the right
-   column stays empty as a balancing spacer. Selector includes
-   .bsx-card to beat the .bsx-card header flex layout's specificity. */
+/* .bsx-card prefix beats the parent .bsx-card header flex specificity. */
 .bsx-card header.tx-summary-head {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -292,16 +298,9 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   text-align: center;
   white-space: nowrap;
 }
-.tx-summary-spacer {
-  /* empty — just a 1fr cell so .tx-summary-coin sits in the visual
-     centre of the header. */
-}
-/* Single-row summary: center both the type label header and the
-   total below it so each column reads as a centered (label / value)
-   pair. Includes .tx-summary-card in the selector to beat the later
-   `.tx-table th, .tx-table td { text-align: left }` and
-   `.td-amount { text-align: right }` rules (which would otherwise win
-   on source order with equal specificity). */
+.tx-summary-spacer {}
+/* .tx-summary-card prefix overrides later .tx-table / .td-amount
+   text-align rules. */
 .tx-summary-card .tx-summary-table th,
 .tx-summary-card .tx-summary-table td,
 .tx-summary-card .tx-summary-table td.td-amount {
@@ -315,7 +314,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   font-size: 12px;
 }
 
-/* Card chrome — same as Edit Account / Workers. */
 .bsx-card {
   background: rgba(255,255,255,.03);
   border: 1px solid rgba(255,255,255,.06);
@@ -340,7 +338,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
 }
 .bsx-card-body { padding: 0; }
 
-/* Filter form lives in the header; compact dropdowns + small button. */
 .tx-filter-form {
   display: flex;
   align-items: center;
@@ -368,8 +365,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   outline: 2px solid rgba(79, 195, 247, 0.55);
   outline-offset: 0;
 }
-/* Matches the dropdown visual chrome so the admin Account filter
-   sits inline with the Type / Status selects. */
 .tx-filter-input {
   font: inherit;
   font-size: 12px;
@@ -389,10 +384,8 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   color: #99a;
   opacity: 0.7;
 }
-/* Address strings are long — give the address filter more room. */
 .tx-filter-input-wide { width: 200px; }
 
-/* Buttons (mirror Edit Account / Workers). */
 .bsx-btn {
   font: inherit;
   font-size: 13px;
@@ -427,7 +420,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
 }
 .bsx-btn-small { padding: 4px 10px; font-size: 12px; }
 
-/* Transactions table. */
 .tx-table-wrap { overflow-x: auto; }
 .tx-table {
   width: 100%;
@@ -455,8 +447,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
 }
 .tx-table tbody tr:last-child td { border-bottom: 0; }
 
-/* Status pills — match the legacy span.confirmed / .unconfirmed /
-   .orphan colour palette but with our v2 chip aesthetic. */
 .tx-status {
   display: inline-block;
   padding: 2px 8px;
@@ -482,7 +472,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   color: #e57373;
 }
 
-/* Right-align numeric columns + monospace for column alignment. */
 .th-id, .td-id, .th-block, .td-block, .th-amount, .td-amount,
 .td-txid, .td-addr {
   font-variant-numeric: tabular-nums;
@@ -516,7 +505,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
 }
 .muted { opacity: 0.55; }
 
-/* Footer: legend on the left, pager on the right. */
 .tx-footer {
   display: flex;
   align-items: center;
