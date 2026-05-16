@@ -394,8 +394,6 @@ async function onDeleteWorker(id: number) {
   color: #f9e3d2;
 }
 
-/* Forms are layout-transparent so the child article becomes a direct
-   grid item. */
 .bsx-form { display: contents; }
 
 .bsx-card {
@@ -562,10 +560,7 @@ async function onDeleteWorker(id: number) {
   padding-right: 4px;
   position: relative;
 }
-/* ::before reserves the X button's outer height (24px = 22px content
-   + 1px border × 2) so the row doesn't collapse during confirm mode
-   when the X is unmounted in favour of the absolute-positioned
-   .delete-confirm overlay. */
+/* Row height placeholder for delete-confirm state. */
 .td-action::before {
   content: '';
   display: inline-block;
@@ -592,8 +587,7 @@ async function onDeleteWorker(id: number) {
   border-color: rgba(245, 203, 167, 0.4);
   color: #f5cba7;
 }
-/* Anchored to the right edge of the 32px action cell and extends
-   leftward into the Difficulty column while visible. */
+/* Delete-confirm overlay */
 .delete-confirm {
   position: absolute;
   right: 4px;

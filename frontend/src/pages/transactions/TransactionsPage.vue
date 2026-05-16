@@ -14,6 +14,9 @@ const i = props.initial;
 // what makes the URL bookmarkable / shareable.
 const filterType = ref(i.filter.type);
 const filterStatus = ref(i.filter.status);
+const filterCoin = ref(i.selectedCoin || '');
+const filterForm = ref<HTMLFormElement | null>(null);
+const hasCoinSelector = computed(() => Array.isArray(i.coinOptions) && i.coinOptions.length > 1);
 
 // GET-form submission discards the action URL's query string and
 // rebuilds it from the form's name/value pairs, so the page/action
@@ -30,6 +33,10 @@ const formActionName = _formActionParams.get('action') || 'transactions';
 const filterAccount = ref(i.filter.account ?? '');
 const filterAddress = ref(i.filter.address ?? '');
 
+function submitFilters() {
+  filterForm.value?.submit();
+}
+
 // Pagination URLs. Legacy controller reads ?start=N from the URL;
 // the filter form preserves filter[type] and filter[status]. Building
 // the prev/next links here keeps the v2 page in sync with that scheme.
@@ -41,6 +48,7 @@ function pageUrl(start: number): string {
   const params = new URLSearchParams();
   for (const [k, v] of base) params.set(k, v);
   if (start > 0) params.set('start', String(start));
+  if (filterCoin.value)    params.set('coin', filterCoin.value);
   if (filterType.value)    params.set('filter[type]',    filterType.value);
   if (filterStatus.value)  params.set('filter[status]',  filterStatus.value);
   if (filterAccount.value) params.set('filter[account]', filterAccount.value);
@@ -99,6 +107,7 @@ const summaryEntries = computed(() => {
   if (i.summaryDisabled || !i.summary) return [];
   return Object.entries(i.summary);
 });
+const showSummaryCard = computed(() => !i.summaryDisabled && (summaryEntries.value.length > 0 || hasCoinSelector.value));
 function summaryAmountClass(type: string): 'credit' | 'debit' {
   return /^(Credit|Bonus)/.test(type) ? 'credit' : 'debit';
 }
@@ -109,13 +118,28 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
     <!-- Transaction Summary — single-row table (one column per type)
          showing per-type running totals. Hidden when the admin setting
          `disable_transactionsummary` is on. -->
-    <article v-if="summaryEntries.length > 0" class="bsx-card tx-summary-card">
+    <article v-if="showSummaryCard" class="bsx-card tx-summary-card">
       <header class="tx-summary-head">
         <h3>Transaction Summary</h3>
-        <span class="tx-summary-coin">{{ i.coinName }}</span>
+        <select
+          v-if="hasCoinSelector"
+          form="tx-filter-form"
+          name="coin"
+          v-model="filterCoin"
+          class="tx-filter-select tx-filter-coin tx-summary-coin-select"
+          aria-label="Select coin"
+          @change="submitFilters"
+        >
+          <option
+            v-for="coin in i.coinOptions"
+            :key="coin.value"
+            :value="coin.value"
+          >{{ coin.label }}</option>
+        </select>
+        <span v-else class="tx-summary-coin">{{ i.coinName }}</span>
         <span class="tx-summary-spacer" aria-hidden="true"></span>
       </header>
-      <div class="bsx-card-body tx-table-wrap">
+      <div v-if="summaryEntries.length > 0" class="bsx-card-body tx-table-wrap">
         <table class="tx-table tx-summary-table">
           <thead>
             <tr>
@@ -133,6 +157,9 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
           </tbody>
         </table>
       </div>
+      <div v-else class="bsx-card-body tx-summary-empty">
+        No summary data for this coin.
+      </div>
     </article>
 
     <article class="bsx-card">
@@ -142,12 +169,20 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
              resulting URL (with `filter[type]` / `filter[status]` /
              `start`) is bookmarkable; page reloads on Filter click. -->
         <form
+          id="tx-filter-form"
+          ref="filterForm"
           method="get"
           :action="i.formAction"
           class="tx-filter-form"
         >
           <input type="hidden" name="page" :value="formPage">
           <input type="hidden" name="action" :value="formActionName">
+          <input
+            v-if="!hasCoinSelector && filterCoin"
+            type="hidden"
+            name="coin"
+            :value="filterCoin"
+          >
           <select name="filter[type]" v-model="filterType" class="tx-filter-select">
             <option
               v-for="(label, key) in i.transactionTypes"
@@ -283,7 +318,6 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   flex-direction: column;
   gap: 16px;
 }
-/* .bsx-card prefix beats the parent .bsx-card header flex specificity. */
 .bsx-card header.tx-summary-head {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -299,8 +333,17 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   white-space: nowrap;
 }
 .tx-summary-spacer {}
-/* .tx-summary-card prefix overrides later .tx-table / .td-amount
-   text-align rules. */
+.tx-summary-coin-select {
+  justify-self: center;
+  text-transform: none;
+}
+.tx-summary-empty {
+  padding: 12px;
+  text-align: center;
+  color: #99a;
+  font-size: 12px;
+  font-style: italic;
+}
 .tx-summary-card .tx-summary-table th,
 .tx-summary-card .tx-summary-table td,
 .tx-summary-card .tx-summary-table td.td-amount {
@@ -327,6 +370,7 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .bsx-card h3 {
@@ -341,6 +385,8 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
 .tx-filter-form {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
   flex: 0 0 auto;
 }
@@ -360,6 +406,10 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   background-size: 10px 10px;
   cursor: pointer;
   max-width: 180px;
+}
+.tx-filter-coin {
+  min-width: 150px;
+  max-width: 230px;
 }
 .tx-filter-select:focus {
   outline: 2px solid rgba(79, 195, 247, 0.55);

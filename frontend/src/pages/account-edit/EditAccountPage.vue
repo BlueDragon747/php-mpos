@@ -166,7 +166,8 @@ function dismissCoinPopup(coinKey: string) {
   if (bodyView.value[coinKey] === 'msg') setBodyView(coinKey, 'fields');
 }
 function scheduleAutoDismiss(coinKey: string, type: PopupMessage['type']) {
-  // Success popups stay until manual Close; errors / info auto-flip back.
+  // Success popups stay until the pending-payout label is opened;
+  // errors / info auto-flip back.
   if (type === 'success') return;
   window.setTimeout(() => dismissCoinPopup(coinKey), AUTO_DISMISS_MS);
 }
@@ -720,7 +721,9 @@ async function copyApiKey() {
                  zero out the value on save. -->
             <div
               class="cashout-fields"
-              v-show="bodyView[coin.key] === 'fields'"
+              :class="{ 'is-hidden': bodyView[coin.key] !== 'fields' }"
+              :aria-hidden="bodyView[coin.key] !== 'fields'"
+              :inert="bodyView[coin.key] !== 'fields'"
             >
               <div class="kv">
                 <label :for="`addr-${coin.key}`">Coin Address</label>
@@ -807,13 +810,6 @@ async function copyApiKey() {
                 :role="cashOutPopupForCoin(coin.key)!.type === 'errormsg' ? 'alert' : 'status'"
               >
                 <p class="cashout-msg-text" v-text="cashOutPopupForCoin(coin.key)!.content"></p>
-                <button
-                  type="button"
-                  class="bsx-btn bsx-btn-small cashout-msg-close"
-                  @click="dismissCoinPopup(coin.key)"
-                >
-                  Close
-                </button>
               </div>
             </Transition>
           </div>
@@ -1372,8 +1368,39 @@ async function copyApiKey() {
   }
 }
 
-.cashout-msg-block {
+.cashout-body-stack {
   position: relative;
+  height: 76px;
+  overflow: hidden;
+  perspective: 900px;
+  transform-style: preserve-3d;
+}
+.cashout-fields {
+  position: absolute;
+  inset: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 180ms ease, transform 180ms ease;
+  transform-origin: center;
+  backface-visibility: hidden;
+}
+.cashout-fields.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: rotateX(-90deg);
+}
+.cashout-overlay {
+  position: absolute;
+  inset: 14px 16px;
+  z-index: 2;
+  backface-visibility: hidden;
+}
+
+.cashout-msg-block.cashout-overlay {
+  position: absolute;
+}
+.cashout-msg-block {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1381,7 +1408,6 @@ async function copyApiKey() {
   text-align: center;
   gap: 6px;
   min-height: 68px;
-  padding-bottom: 28px;
 }
 .cashout-msg-text {
   margin: 0;
@@ -1391,12 +1417,6 @@ async function copyApiKey() {
 .cashout-msg-success .cashout-msg-text  { color: #b5e7a0; }
 .cashout-msg-errormsg .cashout-msg-text { color: #f5cba7; }
 .cashout-msg-info .cashout-msg-text     { color: #4fc3f7; }
-.cashout-msg-close {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  padding: 4px 18px;
-}
 .cashout-detail-line {
   margin: 0;
   font-size: 14px;
@@ -1445,7 +1465,6 @@ async function copyApiKey() {
 .cashout-pending-label:hover {
   background: rgba(79, 195, 247, 0.18);
 }
-.cashout-fields { display: contents; }
 .bsx-flip-enter-active,
 .bsx-flip-leave-active {
   transition: opacity 180ms ease, transform 180ms ease;

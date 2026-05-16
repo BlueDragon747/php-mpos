@@ -127,9 +127,24 @@ if ($_tx_currency === 'BLC' && isset($config['gettingstarted']['coinname'])) {
 // transactions, 'admin' for the admin view. Defaults to 'account' so
 // existing callers don't have to set it.
 $_tx_page = isset($tx_v2_page) ? (string)$tx_v2_page : 'account';
+$_tx_form_action = isset($tx_v2_form_action) && (string)$tx_v2_form_action !== ''
+  ? (string)$tx_v2_form_action
+  : ('?page=' . $_tx_page . '&action=' . (isset($tx_v2_action) ? $tx_v2_action : 'transactions'));
+$_tx_coin_options = array();
+if (isset($tx_v2_coin_options) && is_array($tx_v2_coin_options)) {
+  foreach ($tx_v2_coin_options as $_coin_option) {
+    if (!is_array($_coin_option) || empty($_coin_option['value'])) continue;
+    $_tx_coin_options[] = array(
+      'value'    => (string)$_coin_option['value'],
+      'label'    => isset($_coin_option['label']) ? (string)$_coin_option['label'] : (string)$_coin_option['value'],
+      'currency' => isset($_coin_option['currency']) ? (string)$_coin_option['currency'] : '',
+      'name'     => isset($_coin_option['name']) ? (string)$_coin_option['name'] : '',
+    );
+  }
+}
 
 $_tx_initial = array(
-  'formAction'         => '?page=' . $_tx_page . '&action=' . (isset($tx_v2_action) ? $tx_v2_action : 'transactions'),
+  'formAction'         => $_tx_form_action,
   'transactions'       => $_tx_v2_rows,
   'transactionTypes'   => is_array($tx_v2_types) ? $tx_v2_types : array(),
   'transactionStatus'  => array('' => '— Any —', 'Confirmed' => 'Confirmed', 'Unconfirmed' => 'Unconfirmed', 'Orphan' => 'Orphan'),
@@ -150,6 +165,8 @@ $_tx_initial = array(
   'summary'            => (object)$_tx_summary_v2,
   'summaryDisabled'    => !empty($tx_v2_summary_disabled),
   'currency'           => $_tx_currency,
+  'selectedCoin'       => isset($tx_v2_selected_coin) ? (string)$tx_v2_selected_coin : strtolower($_tx_currency),
+  'coinOptions'        => $_tx_coin_options,
   'coinName'           => $_tx_coin_name,
   // When true, the SPA renders a Username column (admin view across
   // all users). User-facing transactions leave this false.
