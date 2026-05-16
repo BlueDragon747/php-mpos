@@ -198,6 +198,14 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
 
   $smarty->assign("SELECTED_COIN",    $sSelectedCoin);
   $smarty->assign("COIN_OPTIONS",     $aCoinOptions);
+  $smarty->assign("COIN_NAMES",       array(
+    'BLC'  => isset($config['gettingstarted']['coinname']) ? (string)$config['gettingstarted']['coinname'] : 'Blakecoin',
+    'PHO'  => 'Photon',
+    'BBTC' => 'BlakeBitcoin',
+    'LIT'  => 'Lithium',
+    'ELT'  => 'Electron',
+    'UMO'  => 'Universalmolecule',
+  ));
   $smarty->assign("PAGER_AT_OLDEST",  !$bHasOlder);
   $smarty->assign("PAGER_AT_NEWEST",  !$bHasNewer);
   $smarty->assign("PAGER_OLDER_TIME", $iOlderTime);

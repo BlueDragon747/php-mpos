@@ -452,12 +452,12 @@
     background: #4fc3f7; box-shadow: 0 0 0 2px rgba(79,195,247,0.18);
   }
 
-  /* Custom tooltip — matches the Edit Account .addr-type-pill pattern. */
+  /* Custom tooltip — sits above the source so it never clips the card edge below. */
   .bsx-system-page [data-tooltip] { position: relative; outline: none; }
   .bsx-system-page [data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
-    top: calc(100% + 8px);
+    bottom: calc(100% + 8px);
     right: 0;
     background: rgba(20, 23, 28, 0.96);
     border: 1px solid rgba(79, 195, 247, 0.35);
@@ -472,32 +472,30 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 150ms ease, transform 150ms ease;
-    transform: translateY(-2px);
+    transform: translateY(2px);
     z-index: 100;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
   }
   .bsx-system-page [data-tooltip]::before {
     content: '';
     position: absolute;
-    top: calc(100% + 3px);
+    bottom: calc(100% + 3px);
     right: 14px;
     width: 8px;
     height: 8px;
     background: rgba(20, 23, 28, 0.96);
-    border-top: 1px solid rgba(79, 195, 247, 0.35);
-    border-left: 1px solid rgba(79, 195, 247, 0.35);
-    transform: rotate(45deg) translateY(-2px);
+    border-bottom: 1px solid rgba(79, 195, 247, 0.35);
+    border-right: 1px solid rgba(79, 195, 247, 0.35);
+    transform: rotate(45deg) translateY(2px);
     opacity: 0;
     pointer-events: none;
     transition: opacity 150ms ease, transform 150ms ease;
     z-index: 101;
   }
   .bsx-system-page [data-tooltip]:hover::after,
-  .bsx-system-page [data-tooltip]:focus-visible::after,
+  .bsx-system-page [data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
   .bsx-system-page [data-tooltip]:hover::before,
-  .bsx-system-page [data-tooltip]:focus-visible::before { opacity: 1; transform: translateY(0); }
-  .bsx-system-page [data-tooltip]:hover::before,
-  .bsx-system-page [data-tooltip]:focus-visible::before { transform: rotate(45deg) translateY(0); }
+  .bsx-system-page [data-tooltip]:focus-visible::before { opacity: 1; transform: rotate(45deg) translateY(0); }
   [data-theme="light"] .bsx-system-page [data-tooltip]::after,
   [data-theme="light"] .bsx-system-page [data-tooltip]::before {
     background: #ffffff;
@@ -563,7 +561,7 @@
         <dt>Captured:</dt>
         <dd>
           {if $SYS_BACKUP.database}
-            <span class="pill pill-active" data-tooltip="MariaDB dump{if $SYS_BACKUP.database_size} ({($SYS_BACKUP.database_size / 1024 / 1024)|string_format:"%.1f"} MB gzipped){/if}">DB · {$SYS_BACKUP.database|escape|upper}</span>
+            <span class="pill pill-active" data-tooltip="MariaDB{if $SYS_BACKUP.database_size} ({($SYS_BACKUP.database_size / 1024 / 1024)|string_format:"%.1f"} MB gzipped){/if}">DB · {$SYS_BACKUP.database|escape|upper}</span>
           {/if}
           {section name=w loop=$SYS_BACKUP.wallets}
             <span class="pill pill-active" data-tooltip="wallet.dat via backupwallet RPC">{$SYS_BACKUP.wallets[w]|escape|upper}</span>

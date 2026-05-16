@@ -14,18 +14,18 @@
 {if !$BLOCKS_HIDE_NAV|default:false}
       <div class="blocks-pager">
         {if $PAGER_AT_OLDEST|default:false}
-          <span class="bsx-btn bsx-btn-small is-disabled" title="Already at oldest">‹ Older</span>
+          <span class="bsx-btn bsx-btn-small is-disabled" data-tooltip="Already at oldest">‹ Older</span>
         {else}
           <a class="bsx-btn bsx-btn-small"
              href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$SELECTED_COIN|default:'ALL'|escape}&before={$PAGER_OLDER_TIME}"
-             title="Older blocks">‹ Older</a>
+             data-tooltip="Older blocks">‹ Older</a>
         {/if}
         {if $PAGER_AT_NEWEST|default:false}
-          <span class="bsx-btn bsx-btn-small is-disabled" title="Already at newest">Newer ›</span>
+          <span class="bsx-btn bsx-btn-small is-disabled" data-tooltip="Already at newest">Newer ›</span>
         {else}
           <a class="bsx-btn bsx-btn-small"
              href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$SELECTED_COIN|default:'ALL'|escape}&after={$PAGER_NEWER_TIME}"
-             title="Newer blocks">Newer ›</a>
+             data-tooltip="Newer blocks">Newer ›</a>
         {/if}
       </div>
 {/if}
@@ -275,7 +275,7 @@
           {math assign="percentage" equation="shares / estshares * 100" shares=$BLOCKSFOUND[block].shares|default:"0" estshares=$BLOCKSFOUND[block].estshares|default:"1"}
           <tr>
 {if $SELECTED_COIN|default:"ALL" == "ALL"}
-            <td class="center"><span class="chain-pill chain-{$BLOCKSFOUND[block].chain|escape|lower}">{$BLOCKSFOUND[block].chain|escape}</span></td>
+            <td class="center"><span class="chain-pill chain-{$BLOCKSFOUND[block].chain|escape|lower}" data-tooltip="{$COIN_NAMES[$BLOCKSFOUND[block].chain]|default:$BLOCKSFOUND[block].chain|escape}">{$BLOCKSFOUND[block].chain|escape}</span></td>
 {/if}
             <td class="center">
 {if ! $GLOBAL.website.blockexplorer.disabled}
@@ -832,4 +832,57 @@
   }
   [data-theme="light"] .stats-blocks-v2 .pct.is-good { color: #1b5e20; }
   [data-theme="light"] .stats-blocks-v2 .pct.is-bad  { color: #c62828; }
+
+  /* Custom tooltip — sits BELOW the source (pager + chain pills are
+     near the top of the card, so above-positioning would clip them). */
+  .stats-blocks-v2 [data-tooltip] { position: relative; outline: none; }
+  .stats-blocks-v2 [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    background: rgba(20, 23, 28, 0.96);
+    border: 1px solid rgba(79, 195, 247, 0.35);
+    color: #cdd;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease;
+    transform: translateX(-50%) translateY(-2px);
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  }
+  .stats-blocks-v2 [data-tooltip]::before {
+    content: '';
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: rgba(20, 23, 28, 0.96);
+    border-top: 1px solid rgba(79, 195, 247, 0.35);
+    border-left: 1px solid rgba(79, 195, 247, 0.35);
+    transform: translateX(-50%) rotate(45deg) translateY(-2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease;
+    z-index: 101;
+  }
+  .stats-blocks-v2 [data-tooltip]:hover::after,
+  .stats-blocks-v2 [data-tooltip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .stats-blocks-v2 [data-tooltip]:hover::before,
+  .stats-blocks-v2 [data-tooltip]:focus-visible::before { opacity: 1; transform: translateX(-50%) rotate(45deg) translateY(0); }
+  [data-theme="light"] .stats-blocks-v2 [data-tooltip]::after,
+  [data-theme="light"] .stats-blocks-v2 [data-tooltip]::before {
+    background: #ffffff;
+    border-color: rgba(21, 101, 192, 0.40);
+    color: #1f2933;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
 </style>

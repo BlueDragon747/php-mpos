@@ -230,6 +230,14 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   // template renders one chip per entry so the operator can flip
   // between coins without leaving the round view.
   $smarty->assign("ROUND_COIN_LIST", array_values($aSlotMap));
+  $smarty->assign("COIN_NAMES", array(
+    'BLC'  => isset($config['gettingstarted']['coinname']) ? (string)$config['gettingstarted']['coinname'] : 'Blakecoin',
+    'PHO'  => 'Photon',
+    'BBTC' => 'BlakeBitcoin',
+    'LIT'  => 'Lithium',
+    'ELT'  => 'Electron',
+    'UMO'  => 'Universalmolecule',
+  ));
 } else {
   $debug->append('Using cached page', 3);
 }

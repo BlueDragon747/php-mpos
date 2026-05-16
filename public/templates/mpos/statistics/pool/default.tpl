@@ -27,7 +27,7 @@
           {/if}
           <tr{if $GLOBAL.userdata.username|default:""|lower == $CONTRIBUTORS[contrib].account|lower}{assign var=listed value=1} class="is-me"{/if}>
             <td class="td-rank">{$rank++}</td>
-            <td class="td-icon">{if $CONTRIBUTORS[contrib].donate_percent > 0}<span class="donor" title="Donor">★</span>{/if}</td>
+            <td class="td-icon">{if $CONTRIBUTORS[contrib].donate_percent > 0}<span class="donor" data-tooltip="Donor">★</span>{/if}</td>
             <td class="td-name">{if $CONTRIBUTORS[contrib].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}<span class="anon">anonymous</span>{else}{$CONTRIBUTORS[contrib].account|escape}{/if}</td>
             <td class="right num">{$CONTRIBUTORS[contrib].shares|default:0|number_format}</td>
             <td class="right num">{$CONTRIBUTORS[contrib].hashrate|default:0|number_format}</td>
@@ -43,7 +43,7 @@
           {/if}
           <tr class="is-me">
             <td class="td-rank">n/a</td>
-            <td class="td-icon">{if $GLOBAL.userdata.donate_percent > 0}<span class="donor" title="Donor">★</span>{/if}</td>
+            <td class="td-icon">{if $GLOBAL.userdata.donate_percent > 0}<span class="donor" data-tooltip="Donor">★</span>{/if}</td>
             <td class="td-name">{$GLOBAL.userdata.username|escape}</td>
             <td class="right num">{$GLOBAL.userdata.shares.valid|default:0|number_format}</td>
             <td class="right num">{$GLOBAL.userdata.rawhashrate|default:0|number_format}</td>
@@ -76,9 +76,9 @@
             <td class="td-rank">
               <a href="https://explorer.blakestream.io/{$BLOCKSFOUND[block].chain|default:""|escape|lower}?block={$BLOCKSFOUND[block].height}"
                  target="_blank" rel="noopener"
-                 title="View block {$BLOCKSFOUND[block].height} on the BlakeStream Explorer (new tab)">{$BLOCKSFOUND[block].height}</a>
+                 data-tooltip="View block {$BLOCKSFOUND[block].height} on the BlakeStream Explorer (new tab)">{$BLOCKSFOUND[block].height}</a>
             </td>
-            <td class="center"><span class="chain-pill chain-{$BLOCKSFOUND[block].chain|default:""|escape|lower}">{$BLOCKSFOUND[block].chain|default:""|escape}</span></td>
+            <td class="center"><span class="chain-pill chain-{$BLOCKSFOUND[block].chain|default:""|escape|lower}" data-tooltip="{$COIN_NAMES[$BLOCKSFOUND[block].chain]|default:$BLOCKSFOUND[block].chain|escape}">{$BLOCKSFOUND[block].chain|default:""|escape}</span></td>
             <td class="td-name">{if $BLOCKSFOUND[block].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}<span class="anon">anonymous</span>{else}{$BLOCKSFOUND[block].finder|default:"unknown"|escape}{/if}</td>
             <td class="center num">{$BLOCKSFOUND[block].time|date_format:"%d/%m %H:%M:%S"}</td>
             <td class="right num">{$BLOCKSFOUND[block].shares|number_format}</td>
@@ -110,7 +110,8 @@
         <button type="button"
                 class="pool-coin-tab chain-pill chain-{$tk|escape|lower}"
                 role="tab"
-                data-coin="{$tk|escape}">{$tk|escape}</button>
+                data-coin="{$tk|escape}"
+                data-tooltip="{$COIN_NAMES[$tk]|default:$tk|escape}">{$tk|escape}</button>
 {/foreach}
       </nav>
     </header>
@@ -149,7 +150,7 @@
         {if $cs.LastBlock > 0}
           <a href="https://explorer.blakestream.io/{$tk|escape|lower}?block={$cs.LastBlock}"
              target="_blank" rel="noopener"
-             title="View block {$cs.LastBlock} on the BlakeStream Explorer (new tab)">{$cs.LastBlock}</a>
+             data-tooltip="View block {$cs.LastBlock} on the BlakeStream Explorer (new tab)">{$cs.LastBlock}</a>
         {else}
           0
         {/if}
@@ -163,7 +164,7 @@
         {if $cs.CurrentBlock > 0}
           <a href="https://explorer.blakestream.io/{$tk|escape|lower}?block={$cs.CurrentBlock}"
              target="_blank" rel="noopener"
-             title="View block {$cs.CurrentBlock} on the BlakeStream Explorer (new tab)">{$cs.CurrentBlock}</a>
+             data-tooltip="View block {$cs.CurrentBlock} on the BlakeStream Explorer (new tab)">{$cs.CurrentBlock}</a>
         {else}
           {$cs.CurrentBlock}
         {/if}
@@ -540,4 +541,56 @@
     color: #4a5568;
   }
   [data-theme="light"] .stats-pool-v2 .pool-card-footer a { color: #1565c0; }
+
+  /* Custom tooltip — sits above the source. Mirrors the System Status pattern. */
+  .stats-pool-v2 [data-tooltip] { position: relative; outline: none; }
+  .stats-pool-v2 [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    background: rgba(20, 23, 28, 0.96);
+    border: 1px solid rgba(79, 195, 247, 0.35);
+    color: #cdd;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease;
+    transform: translateX(-50%) translateY(2px);
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  }
+  .stats-pool-v2 [data-tooltip]::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 3px);
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: rgba(20, 23, 28, 0.96);
+    border-bottom: 1px solid rgba(79, 195, 247, 0.35);
+    border-right: 1px solid rgba(79, 195, 247, 0.35);
+    transform: translateX(-50%) rotate(45deg) translateY(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease;
+    z-index: 101;
+  }
+  .stats-pool-v2 [data-tooltip]:hover::after,
+  .stats-pool-v2 [data-tooltip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .stats-pool-v2 [data-tooltip]:hover::before,
+  .stats-pool-v2 [data-tooltip]:focus-visible::before { opacity: 1; transform: translateX(-50%) rotate(45deg) translateY(0); }
+  [data-theme="light"] .stats-pool-v2 [data-tooltip]::after,
+  [data-theme="light"] .stats-pool-v2 [data-tooltip]::before {
+    background: #ffffff;
+    border-color: rgba(21, 101, 192, 0.40);
+    color: #1f2933;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
 </style>

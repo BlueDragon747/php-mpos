@@ -196,6 +196,14 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   }
   $smarty->assign("STATS_BY_COIN", $aStatsByCoin);
   $smarty->assign("COIN_TICKERS",  array_keys($aPoolActiveSlots));
+  $smarty->assign("COIN_NAMES",    array(
+    'BLC'  => isset($config['gettingstarted']['coinname']) ? (string)$config['gettingstarted']['coinname'] : 'Blakecoin',
+    'PHO'  => 'Photon',
+    'BBTC' => 'BlakeBitcoin',
+    'LIT'  => 'Lithium',
+    'ELT'  => 'Electron',
+    'UMO'  => 'Universalmolecule',
+  ));
 
   // Propagate content our template
   $smarty->assign("ESTTIME", $iEstTime);
