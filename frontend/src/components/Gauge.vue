@@ -56,10 +56,15 @@ const props = withDefaults(defineProps<{
 function pickTitleColor(): string {
   if (typeof document === 'undefined') return props.titleFontColor;
   const theme = document.documentElement.getAttribute('data-theme');
-  // In light mode, the default '#cdd' is washed out on white. Use a
-  // mid-dark slate so the gauge title is comfortably readable.
   if (theme === 'light') return '#1f2933';
   return props.titleFontColor;
+}
+
+function pickValueFontColor(): string {
+  if (typeof document === 'undefined') return props.valueFontColor;
+  const theme = document.documentElement.getAttribute('data-theme');
+  if (theme === 'light') return '#1f2933';
+  return props.valueFontColor;
 }
 
 // Mirror legacy js_api.tpl: `parseFloat(value).toFixed(2)` before each
@@ -86,7 +91,7 @@ function buildGauge() {
     title: props.title,
     label: props.unit,
     gaugeColor: props.gaugeColor,
-    valueFontColor: props.valueFontColor,
+    valueFontColor: pickValueFontColor(),
     titleFontColor: pickTitleColor(),
     labelFontColor: props.labelFontColor,
     shadowOpacity: props.shadowOpacity,

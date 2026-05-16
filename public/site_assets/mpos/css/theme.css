@@ -1,19 +1,23 @@
 /* Theme CSS Variables - Light/Dark Mode Support */
 
-/* Default Light Theme */
+/* Default Light Theme — softened from pure-white so the dark→light
+   transition isn't a "flashbang". Backgrounds sit ~5–10 % darker
+   than the original palette, cards lifted only slightly above the
+   page rather than glowing white. Text contrasts remain ample
+   against the new shades. */
 :root {
   /* Background Colors */
-  --bg-primary: #F8F8F8;
-  --bg-secondary: #F1F1F4;
-  --bg-tertiary: #E0E0E3;
-  --bg-card: #ffffff;
+  --bg-primary: #E4E6EA;        /* page background — soft warm gray */
+  --bg-secondary: #D9DCE1;      /* sidebar / breadcrumb */
+  --bg-tertiary: #C9CDD4;       /* hover surfaces */
+  --bg-card: #EEF0F3;           /* cards — sits just above page bg */
   --bg-header: #222222;
-  --bg-fieldset: #F6F6F6;
-  --bg-input: #ffffff;
-  --bg-module-header: #F1F1F4;
-  --bg-module-footer: #F1F1F4;
-  --bg-table-header: #F1F1F4;
-  --bg-table-row-alt: #f9f9f9;
+  --bg-fieldset: #E0E3E8;
+  --bg-input: #F4F5F7;          /* inputs — softer than pure white */
+  --bg-module-header: #D9DCE1;
+  --bg-module-footer: #D9DCE1;
+  --bg-table-header: #D9DCE1;
+  --bg-table-row-alt: #E7E9ED;
   --bg-success: #e6efc2;
   --bg-error: #ff9473;
   --bg-warning: #ffce9c;
@@ -294,3 +298,50 @@ hr {
   border-color: var(--accent-secondary);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sitewide light-mode softening for the v2 (`bsx-*`) components.    */
+/*                                                                  */
+/* Many v2 pages declare their own `[data-theme="light"]` overrides */
+/* with hard-coded `#ffffff` and `#f1f3f5`. Those inline blocks      */
+/* render after theme.css, so we use !important to win the cascade  */
+/* without having to touch every page template.                     */
+/* ---------------------------------------------------------------- */
+[data-theme="light"] body,
+[data-theme="light"] {
+  background: #E4E6EA !important;
+}
+[data-theme="light"] .bsx-card,
+[data-theme="light"] article.bsx-card {
+  background: #EEF0F3 !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+[data-theme="light"] .bsx-card > header,
+[data-theme="light"] article.bsx-card > header,
+[data-theme="light"] article.bsx-card header {
+  background: #DDE0E5 !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] table thead th,
+[data-theme="light"] .bsx-table thead th {
+  background: #DDE0E5 !important;
+}
+[data-theme="light"] tbody tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.025) !important;
+}
+
+/* Sidebar text in light mode reads as full black so the nav stays
+   easy to scan against the softened gray sidebar background. The
+   variable-driven default (--text-primary = #666) was hard to read
+   for several operators. Hover keeps a slight delta so the
+   interactive state still registers. */
+[data-theme="light"] #sidebar li a,
+[data-theme="light"] #sidebar p,
+[data-theme="light"] #sidebar h3,
+[data-theme="light"] #sidebar h2 {
+  color: #111 !important;
+  text-shadow: none !important;
+}
+[data-theme="light"] #sidebar li a:hover {
+  color: #1565c0 !important;
+}

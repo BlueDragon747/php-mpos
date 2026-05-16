@@ -240,10 +240,12 @@ $smarty->assign('V2_STATS_JSON', json_encode_attr($stats));
 // drive the v2 dashboard messages panel.
 $messages = array();
 $sMotd = isset($setting) ? (string)$setting->getValue('system_motd') : '';
-if (trim($sMotd) !== '') {
-  // No title and no posted-date — keeps the MotD as a bare line, not
-  // styled like a full news card. DashboardPage.vue/MessagesOverlay.vue
-  // skip rendering the header row when title + posted are both empty.
+// Pin the MotD as a dashboard card ONLY in `popup` mode. In `always`
+// mode the master.tpl banner is the single source of truth, so we
+// skip the card to avoid double-rendering.
+$sMotdMode = isset($setting) ? (string)$setting->getValue('system_motd_display_mode') : '';
+if (!in_array($sMotdMode, array('always', 'popup'), true)) $sMotdMode = 'always';
+if (trim($sMotd) !== '' && $sMotdMode === 'popup') {
   $messages[] = array(
     'id'     => 'motd',
     'type'   => 'info',

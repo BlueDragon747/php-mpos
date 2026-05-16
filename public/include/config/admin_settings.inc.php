@@ -19,6 +19,13 @@ $aSettings['website'][] = array(
   'tooltip' => 'Display a message of the day as information popup if set.'
 );
 $aSettings['website'][] = array(
+  'display' => 'Display mode', 'type' => 'select',
+  'options' => array('always' => 'Always show', 'popup' => 'Pop-up notice'),
+  'default' => 'always',
+  'name' => 'system_motd_display_mode', 'value' => $setting->getValue('system_motd_display_mode'),
+  'inline_with' => 'system_motd',
+);
+$aSettings['website'][] = array(
   'display' => 'Hashrate Window (seconds)', 'type' => 'text',
   'size' => 6,
   'default' => 900,
@@ -335,9 +342,9 @@ $aSettings['system'][] = array(
 $aSettings['system'][] = array(
   'display' => 'Disable Manual Payouts', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
-  'default' => 0,
+  'default' => 1,
   'name' => 'disable_manual_payouts', 'value' => $setting->getValue('disable_manual_payouts'),
-  'tooltip' => 'Enable or Disable manual payouts. Users will not be able to withdraw any funds manually if disabled. Will NOT be logged in monitoring page.'
+  'tooltip' => 'Enable or Disable manual payouts. Users will not be able to withdraw any funds manually if disabled. Will NOT be logged in monitoring page. Off by default on fresh installs.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable Auto Payout', 'type' => 'select',
@@ -356,9 +363,9 @@ $aSettings['system'][] = array(
 $aSettings['system'][] = array(
   'display' => 'Disable Contactform', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
-  'default' => 0,
+  'default' => 1,
   'name' => 'disable_contactform', 'value' => $setting->getValue('disable_contactform'),
-  'tooltip' => 'Enable or Disable Contactform. Users will not be able to use the contact form.'
+  'tooltip' => 'Enable or Disable Contactform. Users will not be able to use the contact form. Off by default on fresh installs.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable Contactform for Guests', 'type' => 'select',

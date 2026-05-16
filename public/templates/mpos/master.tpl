@@ -44,6 +44,11 @@
 	<header id="header">
     {include file="global/header.tpl"}
 	</header>
+{if $MOTD_BANNER|default}
+  <div id="bsx-motd-banner" class="bsx-motd-banner" role="status" aria-live="polite">
+    <div class="bsx-motd-banner-inner">{$MOTD_BANNER nofilter}</div>
+  </div>
+{/if}
 	<section id="secondary_bar">
     {include file="global/userinfo.tpl"}
     {include file="global/breadcrumbs.tpl"}
@@ -144,6 +149,27 @@
       .bsx-toast-warning { background: rgba(245, 124, 0, 0.95); border-color: rgba(255, 214, 110, 0.55); color: #ffffff; }
       .bsx-toast-errormsg,
       .bsx-toast-error   { background: rgba(198, 40, 40, 0.95); border-color: rgba(229, 115, 115, 0.55); color: #ffffff; }
+
+      /* MotD banner — pinned across the top in "Always show" mode. */
+      .bsx-motd-banner {
+        background: rgba(25, 118, 210, 0.95);
+        border-bottom: 1px solid rgba(79, 195, 247, 0.55);
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-align: center;
+        padding: 8px 10px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+      }
+      .bsx-motd-banner-inner { max-width: none; margin: 0; }
+      .bsx-motd-banner a { color: inherit; text-decoration: underline; }
+      .bsx-motd-banner p { margin: 0; }
+      .bsx-motd-banner p + p { margin-top: 4px; }
+      [data-theme="light"] .bsx-motd-banner {
+        background: rgba(25, 118, 210, 0.97);
+        border-bottom-color: rgba(21, 101, 192, 0.65);
+      }
     </style>
     {if $CONTENT != "empty" && $CONTENT != ""}
       {if file_exists($smarty.current_dir|cat:"/$PAGE/$ACTION/$CONTENT")}

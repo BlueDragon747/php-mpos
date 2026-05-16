@@ -432,19 +432,22 @@ if (@$_SESSION['USERDATA']['id']) {
 if ($setting->getValue('maintenance'))
   $_SESSION['POPUP'][] = array('CONTENT' => 'The pool is in maintenance mode. Mining stays online; account changes and payouts are temporarily paused.', 'TYPE' => 'warning');
 
-// Message of the Day routing:
-//   - Logged-OFF visitors  → pushed to $_SESSION['POPUP'] so the toast
-//                             surfaces on every public page (login,
-//                             register, gettingstarted, etc.) — same
-//                             as the legacy behaviour.
-//   - Logged-IN  users     → NOT pushed; MotD instead appears as the
-//                             first card in the dashboard messages
-//                             panel (see public/include/pages/dashboard.inc.php).
-//   Operators author the MotD once via admin/settings → "Message of
-//   the Day" — both surfaces read the same setting value.
-if (($_motd = trim((string)$setting->getValue('system_motd'))) !== ''
-    && !$user->isAuthenticated(false)) {
-  $_SESSION['POPUP'][] = array('CONTENT' => $_motd, 'TYPE' => 'info');
+// Message of the Day routing — driven by `system_motd_display_mode`:
+//   always → banner pinned at the top of master.tpl for everyone
+//            (matches original MPOS behaviour).
+//   popup  → legacy 4 s auto-fade toast for logged-out viewers;
+//            dashboard.inc.php pins a card for logged-in users.
+$_motd = trim((string)$setting->getValue('system_motd'));
+$_motd_mode = (string)$setting->getValue('system_motd_display_mode');
+if (!in_array($_motd_mode, array('always', 'popup'), true)) $_motd_mode = 'always';
+$smarty->assign('MOTD_MODE', $_motd_mode);
+if ($_motd !== '') {
+  if ($_motd_mode === 'always') {
+    require_once(INCLUDE_DIR . '/safe_markdown.inc.php');
+    $smarty->assign('MOTD_BANNER', mpos_render_safe_markdown($_motd));
+  } else if (!$user->isAuthenticated(false)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => $_motd, 'TYPE' => 'info');
+  }
 }
 
 // So we can display additional info
