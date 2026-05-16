@@ -207,6 +207,7 @@ class Payouts:
             )
 
         # Manual payouts first.
+        paid_account_ids: set[int] = set()
         for p in manual_queue:
             account_id = int(p["account_id"])
             username = p["username"]
@@ -221,10 +222,23 @@ class Payouts:
                 kind="Debit_MP", txfee=txfee_manual,
                 manual_payout_id=payout_id,
             )
+            paid_account_ids.add(account_id)
 
-        # Then auto.
+        # Then auto. Skip accounts that just received a manual payout
+        # this tick — auto_candidates was snapshotted before the manual
+        # loop ran, so a user who sat on the cashout button until cron
+        # started would otherwise be paid TWICE in the same tick
+        # (Debit_MP + Debit_AP both drain a balance the manual already
+        # zeroed).
         for c in auto_candidates:
             account_id = int(c["id"])
+            if account_id in paid_account_ids:
+                log.info(
+                    "[%s/%s] skipping auto payout for account_id=%d — "
+                    "already paid manual queue this tick",
+                    self.name, slot_label, account_id,
+                )
+                continue
             username = c["username"]
             address = c["payout_address"]
             amount = round(float(c["balance"]), 8)

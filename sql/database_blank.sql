@@ -430,6 +430,12 @@ CREATE TABLE IF NOT EXISTS `settings` (
 INSERT INTO `settings` (`name`, `value`) VALUES ('DB_VERSION', '0.0.5')
   ON DUPLICATE KEY UPDATE `value` = '0.0.5';
 INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('backups_enabled', '1');
+-- Fresh installs ship with payouts + contact form OFF by default.
+-- Operator opts in via Admin → Settings once they've configured wallet
+-- credentials / SMTP. Prevents auto-payouts from firing on a half-
+-- configured deploy.
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('disable_manual_payouts', '1');
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('disable_contactform',    '1');
 
 -- Dumping structure for table mpos.shares
 CREATE TABLE IF NOT EXISTS `shares` (

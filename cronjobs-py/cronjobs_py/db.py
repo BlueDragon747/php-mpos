@@ -1630,9 +1630,17 @@ class Db:
         threshold_col = "ap_threshold" if slot == "" else f"ap_threshold_{slot}"
         txn_table = self._transactions_table(slot)
         block_table = self._blocks_table(slot)
+        payouts_table = self._suffixed("payouts", slot)
         confirmed = self._confirmed_balance_sql(
             txn_table=txn_table, block_table=block_table,
         )
+        # The LEFT JOIN on payouts + `WHERE p.id IS NULL` excludes any
+        # account that already has an active manual payout request
+        # (payouts.completed = 0). Without it a user could time a
+        # manual cash-out so they appear in both manual_queue AND
+        # auto_candidates in the same tick, getting paid twice. The
+        # cron loop also dedupes (payouts.py); this is defence in
+        # depth at the SQL layer.
         sql = (
             f"SELECT a.id, a.username, "
             f"       a.{coin_addr_col} AS payout_address, "
@@ -1641,7 +1649,10 @@ class Db:
             f"FROM {txn_table} t "
             f"LEFT JOIN {block_table} b ON b.id = t.block_id "
             f"LEFT JOIN accounts a ON a.id = t.account_id "
+            f"LEFT JOIN {payouts_table} p "
+            f"       ON p.account_id = t.account_id AND p.completed = 0 "
             f"WHERE t.archived = 0 "
+            f"  AND p.id IS NULL "
             f"  AND a.{threshold_col} > 0 "
             f"  AND a.{coin_addr_col} IS NOT NULL "
             f"  AND a.{coin_addr_col} <> '' "
