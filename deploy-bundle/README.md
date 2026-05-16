@@ -17,6 +17,8 @@ What it installs:
 - `cronjobs-py` scheduler running as a systemd service
 - daily DB + wallet backup helper and systemd timer, controlled by the
   MPOS `settings.backups_enabled` admin setting
+- a root-owned, no-argument disk stats helper with a sudoers rule limited
+  to `www-data` running `/usr/local/sbin/blakestream-mpos-disk-stats`
 
 ## Layout
 
@@ -26,6 +28,7 @@ deploy-bundle/
 ├── scripts/
 │   ├── 05-wipe.sh            # purge prior MPOS install (--wipe)
 │   ├── 10-system-deps.sh     # apt: nginx, php-fpm, mariadb, memcached, python, docker
+│   ├── system-disk-stats.sh  # read-only allowlisted disk stats helper
 │   ├── 20-pull-daemons.sh    # docker pull + binary extract + libboost ldconfig
 │   ├── 30-init-daemons.sh    # write configs, systemd units, start 12 daemons
 │   ├── 40-install-pool.sh    # eloipool + MPOS auth + MMP, render config
@@ -35,6 +38,8 @@ deploy-bundle/
 │   │   ├── 21-bootstrap-coins.sh  # sequential solo daemon bootstrap (see below)
 │   │   └── ...
 │   └── 99-verify.sh
+├── sudoers/
+│   └── blakestream-mpos-disk-stats
 ├── templates/
 │   └── eloipool-testnet.config.py.template
 └── README.md

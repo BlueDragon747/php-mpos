@@ -22,10 +22,9 @@ define('SECURITY', '*)WT#&YHfd');
 // Whether or not to check SECHASH for validity, still checks if SECURITY defined as before if disabled
 define('SECHASH_CHECK', false);
 
-// PHP cronjobs are the production scheduler. The cronjobs-py rewrite is
-// in development and gated behind MPOS_PYTHON_CRONJOBS_ACTIVE — until
-// the Wave 0..4 plan in QC_POOL_UPDATE_2026-04-25.md lands, PHP cron is
-// authoritative.
+// PHP cronjobs are the production scheduler unless cronjobs-py has been
+// explicitly activated. Keep only one scheduler active against a given
+// database.
 //
 // Running both schedulers against the same DB produces double-credits
 // and (worse) double on-chain payouts, since both stacks insert Credit

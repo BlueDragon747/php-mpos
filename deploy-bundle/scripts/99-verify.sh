@@ -70,6 +70,13 @@ else
     fail "MPOS DB query failed"
 fi
 
+say "disk stats sudo helper"
+if sudo -u www-data sudo -n /usr/local/sbin/blakestream-mpos-disk-stats >/dev/null 2>&1; then
+    pass "www-data can run the allowlisted disk stats helper"
+else
+    fail "www-data cannot run /usr/local/sbin/blakestream-mpos-disk-stats via sudo"
+fi
+
 if [ "$ok" = "1" ]; then
     printf '\033[1;32m\n=== verify: ALL CHECKS PASSED ===\033[0m\n'
     exit 0

@@ -4,12 +4,9 @@
 #   - venv + pip install -e .
 #   - systemd unit invokes `cronjobs-py serve`
 #
-# Default: install but DO NOT enable. PHP cronjobs remain the
-# production path until the cronjobs-py Wave 0..4 plan in
-# QC_POOL_UPDATE_2026-04-25.md lands. Set MPOS_PYTHON_CRONJOBS_ACTIVE=1
-# in the deploy environment to opt in (and remember to also set
-# MPOS_PHP_CRONJOBS_OPT_IN=0 — running both schedulers against the
-# same DB is an idempotency hazard).
+# Default: install but DO NOT enable. Set MPOS_PYTHON_CRONJOBS_ACTIVE=1
+# in the deploy environment to opt in. Running PHP cronjobs and
+# cronjobs-py against the same DB is an idempotency hazard.
 set -euo pipefail
 
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }

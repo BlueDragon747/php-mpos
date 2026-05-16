@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # 85-install-logrotate.sh — install the MPOS log retention policy.
-# See deploy-bundle/logrotate/blakestream-mpos and the
-# "Log files: kept vs rotated" section of MPOS-Postsegwit.md.
+# See deploy-bundle/logrotate/blakestream-mpos for the installed rules.
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 

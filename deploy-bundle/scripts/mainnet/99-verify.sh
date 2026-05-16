@@ -99,6 +99,13 @@ else
     fi
 fi
 
+say "disk stats sudo helper"
+if sudo -u www-data sudo -n /usr/local/sbin/blakestream-mpos-disk-stats >/dev/null 2>&1; then
+    pass "www-data can run the allowlisted disk stats helper"
+else
+    fail "www-data cannot run /usr/local/sbin/blakestream-mpos-disk-stats via sudo"
+fi
+
 say "scheduler mode"
 if [ -f /etc/cron.d/blakestream-mpos ]; then
     fail "/etc/cron.d/blakestream-mpos exists; PHP cron must not be scheduled with authoritative cronjobs-py"

@@ -51,6 +51,8 @@ write_backup_status() {
     local status="$1"
     local tarball="$2"
     local wallets="$3"
+    local db_name="$4"
+    local db_size="$5"
     local tmp
     tmp="${STATUS_FILE}.tmp.$$"
     mkdir -p "$(dirname "$STATUS_FILE")"
@@ -62,6 +64,8 @@ write_backup_status() {
         printf 'tarball="%s"\n' "$(ini_escape "$(basename "$tarball")")"
         printf 'out_dir="%s"\n' "$(ini_escape "$OUT_DIR")"
         printf 'wallets="%s"\n' "$(ini_escape "$wallets")"
+        printf 'database="%s"\n' "$(ini_escape "$db_name")"
+        printf 'database_size="%s"\n' "$db_size"
     } > "$tmp"
     chmod 644 "$tmp"
     mv "$tmp" "$STATUS_FILE"
@@ -84,6 +88,47 @@ case "${ENABLED:-1}" in
         exit 0
         ;;
 esac
+
+# Schedule + retention come from the same `settings` table the web UI
+# edits — the systemd timer fires every 30 minutes; this script checks
+# whether we're inside the operator's chosen window (HH:MM ± 30 min in
+# UTC) AND no backup has succeeded in the last 22 hours, and bails
+# cheaply if not. That keeps schedule changes admin-editable without
+# touching systemd / sudoers.
+read_setting() {
+    local key="$1" default="$2" val
+    val=$(mariadb -BNe \
+        "SELECT value FROM settings WHERE name='${key}' LIMIT 1;" \
+        -u "${MPOS_DB_USER}" "-p${MPOS_DB_PASS}" "${MPOS_DB_NAME}" 2>/dev/null || true)
+    if [ -z "$val" ]; then val="$default"; fi
+    printf '%s' "$val"
+}
+SCHED_H=$(read_setting backup_schedule_hour   3)
+SCHED_M=$(read_setting backup_schedule_minute 30)
+BACKUP_RETENTION_DAYS=$(read_setting backup_retention_days 14)
+export BACKUP_RETENTION_DAYS
+
+NOW_H=$(date -u +%-H)
+NOW_M=$(date -u +%-M)
+TARGET_MOD=$((10#$SCHED_H * 60 + 10#$SCHED_M))
+NOW_MOD=$((10#$NOW_H * 60 + 10#$NOW_M))
+DELTA=$(( NOW_MOD - TARGET_MOD ))
+if [ "$DELTA" -lt 0 ]; then DELTA=$((DELTA + 1440)); fi
+if [ "$DELTA" -ge 30 ]; then
+    echo "==> outside backup window (target ${SCHED_H}:${SCHED_M} UTC, now ${NOW_H}:${NOW_M}, delta=${DELTA}m); skipping"
+    exit 0
+fi
+
+LATEST="${OUT_DIR}/latest.tar.gz"
+if [ -e "$LATEST" ]; then
+    LAST_MTIME=$(stat -c %Y "$LATEST" 2>/dev/null || echo 0)
+    NOW_EPOCH=$(date +%s)
+    AGE=$(( NOW_EPOCH - LAST_MTIME ))
+    if [ "$AGE" -lt 79200 ]; then  # 22h debounce
+        echo "==> last backup is ${AGE}s old (< 22h); skipping"
+        exit 0
+    fi
+fi
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 HOSTNAME=$(hostname -s)
@@ -177,7 +222,8 @@ BACKUP_STATUS=ok
 if [ "$WALLET_FAILURES" -gt 0 ]; then
     BACKUP_STATUS=partial
 fi
-if ! write_backup_status "$BACKUP_STATUS" "$OUT" "$WALLETS_CSV"; then
+DB_DUMP_SIZE=$(stat -c %s "${WORK}/${MPOS_DB_NAME}.sql.gz" 2>/dev/null || echo 0)
+if ! write_backup_status "$BACKUP_STATUS" "$OUT" "$WALLETS_CSV" "$MPOS_DB_NAME" "$DB_DUMP_SIZE"; then
     echo "==> WARN: could not write backup status file ${STATUS_FILE}"
 fi
 

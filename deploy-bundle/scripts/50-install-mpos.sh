@@ -75,6 +75,17 @@ chmod 770 "${MPOS_WEB_ROOT}/templates_c" \
           "${MPOS_WEB_ROOT}/templates/compile/mpos" \
           "${MPOS_WEB_ROOT}/templates/compile/mobile"
 
+say "installing read-only disk stats sudo helper"
+install -o root -g root -m 0755 \
+    "${MPOS_DEPLOY_BUNDLE}/scripts/system-disk-stats.sh" \
+    /usr/local/sbin/blakestream-mpos-disk-stats
+install -d -o root -g root -m 0750 /etc/sudoers.d
+install -o root -g root -m 0440 \
+    "${MPOS_DEPLOY_BUNDLE}/sudoers/blakestream-mpos-disk-stats" \
+    /etc/sudoers.d/blakestream-mpos-disk-stats
+visudo -cf /etc/sudoers.d/blakestream-mpos-disk-stats >/dev/null
+sudo -u www-data sudo -n /usr/local/sbin/blakestream-mpos-disk-stats >/dev/null
+
 # ---- Render global.inc.php ---------------------------------------------
 #
 # global.inc.php is NOT tracked in git (it contains DB creds + RPC creds

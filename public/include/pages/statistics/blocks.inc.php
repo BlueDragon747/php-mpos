@@ -135,10 +135,9 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $bUseAverage = false;
   if ($config['payout_system'] == 'pplns') {
     foreach ($aBlocksFoundData as $key => $aData) {
-      // PPLNS shares: only meaningful for parent blocks in this stack
-      // (aux PPLNS draws from the same parent share stream — see
-      // share-review.md). For aux rows leave it 0; the template renders
-      // a dash.
+      // PPLNS shares are only meaningful for parent blocks in this
+      // merge-mined stack. Aux PPLNS draws from the same parent share
+      // stream; for aux rows leave it 0 and the template renders a dash.
       if ($aData['slot'] === '') {
         $aBlocksFoundData[$key]['pplns_shares'] = $roundstats->getPPLNSRoundShares($aData['height']);
       } else {

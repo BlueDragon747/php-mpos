@@ -6,6 +6,7 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
   header("HTTP/1.1 404 Page not found");
   die("404 Page not found");
 }
+require_once __DIR__ . '/_daemon_rule_status.inc.php';
 
 if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $debug->append('No cached version available, fetching from backend', 3);
@@ -46,6 +47,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $smarty->assign("LOCKED", $dLockedBalance_mm);
   $smarty->assign("NEWMINT", $dNewmint_mm);
   $smarty->assign("COININFO", $aGetInfo_mm);
+  $smarty->assign("COIN_RULE_STATUS", bsx_daemon_rule_status($bitcoin_mm, $aGetInfo_mm));
 
   // Tempalte specifics
 } else {

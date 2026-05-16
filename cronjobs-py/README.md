@@ -5,9 +5,8 @@ operationally robust where the PHP version is fragile (block reorgs,
 brief RPC outages, out-of-order shares) and to be the long-term
 production scheduler for the Blakestream pool stack.
 
-The full design rationale is in
-`../MPOS-Postsegwit.md` ("Why we ported PHP cronjobs to Python") and the
-Wave 1 / Wave 2 implementation notes.
+This README is the tracked design reference for cronjobs-py. Operator
+procedures that apply across the pool live in `../HELP.md`.
 
 ## Status (post-Wave 2)
 

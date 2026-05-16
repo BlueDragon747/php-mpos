@@ -49,7 +49,7 @@
               <th class="center">Protocol Version</th>
               <th class="center">Wallet Version</th>
               <th class="center">Connections</th>
-              <th class="center">Errors</th>
+              <th class="center">Rules</th>
             </tr>
           </thead>
           <tbody>
@@ -59,8 +59,16 @@
               <td class="center num">{$COININFO.walletversion|default:""}</td>
               <td class="center num">{$COININFO.connections|default:""}</td>
               <td class="center">
-                {if $COININFO.errors|default:""}
-                  <span class="status-pill err">{$COININFO.errors}</span>
+                {if $COIN_RULE_STATUS}
+                  <span class="status-pill {$COIN_RULE_STATUS.class|default:"ok"|escape}"
+                        title="{$COIN_RULE_STATUS.detail|default:""|escape}">
+                    {$COIN_RULE_STATUS.label|default:"OK"|escape}
+                  </span>
+                  {if $COIN_RULE_STATUS.raw_warning|default:"" && !$COIN_RULE_STATUS.warning_explained}
+                    <div class="wallet-rule-note">{$COIN_RULE_STATUS.raw_warning|escape}</div>
+                  {/if}
+                {elseif $COININFO.errors|default:""}
+                  <span class="status-pill err">{$COININFO.errors|escape}</span>
                 {else}
                   <span class="status-pill ok">OK</span>
                 {/if}
@@ -214,6 +222,18 @@
     border-color: rgba(229, 115, 115, 0.45);
     color: #e57373;
   }
+  .admin-wallet-v2 .status-pill.signal {
+    background: rgba(79, 195, 247, 0.16);
+    border-color: rgba(79, 195, 247, 0.45);
+    color: #4fc3f7;
+  }
+  .admin-wallet-v2 .wallet-rule-note {
+    margin-top: 4px;
+    color: #e57373;
+    font-size: 11px;
+    white-space: normal;
+    max-width: 360px;
+  }
 
   /* Light-mode overrides — scoped to [data-theme="light"]. */
   [data-theme="light"] .admin-wallet-v2 .bsx-card {
@@ -249,4 +269,10 @@
     border-color: rgba(198, 40, 40, 0.45);
     color: #b71c1c;
   }
+  [data-theme="light"] .admin-wallet-v2 .status-pill.signal {
+    background: rgba(2, 136, 209, 0.14);
+    border-color: rgba(2, 136, 209, 0.45);
+    color: #01579b;
+  }
+  [data-theme="light"] .admin-wallet-v2 .wallet-rule-note { color: #b71c1c; }
 </style>

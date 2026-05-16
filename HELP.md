@@ -67,6 +67,55 @@ with the admin credentials the script printed.
      GROUP BY reason;"'
   ```
 
+## Admin UI quick reference
+
+- System Status:
+  `Admin Panel -> System Status` is the main operator page. It shows
+  services, backup state, CPU, memory, swap, disk, network traffic,
+  daemon sync/rules, wallet balances, and payout state in one place.
+- Coin daemons:
+  `SYNC` should read `SYNCED`. `RULES` reads `OK` unless the daemon is
+  actively signaling a known softfork rule, for example
+  `SIGNALING - SEGWIT`. Hover the rules chip for activation details.
+- Wallets:
+  `Balance` is spendable wallet RPC balance, `Locked` is DB-tracked
+  committed payout balance, and `Unconfirmed` is maturing block reward
+  value.
+- Disk:
+  Directory sizes use the read-only helper
+  `/usr/local/sbin/blakestream-mpos-disk-stats`. The deploy installer
+  adds a narrowly scoped sudoers entry so `www-data` can run only that
+  helper without a password. If disk rows show `restricted` or `-`,
+  verify the helper exists, is executable, and the sudoers file was
+  installed.
+- Payout:
+  Use the filter buttons to view `Pending`, `Broadcasted`,
+  `Reconciled`, or `Other`. `Other` means abandoned or unknown payout
+  states and should normally be zero.
+
+## Payout lifecycle
+
+- `Pending` means a manual or automatic payout is queued but has not
+  been sent by the wallet yet.
+- `Broadcasted` means the wallet accepted the send and returned a txid.
+  The TX column stays blank until the daemon reports at least one
+  confirmation, so clicking the link opens correctly in the explorer.
+- `Reconciled` means the payout reached the configured reconciliation
+  confirmation depth and accounting has closed it out.
+- `Indeterminate` means the RPC result was ambiguous. Treat it as a
+  stop-and-investigate state: check the wallet with `listtransactions`
+  or `gettransaction`, reconcile manually, then clear the slot only
+  after you know whether the wallet broadcast the payment.
+- `Abandoned` means the daemon rejected the send and user balance was
+  left unchanged. Investigate the rejection before retrying.
+
+## Admin transactions
+
+The old per-coin transaction menu entries are consolidated under
+`Admin Panel -> Transactions`. Use the coin selector in the transaction
+header to switch both the summary and history table between BLC, PHO,
+BBTC, ELT, UMO, and LIT.
+
 ## Where to read more
 
 - `deploy-bundle/README.md` — what each stage script does, dependency

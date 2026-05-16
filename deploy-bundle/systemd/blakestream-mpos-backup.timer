@@ -1,12 +1,17 @@
 [Unit]
-Description=Daily Blakestream-MPOS backup (timer)
+Description=Schedule for Blakestream-MPOS backup snapshot
+Requires=blakestream-mpos-backup.service
 
 [Timer]
-# Daily at 03:17 local time. Randomised by 5 minutes to avoid stampedes
-# when multiple Blakestream hosts share a backup target.
-OnCalendar=03:17
-RandomizedDelaySec=5m
+# Fire every 30 minutes. The actual decision to run lives in
+# bin/backup.sh, which reads the operator-configured time from the
+# settings table and bails cheaply if we're outside the window or a
+# fresh backup already exists. This way the schedule is admin-editable
+# without giving www-data write access to /etc/systemd/system/.
+OnCalendar=*:0,30
+RandomizedDelaySec=2m
 Persistent=true
+Unit=blakestream-mpos-backup.service
 
 [Install]
 WantedBy=timers.target

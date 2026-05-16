@@ -1,7 +1,8 @@
 # /etc/logrotate.d/blakestream-mpos
 #
-# Retention policy for the MPOS pool stack. See MPOS-Postsegwit.md
-# (the "Log files: kept vs rotated" table) for what each file is for.
+# Retention policy for the MPOS pool stack. Operator-facing service and
+# backup notes live in HELP.md. The deploy script installs these rules
+# into /etc/logrotate.d/blakestream-mpos.
 #
 # Rule of thumb:
 #   - eloipool.log already self-rotates (Python TimedRotatingFileHandler
