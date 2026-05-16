@@ -12,10 +12,10 @@ declare -A RPC_PORT=(
 )
 for sym in blc pho bbtc elt lit umo; do
     port="${RPC_PORT[$sym]}"
-    h=$(curl -fsSL --max-time 5 -u "${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}" \
+    rpc_response=$(curl -fsSL --max-time 20 -u "${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}" \
         --data '{"jsonrpc":"1.0","id":"verify","method":"getblockcount"}' \
-        -H 'content-type: text/plain' "http://127.0.0.1:${port}/" 2>/dev/null \
-        | sed -n 's/.*"result":\([0-9]*\).*/\1/p')
+        -H 'content-type: text/plain' "http://127.0.0.1:${port}/" 2>/dev/null || true)
+    h=$(printf '%s' "$rpc_response" | sed -n 's/.*"result":\([0-9]*\).*/\1/p')
     if [ -n "$h" ]; then
         pass "${sym} height ${h}"
     else
@@ -33,7 +33,22 @@ for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mp
 done
 
 say "ports listening"
-for entry in "stratum:${MPOS_STRATUM_PORT}" "mmproxy:19335" "pool-jsonrpc:19334" "http:${MPOS_HTTP_PORT}"; do
+VERIFY_STRATUM_PORT="${MPOS_STRATUM_PORT:-3334}"
+if [ -r /opt/blakestream-mpos/eloipool/config.py ]; then
+    CONFIG_STRATUM_PORT="$(python3 - <<'PY' 2>/dev/null || true
+import re
+from pathlib import Path
+cfg = Path('/opt/blakestream-mpos/eloipool/config.py')
+m = re.search(r'StratumAddresses\s*=\s*\(\(\s*[\"\'][^\"\']*[\"\']\s*,\s*(\d{2,5})', cfg.read_text(errors='ignore'))
+if m:
+    print(m.group(1))
+PY
+)"
+    if [[ "${CONFIG_STRATUM_PORT}" =~ ^[1-9][0-9]{0,4}$ ]]; then
+        VERIFY_STRATUM_PORT="${CONFIG_STRATUM_PORT}"
+    fi
+fi
+for entry in "stratum:${VERIFY_STRATUM_PORT}" "mmproxy:19335" "pool-jsonrpc:19334" "http:${MPOS_HTTP_PORT}"; do
     name=${entry%:*}; port=${entry#*:}
     if ss -tln | awk '{print $4}' | grep -qE ":(${port})\$"; then
         pass "${name} listening on :${port}"

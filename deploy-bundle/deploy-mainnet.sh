@@ -42,8 +42,13 @@ ELIOPOOL_TMPROOT=""
 ENVRC=""
 
 cleanup() {
-    [ -n "${ELIOPOOL_TMPROOT}" ] && rm -rf "${ELIOPOOL_TMPROOT}"
-    [ -n "${ENVRC}" ] && rm -f "${ENVRC}"
+    if [ -n "${ELIOPOOL_TMPROOT}" ]; then
+        rm -rf "${ELIOPOOL_TMPROOT}"
+    fi
+    if [ -n "${ENVRC}" ]; then
+        rm -f "${ENVRC}"
+    fi
+    return 0
 }
 trap cleanup EXIT
 
@@ -165,6 +170,22 @@ if [ -n "${DAEMON_RPC_USER}" ] && [ -n "${DAEMON_RPC_PASS}" ]; then
     export MPOS_NODE_RPC_USER MPOS_NODE_RPC_PASS
 fi
 
+LIVE_STRATUM_PORT="$(ssh "${HOST}" "python3 - <<'PY' 2>/dev/null || true
+import re
+from pathlib import Path
+cfg = Path('/opt/blakestream-mpos/eloipool/config.py')
+if cfg.is_file():
+    m = re.search(r'StratumAddresses\\s*=\\s*\\(\\(\\s*[\\\"\\'][^\\\"\\']*[\\\"\\']\\s*,\\s*(\\d{2,5})', cfg.read_text(errors='ignore'))
+    if m:
+        print(m.group(1))
+PY
+")"
+if [ -z "${MPOS_STRATUM_PORT+x}" ] && [[ "${LIVE_STRATUM_PORT}" =~ ^[1-9][0-9]{0,4}$ ]]; then
+    say "adopting stratum port ${LIVE_STRATUM_PORT} from live eloipool config"
+    MPOS_STRATUM_PORT="${LIVE_STRATUM_PORT}"
+    export MPOS_STRATUM_PORT
+fi
+
 PRIOR_ENV="$(ssh "${HOST}" 'cat /root/.mpos-deploy.env 2>/dev/null' || true)"
 if [ -n "${PRIOR_ENV}" ]; then
     say "found prior /root/.mpos-deploy.env - adopting non-RPC values "
@@ -179,12 +200,12 @@ if [ -n "${PRIOR_ENV}" ]; then
         if [ "$key" = "MPOS_NODE_RPC_USER" ] || [ "$key" = "MPOS_NODE_RPC_PASS" ]; then
             continue
         fi
-        # Bootstrap timing values are operational tunables, not persistent
-        # secrets. Let the current script defaults or the operator's current
-        # environment win so an old /root/.mpos-deploy.env cannot pin unsafe
-        # timing from a previous release.
+        # Bootstrap timing, stratum port, and skip flags are operational
+        # tunables, not persistent secrets. Let current defaults, the
+        # operator's current environment, or live config win so an old
+        # /root/.mpos-deploy.env cannot pin stale release values.
         case "$key" in
-            BOOTSTRAP_IMPORT_TIMEOUT_S|BOOTSTRAP_IMPORT_SLEEP_S|BOOTSTRAP_DOWNLOAD_ATTEMPTS|BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S|BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S|BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S|TIP_CATCH_TIMEOUT_S|TIP_CATCH_LAG)
+            MPOS_STRATUM_PORT|BOOTSTRAP_IMPORT_TIMEOUT_S|BOOTSTRAP_IMPORT_SLEEP_S|BOOTSTRAP_DOWNLOAD_ATTEMPTS|BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S|BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S|BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S|TIP_CATCH_TIMEOUT_S|TIP_CATCH_LAG|SKIP_DAEMONS|SKIP_BOOTSTRAP)
                 continue
                 ;;
         esac
@@ -230,6 +251,7 @@ export BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S="${BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOU
 export BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S="${BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S:-90}"
 export TIP_CATCH_TIMEOUT_S="${TIP_CATCH_TIMEOUT_S:-7200}"
 export TIP_CATCH_LAG="${TIP_CATCH_LAG:-5}"
+export MPOS_DAEMON_STOP_TIMEOUT_S="${MPOS_DAEMON_STOP_TIMEOUT_S:-900}"
 export SKIP_DAEMONS="${SKIP_DAEMONS:-0}"
 export SKIP_BOOTSTRAP="${SKIP_BOOTSTRAP:-0}"
 
@@ -255,8 +277,8 @@ require_pattern MPOS_DB_PORT      "${MPOS_DB_PORT}"      '[1-9][0-9]{0,4}'
 require_pattern MPOS_ADMIN_USER   "${MPOS_ADMIN_USER}"   '[A-Za-z0-9_]{1,32}'
 require_pattern MPOS_ADMIN_PASS   "${MPOS_ADMIN_PASS}"   '[A-Za-z0-9_+=:,.@%/-]{8,128}'
 require_pattern MPOS_ADMIN_EMAIL  "${MPOS_ADMIN_EMAIL}"  '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+'
-require_pattern MPOS_SALT         "${MPOS_SALT}"         '[A-Fa-f0-9]{32,128}'
-require_pattern MPOS_SALTY        "${MPOS_SALTY}"        '[A-Fa-f0-9]{32,128}'
+require_pattern MPOS_SALT         "${MPOS_SALT}"         '[A-Fa-f0-9]{8,128}'
+require_pattern MPOS_SALTY        "${MPOS_SALTY}"        '[A-Fa-f0-9]{8,128}'
 require_pattern MPOS_API_TOKEN    "${MPOS_API_TOKEN}"    '[A-Fa-f0-9]{8,128}'
 require_pattern MPOS_NODE_RPC_USER "${MPOS_NODE_RPC_USER}" '[A-Za-z0-9_@%+=:,./-]{1,64}'
 require_pattern MPOS_NODE_RPC_PASS "${MPOS_NODE_RPC_PASS}" '[A-Za-z0-9_@%+=:,./-]{16,128}'
@@ -291,7 +313,7 @@ ENVRC=$(mktemp)
                BOOTSTRAP_IMPORT_TIMEOUT_S BOOTSTRAP_IMPORT_SLEEP_S \
                BOOTSTRAP_DOWNLOAD_ATTEMPTS BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S \
                BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S \
-               TIP_CATCH_TIMEOUT_S TIP_CATCH_LAG \
+               TIP_CATCH_TIMEOUT_S TIP_CATCH_LAG MPOS_DAEMON_STOP_TIMEOUT_S \
                SKIP_DAEMONS SKIP_BOOTSTRAP; do
         printf 'export %s=%s\n' "$var" "${!var}"
     done

@@ -14,6 +14,7 @@ warn() { printf '\033[1;31m!! %s\033[0m\n' "$*" >&2; }
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
 MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 MPOS_EXPLORER_API_BASE="${MPOS_EXPLORER_API_BASE:-https://explorer.blakestream.io/api}"
+MPOS_DAEMON_STOP_TIMEOUT_S="${MPOS_DAEMON_STOP_TIMEOUT_S:-900}"
 
 COINS=(blc pho bbtc elt lit umo)
 
@@ -203,13 +204,15 @@ stop_existing_container() {
     docker update --restart=no "$coin" >/dev/null 2>&1 || true
     if docker ps --format '{{.Names}}' | grep -qx "$coin"; then
         docker exec "$coin" "/usr/local/bin/${cli}" "-datadir=/root/${config_dir}" stop >/dev/null 2>&1 || true
-        for _ in $(seq 1 60); do
+        local rpc_wait_iterations=$((MPOS_DAEMON_STOP_TIMEOUT_S / 5))
+        [ "$rpc_wait_iterations" -ge 1 ] || rpc_wait_iterations=1
+        for _ in $(seq 1 "$rpc_wait_iterations"); do
             if ! docker ps --format '{{.Names}}' | grep -qx "$coin"; then
                 break
             fi
             sleep 5
         done
-        docker stop -t 300 "$coin" >/dev/null 2>&1 || true
+        docker stop -t "$MPOS_DAEMON_STOP_TIMEOUT_S" "$coin" >/dev/null 2>&1 || true
     fi
     docker rm -f "$coin" >/dev/null 2>&1 || true
 }
@@ -228,7 +231,7 @@ launch_coin() {
         --name "$coin" \
         --net=host \
         --restart=unless-stopped \
-        --stop-timeout 300 \
+        --stop-timeout "$MPOS_DAEMON_STOP_TIMEOUT_S" \
         -v "${datadir}:${datadir}" \
         "$image" \
         /bin/sh -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}" \
