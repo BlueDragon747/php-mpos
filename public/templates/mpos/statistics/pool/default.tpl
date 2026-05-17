@@ -110,8 +110,7 @@
         <button type="button"
                 class="pool-coin-tab chain-pill chain-{$tk|escape|lower}"
                 role="tab"
-                data-coin="{$tk|escape}"
-                data-tooltip="{$COIN_NAMES[$tk]|default:$tk|escape}">{$tk|escape}</button>
+                data-coin="{$tk|escape}">{$tk|escape}</button>
 {/foreach}
       </nav>
     </header>

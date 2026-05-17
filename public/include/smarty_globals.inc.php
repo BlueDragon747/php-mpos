@@ -195,7 +195,7 @@ $aGlobal = array(
     'currency' => $config['currency'],
     'currency_mm' => $config['currency_mm'],
     'currency_mm1' => $config['currency_mm1'],
-
+    'currency_mm2' => $config['currency_mm2'],
     'currency_mm3' => $config['currency_mm3'],
     'currency_mm4' => $config['currency_mm4'],
     'currency_mm5' => $config['currency_mm5'],

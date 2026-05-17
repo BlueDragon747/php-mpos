@@ -78,8 +78,8 @@ $config['wallet_mm1']['username'] = 'blakebitcoin';
 $config['wallet_mm1']['password'] = 'x';
 
 $config['wallet_mm2']['type'] = 'http';
-$config['wallet_mm2']['host'] = 'localhost:12000';  // Lithium mainnet RPC
-$config['wallet_mm2']['username'] = 'lithium';
+$config['wallet_mm2']['host'] = 'localhost:12000';  // reserved legacy aux slot
+$config['wallet_mm2']['username'] = 'unused1';
 $config['wallet_mm2']['password'] = 'x';
 
 $config['wallet_mm3']['type'] = 'http';
@@ -93,8 +93,8 @@ $config['wallet_mm4']['username'] = 'umo';
 $config['wallet_mm4']['password'] = 'x';
 
 $config['wallet_mm5']['type'] = 'http';
-$config['wallet_mm5']['host'] = 'localhost:123';
-$config['wallet_mm5']['username'] = 'tba1';
+$config['wallet_mm5']['host'] = 'localhost:12345';  // Lithium mainnet RPC
+$config['wallet_mm5']['username'] = 'lithium';
 $config['wallet_mm5']['password'] = 'x';
 
 $config['wallet_mm6']['type'] = 'http';
@@ -236,10 +236,10 @@ $config['accounts']['invitations']['count'] = 5;
 $config['currency']     = 'BLC';
 $config['currency_mm']  = 'PHO';   // Photon
 $config['currency_mm1'] = 'BBTC';  // BlakeBitcoin (was HTML entity; plain ticker is safer)
-$config['currency_mm2'] = 'LIT';   // Lithium (was Dirac — no longer shipped)
+$config['currency_mm2'] = 'unused1';  // reserved legacy aux slot
 $config['currency_mm3'] = 'ELT';   // Electron
 $config['currency_mm4'] = 'UMO';   // Universalmolecule
-$config['currency_mm5'] = 'unused1';  // free slot — see header for re-use checklist
+$config['currency_mm5'] = 'LIT';   // Lithium
 $config['currency_mm6'] = 'unused2';  // free slot — see header for re-use checklist
 
 
