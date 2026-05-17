@@ -89,8 +89,8 @@ if [ ! -f "$GLOBAL" ]; then
     cp "$GLOBAL_DIST" "$GLOBAL"
 fi
 
-sed -i "s|^\\\$config\\['SALT'\\] = '[^']*';|\\\$config['SALT'] = '${MPOS_SALT}';|" "$GLOBAL"
-sed -i "s|^\\\$config\\['SALTY'\\] = '[^']*';|\\\$config['SALTY'] = '${MPOS_SALTY}';|" "$GLOBAL"
+sed -i -E "s|^\\\$config\\['SALT'\\][[:space:]]*=[[:space:]]*'[^']*';|\\\$config['SALT'] = '${MPOS_SALT}';|" "$GLOBAL"
+sed -i -E "s|^\\\$config\\['SALTY'\\][[:space:]]*=[[:space:]]*'[^']*';|\\\$config['SALTY'] = '${MPOS_SALTY}';|" "$GLOBAL"
 sed -i "s|^\\\$config\\['db'\\]\\['host'\\] = '[^']*';|\\\$config['db']['host'] = '${MPOS_DB_HOST}';|" "$GLOBAL"
 sed -i "s|^\\\$config\\['db'\\]\\['user'\\] = '[^']*';|\\\$config['db']['user'] = '${MPOS_DB_USER}';|" "$GLOBAL"
 sed -i "s|^\\\$config\\['db'\\]\\['pass'\\] = '[^']*';|\\\$config['db']['pass'] = '${MPOS_DB_PASS}';|" "$GLOBAL"
@@ -99,7 +99,8 @@ sed -i "s|^\\\$config\\['db'\\]\\['name'\\] = '[^']*';|\\\$config['db']['name'] 
 sed -i "s|^\\\$config\\['system'\\]\\['load'\\]\\['max'\\] = [0-9.]*;|\\\$config['system']['load']['max'] = 100.0;|" "$GLOBAL"
 
 # Stratum URL on the Getting Started page.
-sed -i "s|^\\\$config\\['gettingstarted'\\]\\['stratumurl'\\] = '[^']*';|\\\$config['gettingstarted']['stratumurl'] = 'stratum+tcp://${HOST_IP}:${MPOS_STRATUM_PORT}/';|" "$GLOBAL"
+sed -i "s|^\\\$config\\['gettingstarted'\\]\\['stratumurl'\\] = '[^']*';|\\\$config['gettingstarted']['stratumurl'] = '${HOST_IP}';|" "$GLOBAL"
+sed -i "s|^\\\$config\\['gettingstarted'\\]\\['stratumport'\\] = '[^']*';|\\\$config['gettingstarted']['stratumport'] = '${MPOS_STRATUM_PORT}';|" "$GLOBAL"
 
 # Mainnet daemon RPC ports.
 python3 - <<PY "$GLOBAL"
