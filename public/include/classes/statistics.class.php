@@ -641,16 +641,17 @@ class Statistics extends Base {
    * @param username string username
    * @return data int Current hashrate in khash/s
    **/
-  public function getWorkerHashrate($workername, $worker_id=NULL, $interval=180) {
+  public function getWorkerHashrate($workername, $worker_id=NULL, $interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     if ($data = $this->memcache->get(__FUNCTION__ . $worker_id)) return $data;
     $stmt = $this->mysqli->prepare("
-      SELECT IFNULL(ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 600 / 1000), 0) AS hashrate
+      SELECT IFNULL(ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
       FROM " . $this->share->getTableName() . " AS
       WHERE username = '?'
         AND our_result = 'Y'
         AND time > DATE_SUB(now(), INTERVAL ? SECOND)");
-    if ($this->checkStmt($stmt) && $stmt->bind_param("si", $workername, $interval) && $stmt->execute() && $result = $stmt->get_result())
+    if ($this->checkStmt($stmt) && $stmt->bind_param("isi", $interval, $workername, $interval) && $stmt->execute() && $result = $stmt->get_result())
       return $this->memcache->setCache(__FUNCTION__ . $worker_id, (float)$result->fetch_object()->hashrate);
     return $this->sqlError();
   }
