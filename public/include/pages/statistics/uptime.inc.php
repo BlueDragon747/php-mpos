@@ -22,4 +22,5 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $debug->append('Using cached page', 3);
 }
 
+
 ?>

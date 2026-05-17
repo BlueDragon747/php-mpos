@@ -18,16 +18,27 @@ if (!@include_once(BASEPATH . 'include/config/global.inc.php')) die('Unable to l
 if (!include_once(BASEPATH . 'include/config/security.inc.dist.php')) die('Unable to load base security config - '.$quickstartlink);
 if (@file_exists(BASEPATH . 'include/config/security.inc.php')) include_once(BASEPATH . 'include/config/security.inc.php');
 
-// start our session, we need it for smarty caching
-session_set_cookie_params(time()+$config['cookie']['duration'], $config['cookie']['path'], $config['cookie']['domain'], $config['cookie']['secure'], $config['cookie']['httponly']);
-$session_start = @session_start();
-if (!$session_start) {
-    $log->log("info", "Forcing session id regeneration, session failed to start [hijack attempt?]");
-      session_destroy();
-      session_regenerate_id(true);
-        session_start();
+// API endpoints authenticate with API keys and do not use $_SESSION. Avoid
+// opening the PHP session there so AJAX polling cannot block on session locks
+// held by slower page requests in another browser tab.
+$is_api_request = isset($_REQUEST['page']) && !is_array($_REQUEST['page']) && $_REQUEST['page'] === 'api';
+if ($is_api_request) {
+  $_SESSION = array();
+} else {
+  // start our session, we need it for smarty caching
+  if (!empty($config['cookie']['name'])) {
+    session_name($config['cookie']['name']);
+  }
+  session_set_cookie_params(time()+$config['cookie']['duration'], $config['cookie']['path'], $config['cookie']['domain'], $config['cookie']['secure'], $config['cookie']['httponly']);
+  $session_start = @session_start();
+  if (!$session_start) {
+      $log->log("info", "Forcing session id regeneration, session failed to start [hijack attempt?]");
+        session_destroy();
+        session_regenerate_id(true);
+          session_start();
+  }
+  @setcookie(session_name(), session_id(), time()+$config['cookie']['duration'], $config['cookie']['path'], $config['cookie']['domain'], $config['cookie']['secure'], $config['cookie']['httponly']);
 }
-@setcookie(session_name(), session_id(), time()+$config['cookie']['duration'], $config['cookie']['path'], $config['cookie']['domain'], $config['cookie']['secure'], $config['cookie']['httponly']);
 
 // Our default template to load, pages can overwrite this later
 $master_template = 'master.tpl';

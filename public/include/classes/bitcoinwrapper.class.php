@@ -5,10 +5,22 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
  * We use a wrapper class around BitcoinClient to add
  * some basic caching functionality and some debugging
  **/
+#[\AllowDynamicProperties]
 class BitcoinWrapper extends BitcoinClient {
   private $socket_timeout = 3; // 3 second timeout for all connections
   private $port;
-  
+  // Declared to silence PHP 8.2+ "Creation of dynamic property" on the
+  // simple scalar fields the constructor stashes. #[AllowDynamicProperties]
+  // above keeps any other runtime additions from spamming the log; remove
+  // the attribute once the codebase no longer needs the safety net.
+  protected $type;
+  protected $username;
+  protected $password;
+  protected $host;
+  protected $debug_level;
+  protected $debug_object;
+  protected $memcache;
+
   public function __construct($type, $username, $password, $host, $debug_level, $debug_object, $memcache) {
     $this->type = $type;
     $this->username = $username;

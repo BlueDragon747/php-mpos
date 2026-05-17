@@ -19,6 +19,27 @@ $aSettings['website'][] = array(
   'tooltip' => 'Display a message of the day as information popup if set.'
 );
 $aSettings['website'][] = array(
+  'display' => 'Display mode', 'type' => 'select',
+  'options' => array('always' => 'Always show', 'popup' => 'Pop-up notice'),
+  'default' => 'always',
+  'name' => 'system_motd_display_mode', 'value' => $setting->getValue('system_motd_display_mode'),
+  'inline_with' => 'system_motd',
+);
+$aSettings['website'][] = array(
+  'display' => 'Hashrate Window (seconds)', 'type' => 'text',
+  'size' => 6,
+  'default' => 900,
+  'name' => 'hashrate_window_seconds', 'value' => $setting->getValue('hashrate_window_seconds'),
+  'tooltip' => 'Per-tick sampling window the cron uses to read raw hashrate before EMA smoothing. Default 900, minimum 60.'
+);
+$aSettings['website'][] = array(
+  'display' => 'Hashrate Smoothing (seconds)', 'type' => 'text',
+  'size' => 6,
+  'default' => 300,
+  'name' => 'hashrate_ema_tau_seconds', 'value' => $setting->getValue('hashrate_ema_tau_seconds'),
+  'tooltip' => 'EMA time constant for the displayed hashrate. Half-life ≈ 0.7 × this value. Larger = steadier number that lags real changes; smaller = jumpier number that reacts faster. Default 300 (~3.5 min half-life), minimum 60.'
+);
+$aSettings['website'][] = array(
   'display' => 'Website Name', 'type' => 'text',
   'size' => 25,
   'default' => 'The Pool',
@@ -243,6 +264,18 @@ $aSettings['acl'][] = array(
   'name' => 'acl_block_statistics', 'value' => $setting->getValue('acl_block_statistics'),
   'tooltip' => 'Make the block statistics page private (users only) or public.'
 );
+// Inline-attached toggle: rendered next to the Block Statistics row's
+// tooltip in the admin settings UI (settings/default.tpl handles the
+// inline placement when 'inline_with' is set). Hide the coin filter
+// and Older/Newer pager from non-admin viewers (admin always sees
+// them). On by default.
+$aSettings['acl'][] = array(
+  'display' => 'Block Navigation for Non-Admin', 'type' => 'select',
+  'options' => array( 0 => 'Show', 1 => 'Hide'),
+  'default' => 1,
+  'name' => 'acl_block_statistics_hide_nav', 'value' => $setting->getValue('acl_block_statistics_hide_nav'),
+  'inline_with' => 'acl_block_statistics',
+);
 $aSettings['acl'][] = array(
   'display' => 'Round Statistics', 'type' => 'select',
   'options' => array( 0 => 'Private', 1 => 'Public'),
@@ -270,6 +303,13 @@ $aSettings['system'][] = array(
   'default' => 'test@example.com',
   'name' => 'system_error_email', 'value' => $setting->getValue('system_error_email'),
   'tooltip' => 'The email address for system errors notifications, like cronjobs failures.'
+);
+$aSettings['system'][] = array(
+  'display' => 'Daily Backups', 'type' => 'select',
+  'options' => array( 1 => 'Enabled', 0 => 'Disabled' ),
+  'default' => 1,
+  'name' => 'backups_enabled', 'value' => $setting->getValue('backups_enabled'),
+  'tooltip' => 'Enable or disable the daily DB + wallet backup.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable e-mail confirmations', 'type' => 'select',
@@ -302,9 +342,9 @@ $aSettings['system'][] = array(
 $aSettings['system'][] = array(
   'display' => 'Disable Manual Payouts', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
-  'default' => 0,
+  'default' => 1,
   'name' => 'disable_manual_payouts', 'value' => $setting->getValue('disable_manual_payouts'),
-  'tooltip' => 'Enable or Disable manual payouts. Users will not be able to withdraw any funds manually if disabled. Will NOT be logged in monitoring page.'
+  'tooltip' => 'Enable or Disable manual payouts. Users will not be able to withdraw any funds manually if disabled. Will NOT be logged in monitoring page. Off by default on fresh installs.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable Auto Payout', 'type' => 'select',
@@ -323,9 +363,9 @@ $aSettings['system'][] = array(
 $aSettings['system'][] = array(
   'display' => 'Disable Contactform', 'type' => 'select',
   'options' => array( 0 => 'No', 1 => 'Yes' ),
-  'default' => 0,
+  'default' => 1,
   'name' => 'disable_contactform', 'value' => $setting->getValue('disable_contactform'),
-  'tooltip' => 'Enable or Disable Contactform. Users will not be able to use the contact form.'
+  'tooltip' => 'Enable or Disable Contactform. Users will not be able to use the contact form. Off by default on fresh installs.'
 );
 $aSettings['system'][] = array(
   'display' => 'Disable Contactform for Guests', 'type' => 'select',
@@ -445,4 +485,21 @@ $aSettings['notifications'][] = array(
   'default' => 0,
   'name' => 'notifications_disable_block', 'value' => $setting->getValue('notifications_disable_block'),
   'tooltip' => 'Enable/Disable block notifications globally. Will remove the user option too.'
+);
+
+// Tab labels for the admin Settings page. The template falls back to
+// the array key (capitalised) when a tab isn't listed here — so any
+// future tab added to $aSettings still renders, just without a custom
+// display name. Acronyms (ACL, reCAPTCHA) read better than the
+// default `{$TAB|capitalize}` output.
+$aSettingsTabLabels = array(
+  'website'       => 'Website',
+  'blockchain'    => 'Blockchain',
+  'wallet'        => 'Wallet',
+  'statistics'    => 'Statistics',
+  'acl'           => 'ACL',
+  'system'        => 'System',
+  'recaptcha'     => 'reCAPTCHA',
+  'monitoring'    => 'Monitoring',
+  'notifications' => 'Notifications',
 );

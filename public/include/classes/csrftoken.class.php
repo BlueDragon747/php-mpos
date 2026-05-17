@@ -68,25 +68,32 @@ class CSRFToken Extends Base {
   }
   
   /**
-   * Convenience method to get a token expired message with a token type, and ? image with description
-   * @param string $tokentype if you want a specific tokentype, set it here
-   * @param string $dowhat What will be put in the string "Simply $dowhat again to...", default is try
+   * Plain-text "session expired" message shown to a user when a
+   * page-level CSRF token didn't match. Returned as a single line of
+   * text — no HTML — so the v2 SPA can render it via text interpolation
+   * without leaking raw markup, and legacy Smarty templates can show it
+   * as-is. The questionmark-image tooltip from the upstream version is
+   * dropped: the message itself is enough, and the operator-facing
+   * "tokens mitigate attacks" tooltip never told end users anything
+   * actionable.
+   * @param string $tokentype optional context (e.g. "withdraw")
+   * @param string $dowhat unused; kept for upstream signature parity
    */
   public static function getErrorWithDescriptionHTML($tokentype="", $dowhat="try") {
-    return ($tokentype !== "") ? "$tokentype token expired, please try again ".self::getDescriptionImageHTML($dowhat) : "Token expired, please try again ".self::getDescriptionImageHTML($dowhat);
+    if ($tokentype !== "") {
+      return "Your session has expired. Please try " . $tokentype . " again.";
+    }
+    return "Your session has expired. Please try again.";
   }
-  
+
   /**
-   * Gets the HTML image (?) with short csrf description for users for the incorrect token error message
-   * @param dowhat string What will be put in the string "Simply $dowhat again to...", default is try
-   * @return string HTML image with description
+   * Back-compat stub for any caller that still wants the legacy
+   * questionmark-image tooltip. The v2 SPA never renders HTML in
+   * popups, so this returns an empty string by default; if you want
+   * to surface the tooltip in a legacy Smarty page, override there.
    */
   public static function getDescriptionImageHTML($dowhat="try") {
-    $string = "<img src='site_assets/mpos/images/questionmark.png' ";
-    $string.= "title='Tokens are used to help us mitigate attacks; Simply ";
-    $string.= htmlentities(strip_tags($dowhat));
-    $string.= " again to continue' width='20px' height='20px'>";
-    return $string;
+    return "";
   }
   
   private function getHash($string) {

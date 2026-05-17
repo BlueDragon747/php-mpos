@@ -1,509 +1,145 @@
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="updateAccount">
-  <article class="module width_half">
-    <header><h3>Account Details</h3></header>
+{if !$smarty.session.AUTHENTICATED|default}
+  <article class="module module width_full">
+    <header><h3>Edit Account</h3></header>
     <div class="module_content">
-      <fieldset>
-        <label>Username</label>
-        <input type="text" value="{$GLOBAL.userdata.username|escape}" disabled />
-      </fieldset>
-      <fieldset>
-        <label>User Id</label>
-        <input type="text" value="{$GLOBAL.userdata.id}" disabled />
-      </fieldset>
-      {if !$GLOBAL.website.api.disabled}
-      <fieldset>
-        <label>API Key</label>
-        <a href="{$smarty.server.SCRIPT_NAME}?page=api&action=getuserstatus&api_key={$GLOBAL.userdata.api_key}&id={$GLOBAL.userdata.id}">{$GLOBAL.userdata.api_key}</a>
-      </fieldset>
-      {/if}
-      <fieldset>
-        <label>E-Mail</label>
-        {nocache}<input type="text" name="email" value="{$GLOBAL.userdata.email|escape}" size="20" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress" value="{$smarty.request.paymentAddress|default:$GLOBAL.userdata.coin_address|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm" value="{$smarty.request.paymentAddress_mm|default:$GLOBAL.userdata.coin_address_mm|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm1} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm1" value="{$smarty.request.paymentAddress_mm1|default:$GLOBAL.userdata.coin_address_mm1|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm3} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm3" value="{$smarty.request.paymentAddress_mm3|default:$GLOBAL.userdata.coin_address_mm3|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm4} Payment Address</label>
-        {nocache}<input type="text" name="paymentAddress_mm4" value="{$smarty.request.paymentAddress_mm4|default:$GLOBAL.userdata.coin_address_mm4|escape}" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm5} Payment Address</label>
-      <font size="2">Unused payment address no need to change!</font>
-        {nocache}<input type="text" name="paymentAddress_mm5" value="unused1" size="40"  {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-      <fieldset>
-        <label>Donation Percentage</label>
-        <font size="1"> Donation amount in percent ({$DONATE_THRESHOLD.min}-100%)</font>
-        {nocache}<input type="text" name="donatePercent" value="{$smarty.request.donatePercent|default:$GLOBAL.userdata.donate_percent|escape|number_format:"2"}" size="4" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency} Automatic Payout Threshold</label>
-        </br>
-        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold.min}-{$GLOBAL.config.ap_threshold.max} {$GLOBAL.config.currency}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold" value="{nocache}{$smarty.request.payoutThreshold|default:$GLOBAL.userdata.ap_threshold|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm} Automatic Payout Threshold</label>
-        </br>
-        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm.min}-{$GLOBAL.config.ap_threshold_mm.max} {$GLOBAL.config.currency_mm}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold_mm" value="{nocache}{$smarty.request.payoutThreshold_mm|default:$GLOBAL.userdata.ap_threshold_mm|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm1} Automatic Payout Threshold</label>
-        </br>
-        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm1.min}-{$GLOBAL.config.ap_threshold_mm1.max} {$GLOBAL.config.currency_mm1}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm1} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold_mm1" value="{nocache}{$smarty.request.payoutThreshold_mm1|default:$GLOBAL.userdata.ap_threshold_mm1|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm1.max1|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm1.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm3} Automatic Payout Threshold</label>
-        </br>
-        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm3.min}-{$GLOBAL.config.ap_threshold_mm3.max} {$GLOBAL.config.currency_mm3}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm3} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold_mm3" value="{nocache}{$smarty.request.payoutThreshold_mm3|default:$GLOBAL.userdata.ap_threshold_mm3|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm3.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm3.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm4} Automatic Payout Threshold</label>
-        </br>
-        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm4.min}-{$GLOBAL.config.ap_threshold_mm4.max} {$GLOBAL.config.currency_mm4}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm4} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold_mm4" value="{nocache}{$smarty.request.payoutThreshold_mm4|default:$GLOBAL.userdata.ap_threshold_mm4|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm4.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm4.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
-      </fieldset>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm5} Automatic Payout Threshold</label>
-        </br>
-        <font size="1" style="margin: 0px -200px;">{$GLOBAL.config.ap_threshold_mm5.min}-{$GLOBAL.config.ap_threshold_mm5.max} {$GLOBAL.config.currency_mm5}. Set to '0' for no auto payout. A {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} {$GLOBAL.config.currency_mm5} TX fee will apply <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_auto > 0.00001}{$GLOBAL.config.txfee_auto}{else}{$GLOBAL.config.txfee_auto|number_format:"8"}{/if} automatic payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span></font>
-        <input type="text" name="payoutThreshold_mm5" value="{nocache}{$smarty.request.payoutThreshold_mm5|default:$GLOBAL.userdata.ap_threshold_mm5|escape}{/nocache}" size="{$GLOBAL.config.ap_threshold_mm5.max|strlen}" maxlength="{$GLOBAL.config.ap_threshold_mm5.max|strlen}" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>
-      </fieldset>
-
-      <fieldset>
-        <label>Anonymous Account</label>
-        Hide username on website from others. Admins can still get your user information.
-        <label class="checkbox" for="is_anonymous">
-        <input class="ios-switch" type="hidden" name="is_anonymous" value="0" />
-        {nocache}<input class="ios-switch" type="checkbox" name="is_anonymous" value="1" id="is_anonymous" {if $GLOBAL.userdata.is_anonymous}checked{/if} {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details && !$DETAILSUNLOCKED}disabled{/if}/>{/nocache}
-        <div class="switch"></div>
-        </label>
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <font size="1">The 4 digit PIN you chose when registering</font>
-        <input type="password" name="authPin" size="4" maxlength="4">
-      </fieldset>
+      <p>You must be logged in to view this page.</p>
     </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="ea_token" value="{$smarty.request.ea_token|escape|default:""}">
-        <input type="hidden" name="utype" value="account_edit">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.details}
-          {if $DETAILSSENT == 1 && $DETAILSUNLOCKED == 1}
-          	<input type="submit" value="Update Account" class="alt_btn">
-          {elseif $DETAILSSENT == 0 && $DETAILSUNLOCKED == 1 || $DETAILSSENT == 1 && $DETAILSUNLOCKED == 0}
-            <input type="submit" value="Update Account" class="alt_btn" disabled>
-          {elseif $DETAILSSENT == 0 && $DETAILSUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Update Account" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
   </article>
-</form>
-
-{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="cashOut">
-  <article class="module width_half">
-    <header>
-      <h3>{$GLOBAL.config.currency} Cash Out</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
-        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
-      </p>
-      <fieldset>
-        <label>{$GLOBAL.config.currency} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance.confirmed|escape}" {$GLOBAL.config.currency} disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address|escape}" disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="withdraw_funds">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
-          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
-          	<input type="submit" value="Cash Out" class="alt_btn">
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Cash Out" class="alt_btn" disabled>
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Cash Out" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
+{else}
+  {if $AE_CSS}
+    {foreach from=$AE_CSS item=cssPath}
+      <link rel="stylesheet" href="{$cssPath}">
+    {/foreach}
+  {/if}
+  {* SPA mounts here directly. Same approach as dashboard's v2 wrapper —
+     no <article class="module"> shell so the legacy 38 px header banner
+     and `.module_content { margin: 10px 20px }` don't fight the v2
+     layout. The SPA renders its own scoped cards. *}
+  <div id="bsx-v2-shell">
+    <div id="app-account-edit"
+         data-initial='{$AE_INITIAL_JSON nofilter}'></div>
+  </div>
+  {if $AE_JS}
+    <script type="module" src="{$AE_JS}"></script>
+  {else}
+    <p style="color:#e57373; padding: 1em;">
+      v2 build not deployed. From a checkout of this repo, run
+      <code>cd frontend &amp;&amp; bun install &amp;&amp; bun run build</code>
+      and rsync <code>public/v2/</code> to the host.
+    </p>
+  {/if}
 {/if}
 
-{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="cashOut_mm">
-  <article class="module width_half">
-    <header>
-      <h3>{$GLOBAL.config.currency_mm} Cash Out</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
-        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
-      </p>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm.confirmed|escape}" {$GLOBAL.config.currency_mm} disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm|escape}" disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="withdraw_funds">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
-          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
-          	<input type="submit" value="Cash Out" class="alt_btn">
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Cash Out" class="alt_btn" disabled>
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Cash Out" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
-{/if}
+<style>
+  /* Outer shell — sits where the legacy .module wrapper used to be.
+     16 px gutters match the dashboard's internal grid gap so the
+     sidebar→main spacing reads consistent across pages. */
+  #bsx-v2-shell {
+    margin: 0 16px 6px 16px;
+  }
+  /* Layout.css has a 20 px `.spacer` between page content and the
+     footer that's too tall for our pages. Collapse it. */
+  section#main > .spacer { height: 0; }
 
-{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="cashOut_mm1">
-  <article class="module width_half">
-    <header>
-      <h3>{$GLOBAL.config.currency_mm1} Cash Out</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
-        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm1} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
-      </p>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm1} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm1.confirmed|escape}" {$GLOBAL.config.currency_mm1} disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm1|escape}" disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="withdraw_funds">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
-          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
-          	<input type="submit" value="Cash Out" class="alt_btn">
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Cash Out" class="alt_btn" disabled>
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Cash Out" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
-{/if}
+  /* Visually blend the left sidebar with the secondary_bar above it
+     (the "Welcome admin" / breadcrumb strip): same background colour,
+     no negative top margin, no top padding. */
+  aside#sidebar {
+    background: var(--bg-secondary);
+    margin-top: 0;
+    padding-top: 0;
+    min-height: 0;
+  }
+  /* Kill the legacy sidebar_shadow.png + min-height:85% on section#main
+     so the empty space below the content collapses to content height. */
+  section#main {
+    background: none;
+    min-height: 0;
+  }
 
-{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="cashOut_mm3">
-  <article class="module width_half">
-    <header>
-      <h3>{$GLOBAL.config.currency_mm3} Cash Out</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
-        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm3} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
-      </p>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm3} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm3.confirmed|escape}" {$GLOBAL.config.currency_mm3} disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm3|escape}" disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="withdraw_funds">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
-          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
-          	<input type="submit" value="Cash Out" class="alt_btn">
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Cash Out" class="alt_btn" disabled>
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Cash Out" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
-{/if}
+  /* Light-mode overrides — scoped to [data-theme="light"] #bsx-v2-shell
+     so they ONLY trigger when MPOS's sidebar Light Mode toggle is on
+     (theme.js sets data-theme="light" on <html>). Dark mode is the
+     default state and never matches this selector. */
+  [data-theme="light"] #bsx-v2-shell .bsx-section {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.10);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-section-head h2 { color: #1976d2; }
+  [data-theme="light"] #bsx-v2-shell .bsx-card {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.10);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-card header {
+    background: #f1f3f5;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-card h3 { color: #1f2933; }
 
-{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="cashOut_mm4">
-  <article class="module width_half">
-    <header>
-      <h3>{$GLOBAL.config.currency_mm4} Cash Out</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
-        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm4} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
-      </p>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm4} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm4.confirmed|escape}" {$GLOBAL.config.currency_mm4} disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm4|escape}" disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="withdraw_funds">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
-          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
-          	<input type="submit" value="Cash Out" class="alt_btn">
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Cash Out" class="alt_btn" disabled>
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Cash Out" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
-{/if}
+  [data-theme="light"] #bsx-v2-shell .kv label,
+  [data-theme="light"] #bsx-v2-shell .kv-checkbox,
+  [data-theme="light"] #bsx-v2-shell .bsx-note,
+  [data-theme="light"] #bsx-v2-shell .kv-hint { color: #2d3748; }
 
-{if !$GLOBAL.config.disable_payouts && !$GLOBAL.config.disable_manual_payouts}
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="cashOut_mm5">
-  <article class="module width_half">
-    <header>
-      <h3>{$GLOBAL.config.currency_mm5} Cash Out</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:3px; padding-redight:30px; font-size:10px;">
-        Please note: a {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} {$GLOBAL.config.currency_mm5} transaction will apply when processing "On-Demand" manual payments <span id="tt"><img width="15px" height="15px" title="This {if $GLOBAL.config.txfee_manual > 0.00001}{$GLOBAL.config.txfee_manual}{else}{$GLOBAL.config.txfee_manual|number_format:"8"}{/if} manual payment transaction fee is a network fee and goes back into the network not the pool." src="site_assets/mpos/images/questionmark.png"></span>
-      </p>
-      <fieldset>
-        <label>{$GLOBAL.config.currency_mm5} Account Balance</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.balance_mm5.confirmed|escape}" {$GLOBAL.config.currency_mm5} disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Payout to</label>
-        {nocache}<input type="text" value="{$GLOBAL.userdata.coin_address_mm5|escape}" disabled />{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="wf_token" value="{$smarty.request.wf_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="withdraw_funds">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.withdraw}
-          {if $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 1}
-          	<input type="submit" value="Cash Out" class="alt_btn">
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 1 || $WITHDRAWSENT == 1 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Cash Out" class="alt_btn" disabled>
-          {elseif $WITHDRAWSENT == 0 && $WITHDRAWUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Cash Out" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
-{/if}
+  [data-theme="light"] #bsx-v2-shell .kv input[type=text],
+  [data-theme="light"] #bsx-v2-shell .kv input[type=email],
+  [data-theme="light"] #bsx-v2-shell .kv input[type=password],
+  [data-theme="light"] #bsx-v2-shell .kv input[type=number],
+  [data-theme="light"] #bsx-v2-shell .cash-out-pin {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.18);
+    color: #1f2933;
+  }
 
+  [data-theme="light"] #bsx-v2-shell .bsx-popup { color: #1f2933; }
+  [data-theme="light"] #bsx-v2-shell .bsx-popup            { background: rgba(25, 118, 210, 0.08); border-left-color: #1976d2; border-right-color: #1976d2; }
+  [data-theme="light"] #bsx-v2-shell .bsx-popup-success    { background: rgba(46, 125, 50, 0.10); border-left-color: #2e7d32; border-right-color: #2e7d32; }
+  [data-theme="light"] #bsx-v2-shell .bsx-popup-errormsg   { background: rgba(239, 108, 0, 0.10); border-left-color: #ef6c00; border-right-color: #ef6c00; }
 
-<form action="{$smarty.server.SCRIPT_NAME}" method="post"><input type="hidden" name="act" value="updatePassword">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="updatePassword">
-  <article class="module width_half">
-    <header>
-      <h3>Change Password</h3>
-    </header>
-    <div class="module_content">
-      <p style="padding-left:30px; padding-redight:30px; font-size:10px;">
-      Note: You will be redirected to login on successful completion of a password change
-      </p>
-      <fieldset>
-        <label>Current Password</label>
-        {nocache}<input type="password" name="currentPassword" {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.changepw && !$CHANGEPASSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>New Password</label>
-        <p style="padding-right:10px;display:block;margin-top:0px;float:right;color:#999;" id="pw_strength"></p>
-        {nocache}<input type="password" name="newPassword" id="pw_field"{if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.changepw && !$CHANGEPASSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>Repeat New Password</label>
-        <p style="padding-right:10px;display:block;margin-top:0px;float:right;" id="pw_match"></p>
-        {nocache}<input type="password" name="newPassword2" id="pw_field2"{if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.changepw && !$CHANGEPASSUNLOCKED}disabled{/if}/>{/nocache}
-      </fieldset>
-      <fieldset>
-        <label>4 digit PIN</label>
-        <input type="password" name="authPin" size="4" maxlength="4" />
-      </fieldset>
-    </div>
-    <footer>
-      <div class="submit_link">
-      {nocache}
-        <input type="hidden" name="cp_token" value="{$smarty.request.cp_token|escape|default:""}">
-        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-        <input type="hidden" name="utype" value="change_pw">
-        {if $GLOBAL.twofactor.enabled && $GLOBAL.twofactor.options.changepw}
-          {if $CHANGEPASSSENT == 1 && $CHANGEPASSUNLOCKED == 1}
-          	<input type="submit" value="Change Password" class="alt_btn">
-          {elseif $CHANGEPASSSENT == 0 && $CHANGEPASSUNLOCKED == 1 || $CHANGEPASSSENT == 1 && $CHANGEPASSUNLOCKED == 0}
-            <input type="submit" value="Change Password" class="alt_btn" disabled>
-          {elseif $CHANGEPASSSENT == 0 && $CHANGEPASSUNLOCKED == 0}
-            <input type="submit" value="Unlock" class="alt_btn" name="unlock">
-          {/if}
-        {else}
-          <input type="submit" value="Change Password" class="alt_btn">
-        {/if}
-      {/nocache}
-      </div>
-    </footer>
-  </article>
-</form>
+  [data-theme="light"] #bsx-v2-shell .bsx-btn {
+    color: #1f2933;
+    background: rgba(25, 118, 210, 0.08);
+    border-color: rgba(25, 118, 210, 0.40);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-btn:hover:not([disabled]) {
+    background: rgba(25, 118, 210, 0.18);
+    border-color: rgba(25, 118, 210, 0.55);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-btn-primary {
+    background: rgba(25, 118, 210, 0.16);
+    border-color: rgba(25, 118, 210, 0.50);
+    color: #0d47a1;
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-btn-secondary {
+    background: rgba(239, 108, 0, 0.10);
+    border-color: rgba(239, 108, 0, 0.45);
+    color: #b53d00;
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-btn-ghost {
+    background: transparent;
+    border-color: rgba(0, 0, 0, 0.18);
+    color: #2d3748;
+  }
 
+  [data-theme="light"] #bsx-v2-shell .bsx-cashout-form .cash-out-balance { color: #2d3748; }
+  [data-theme="light"] #bsx-v2-shell .bsx-divider {
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.14), transparent);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-section-note { color: #2d3748; }
+  [data-theme="light"] #bsx-v2-shell .bsx-actions-row {
+    border-top-color: rgba(0, 0, 0, 0.10);
+  }
 
-<form action="{$smarty.server.SCRIPT_NAME}" method="post">
-  <input type="hidden" name="page" value="{$smarty.request.page|escape}">
-  <input type="hidden" name="action" value="{$smarty.request.action|escape}">
-  <input type="hidden" name="do" value="genPin">
-  <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}" />
-	<article class="module width_half">
-	  <header>
-		  <h3>Reset PIN</h3>
-		</header>
-		<div class="module_content">
-      <fieldset>
-		  <label>Current Password</label>
-		  <input type="password" name="currentPassword" />
-		  </fieldset>
-		</div>
-		<footer>
-      <div class="submit_link">
-        <input type="submit" class="alt_btn" value="Reset PIN">
-      </div>
-    </footer>
-  </article>
-</form>
+  [data-theme="light"] #bsx-v2-shell .bsx-toggle {
+    background: rgba(0, 0, 0, 0.10);
+    border-color: rgba(0, 0, 0, 0.18);
+  }
+  [data-theme="light"] #bsx-v2-shell .bsx-toggle::after {
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+  [data-theme="light"] #bsx-v2-shell .kv-checkbox input[type=checkbox]:checked + .bsx-toggle {
+    background: rgba(25, 118, 210, 0.55);
+    border-color: rgba(25, 118, 210, 0.65);
+  }
+</style>

@@ -19,6 +19,16 @@ class Statistics extends Base {
     return $this->getcache;
   }
 
+  // Rolling-window for hashrate/sharerate aggregations. Reads the
+  // admin-editable `hashrate_window_seconds` setting; falls back to
+  // 900s with a 60s floor.
+  private function resolveWindow($interval=null) {
+    if ($interval !== null && (int)$interval > 0) return (int)$interval;
+    $v = isset($this->setting) ? (int)$this->setting->getValue('hashrate_window_seconds') : 0;
+    if ($v <= 0) $v = 900;
+    return max(60, $v);
+  }
+
   /**
    * Get our first block found
    *
@@ -214,8 +224,9 @@ class Statistics extends Base {
    * @param none
    * @return data object Return our hashrateas an object
    **/
-  public function getCurrentHashrate($interval=180) {
+  public function getCurrentHashrate($interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     if ($this->getGetCache() && $data = $this->memcache->getStatic(__FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
@@ -242,8 +253,9 @@ class Statistics extends Base {
    * @param none
    * @return data object Our share rate in shares per second
    **/
-  public function getCurrentShareRate($interval=180) {
+  public function getCurrentShareRate($interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     if ($data = $this->memcache->getStatic(__FUNCTION__)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
@@ -448,8 +460,9 @@ class Statistics extends Base {
    * Fetch all user hashrates based on shares and archived shares
    * @return data integer Current Hashrate in khash/s
    **/
-  public function getAllUserMiningStats($interval=180) {
+  public function getAllUserMiningStats($interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     $stmt = $this->mysqli->prepare("
       SELECT
         a.id AS id,
@@ -495,8 +508,9 @@ class Statistics extends Base {
    * @param $account_id int account id
    * @return data integer Current Hashrate in khash/s
    **/
-  public function getUserHashrate($username, $account_id=NULL, $interval=180) {
+  public function getUserHashrate($username, $account_id=NULL, $interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     // Dual-caching, try statistics cron first, then fallback to local, then fallbock to SQL
     if ($this->getGetCache() && $data = $this->memcache->getStatic(STATISTICS_ALL_USER_HASHRATES)) {
       if (array_key_exists($account_id, $data['data']))
@@ -553,8 +567,9 @@ class Statistics extends Base {
    * @param interval int Data interval in seconds
    * @return double Share difficulty or 0
    **/
-  public function getUserShareDifficulty($username, $account_id=NULL, $interval=180) {
+  public function getUserShareDifficulty($username, $account_id=NULL, $interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     // Dual-caching, try statistics cron first, then fallback to local, then fallbock to SQL
     if ($this->getGetCache() && $data = $this->memcache->getStatic(STATISTICS_ALL_USER_HASHRATES)) {
       if (array_key_exists($account_id, $data['data']))
@@ -584,8 +599,9 @@ class Statistics extends Base {
    * @param $account_id int account id   
    * @return data integer Current Sharerate in shares/s
    **/
-  public function getUserSharerate($username, $account_id=NULL, $interval=180) {
+  public function getUserSharerate($username, $account_id=NULL, $interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
+    $interval = $this->resolveWindow($interval);
     // Dual-caching, try statistics cron first, then fallback to local, then fallbock to SQL
     if ($this->getGetCache() && $data = $this->memcache->getStatic(STATISTICS_ALL_USER_HASHRATES)) {
       if (array_key_exists($account_id, $data['data']))
@@ -1017,6 +1033,7 @@ $statistics->setUser($user);
 $statistics->setBlock($block);
 $statistics->setMemcache($memcache);
 $statistics->setConfig($config);
+$statistics->setSetting($setting);
 $statistics->setBitcoin($bitcoin);
 $statistics->setErrorCodes($aErrorCodes);
 

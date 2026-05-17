@@ -29,9 +29,9 @@ $config['mc_antidos']['enabled'] = true;
 $config['mc_antidos']['protect_ajax'] = true;
 $config['mc_antidos']['ajax_hits_additive'] = true;
 $config['mc_antidos']['flush_seconds_api'] = 60;
-$config['mc_antidos']['rate_limit_api'] = 20;
+$config['mc_antidos']['rate_limit_api'] = 6000;
 $config['mc_antidos']['flush_seconds_site'] = 60;
-$config['mc_antidos']['rate_limit_site'] = 30;
+$config['mc_antidos']['rate_limit_site'] = 6000;
 $config['mc_antidos']['ignore_admins'] = true;
 $config['mc_antidos']['error_push_page'] = array('page' => 'error', 'action' => 'ratelimit');
 

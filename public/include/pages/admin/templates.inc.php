@@ -7,6 +7,11 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
   die("404 Page not found");
 }
 
+// CSRF + method enforcement on admin/templates mutations
+// (theme/template save, file edits).
+require_once dirname(__FILE__) . '/../../admin_csrf.inc.php';
+_require_admin_csrf($csrftoken);
+
 $aThemes = $template->getThemes();
 $aTemplates = $template->getTemplatesTree($aThemes);
 $aActiveTemplates = $template->cachedGetActiveTemplates();
@@ -37,6 +42,20 @@ $oDatabaseTemplate = $template->getEntry($sTemplate);
 
 if ( $oDatabaseTemplate === false ) {
   $_SESSION['POPUP'][] = array('CONTENT' => 'Can\'t fetch template from Database. Have you created `templates` table? Run 005_create_templates_table.sql from sql folder', 'TYPE' => 'errormsg');
+}
+
+// AJAX path: when the page is requested with _ajax=1 (e.g. from the
+// in-page tree click handler), return just the data the editor needs
+// to swap in place. Avoids re-rendering master.tpl + reloading the
+// dynatree, which is what was resetting the scroll position.
+if (!empty($_REQUEST['_ajax'])) {
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(array(
+    'currentTemplate'  => $sTemplate,
+    'originalContent'  => $sOriginalTemplate,
+    'databaseTemplate' => $oDatabaseTemplate ?: null,
+  ));
+  exit;
 }
 
 $smarty->assign("TEMPLATES", $aTemplates);

@@ -611,7 +611,10 @@ class Mobile_Detect {
         // Escape the special character which is the delimiter.
         $regex = str_replace('/', '\/', $regex);
 
-        return (bool)preg_match('/'.$regex.'/is', (!empty($userAgent) ? $userAgent : $this->userAgent));
+        // PHP 8.1+ deprecates preg_match() called with a null subject; coerce
+        // to an empty string so cron runs without a HTTP User-Agent header
+        // don't emit a warning per call.
+        return (bool)preg_match('/'.$regex.'/is', (!empty($userAgent) ? $userAgent : ($this->userAgent ?? '')));
 
     }
 

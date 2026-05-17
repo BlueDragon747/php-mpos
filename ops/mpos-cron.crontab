@@ -1,0 +1,44 @@
+# Drop this as /etc/cron.d/mpos (mode 0644, owner root:root).
+# Wires up every MPOS cronjob with sane frequencies.
+#
+# Install:
+#   sudo install -m 0644 ops/mpos-cron.crontab /etc/cron.d/mpos
+#
+# All cronjobs run as www-data (same uid Apache uses) so log files,
+# memcache keys, and session files are owned consistently.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=ops@example.com
+
+# --- Minute-frequency -----------------------------------------------------
+# Refresh block confirmations + harvest newly-solved blocks.
+*     * * * * www-data cd /var/www/mpos/cronjobs && php blockupdate.php    >/dev/null 2>&1
+*     * * * * www-data cd /var/www/mpos/cronjobs && php blockupdate_mm.php >/dev/null 2>&1
+*/2   * * * * www-data cd /var/www/mpos/cronjobs && php findblock.php      >/dev/null 2>&1
+*/2   * * * * www-data cd /var/www/mpos/cronjobs && php findblock_mm.php   >/dev/null 2>&1
+
+# --- PPLNS credit + payouts -----------------------------------------------
+*/5   * * * * www-data cd /var/www/mpos/cronjobs && php pplns_payout.php     >/dev/null 2>&1
+*/5   * * * * www-data cd /var/www/mpos/cronjobs && php pplns_payout_mm.php  >/dev/null 2>&1
+*/30  * * * * www-data cd /var/www/mpos/cronjobs && php payouts.php          >/dev/null 2>&1
+*/30  * * * * www-data cd /var/www/mpos/cronjobs && php payouts_mm.php       >/dev/null 2>&1
+
+# --- Secondary housekeeping ------------------------------------------------
+*     * * * * www-data cd /var/www/mpos/cronjobs && php notifications.php  >/dev/null 2>&1
+*/5   * * * * www-data cd /var/www/mpos/cronjobs && php statistics.php     >/dev/null 2>&1
+*/15  * * * * www-data cd /var/www/mpos/cronjobs && php tickerupdate.php   >/dev/null 2>&1
+
+# Cold-wallet / liquid-assets sweep (if $config['coldwallet']['address'] is set).
+*/30  * * * * www-data cd /var/www/mpos/cronjobs && php liquid_payout.php  >/dev/null 2>&1
+
+# --- Archive rotation: keep `shares` table from growing unbounded ---------
+# Invoke the PHP-based archive (MPOS ships this pattern; the tool rotates
+# rows out of shares into shares_archive beyond the keep_window. See
+# ops/shares-archive.sh for the SQL fallback if the upstream cron is missing.
+0 */4 * * * www-data /opt/blakecoin-pool/bin/shares-archive.sh >/dev/null 2>&1
+
+# --- Token / session cleanup ----------------------------------------------
+30 *  * * * www-data cd /var/www/mpos/cronjobs && php token_cleanup.php     >/dev/null 2>&1
+45 */6 * * * www-data cd /var/www/mpos/cronjobs && php archive_cleanup.php  >/dev/null 2>&1
+45 */6 * * * www-data cd /var/www/mpos/cronjobs && php archive_cleanup_mm.php >/dev/null 2>&1

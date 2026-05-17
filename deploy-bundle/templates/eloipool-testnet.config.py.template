@@ -1,0 +1,131 @@
+# Generated from deploy-bundle/templates/eloipool-testnet.config.py.template
+# by deploy-bundle/scripts/40-install-pool.sh. Do not edit in place — re-run
+# the deploy script if you need to change ports/creds.
+
+ServerName = '@@SERVER_NAME@@'
+NoInteractive = True
+
+# Testnet ShareTarget — match Eliopool's deploy-full-stack.sh testnet
+# preset: SkipBdiff1Floor=True + a near-max target so any honest solve
+# the miner submits is accepted as a share. The diff-1 floor is a
+# mainnet protection only — on a self-mined testnet it just blocks
+# every share since the network target itself is ~diff-1.
+SkipBdiff1Floor = True
+ShareTarget = 0x00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+# Disabled for the testnet payout-flow stress test: with 3 cpu_miner.py
+# instances we want every honest solve to count as a share. Re-enable
+# (DynamicTargetting=2) for any deploy that's bigger than a single
+# operator's lab. Goal/Window/Quick are still referenced unconditionally
+# at module import time, so we leave them defined as no-ops.
+DynamicTargetting       = 0
+AllowShareDifficultyAboveNetwork = True
+DynamicTargetGoal       = 8
+DynamicTargetWindow     = 120
+DynamicTargetQuick      = True
+
+WorkQueueSizeRegular  = (0x100,  0x1000)
+WorkQueueSizeClear    = (0x1000, 0x2000)
+WorkQueueSizeLongpoll = (0x1000, 0x2000)
+
+WorkUpdateInterval    = 55
+MinimumTxnUpdateWait  = 5
+TxnUpdateRetryWait    = 1
+IdleSleepTime         = 0.1
+
+# Pool tracker / fallback wallet (testnet bech32). The deploy script asks
+# the daemon for a fresh tblc1q... address if the operator didn't pin one.
+TrackerAddr = '@@POOL_TRACKER_ADDR@@'
+
+# PPLNS share->payout split happens in MPOS cronjobs; the eloipool side
+# only needs a coinbaser that maps stratum-username → tblc address. We
+# default to a single-output coinbaser pointed at TrackerAddr; MPOS layers
+# its own credit accounting on top via the share rows we write.
+CoinbaserCmd = '@@COINBASER_CMD@@'
+
+TemplateSources = (
+    {
+        'name':     'primary',
+        'uri':      'http://@@RPC_USER@@:@@RPC_PASS@@@127.0.0.1:29332',  # Blakecoin testnet RPC
+        'priority': 0,
+        'weight':   1,
+    },
+)
+
+TemplateChecks = None
+
+BlockSubmissions = (
+    {'name': 'primary', 'uri': 'http://@@RPC_USER@@:@@RPC_PASS@@@127.0.0.1:29332'},
+)
+
+MinimumTemplateAcceptanceRatio = 0
+MinimumTemplateScore = 1
+DelayLogForUpstream = False
+
+GotWorkTarget = 0x00000000ffff0000000000000000000000000000000000000000000000000000
+
+POT = 2
+Greedy = False
+
+# Blakecoin testnet network magic + parent-chain p2p port. The pool
+# never opens an outbound P2P connection (BitcoinNodeAddresses below is
+# empty), but BitcoinNode() construction at startup demands these be
+# present.
+UpstreamBitcoindNode = ('127.0.0.1', 29777)
+UpstreamNetworkId    = b'\xfc\xc1\xb7\xdc'
+
+JSONRPCAddresses     = (('::ffff:127.0.0.1', 19334),)
+StratumAddresses     = (('0.0.0.0', 3334),)
+BitcoinNodeAddresses = ()
+TrustedForwarders    = ('::ffff:127.0.0.1',)
+
+# Internal-RPC creds for the merged-mine-proxy: MMP polls eloipool here
+# for solved parent-chain blocks and turns them into aux submissions.
+# Not user-facing.
+SecretUser = 'auxpow'
+SecretPass = '@@MMP_SECRET@@'
+
+# Wire eloipool to the merged-mine-proxy so the coinbase carries the
+# aux merkle root. MMP listens on this URL (see -w arg in mergeminer
+# systemd unit).
+GotWorkURI = 'http://auxpow:@@MMP_SECRET@@@127.0.0.1:19335/'
+
+# --- SHARES -> MPOS MySQL shares table ------------------------------------
+ShareLogging = (
+    {
+        'type':     'sql',
+        'engine':   'mysql',
+        'dbopts': {
+            'host':   '@@MPOS_DB_HOST@@',
+            'port':    @@MPOS_DB_PORT@@,
+            'user':   '@@MPOS_DB_USER@@',
+            'passwd': '@@MPOS_DB_PASS@@',
+            'db':     '@@MPOS_DB_NAME@@',
+        },
+        'statement': (
+            "insert into shares (rem_host, username, our_result, "
+            "upstream_result, reason, solution, difficulty) values "
+            "({remoteHost}, {username}, {YN(not(rejectReason))}, "
+            "{YN(upstreamResult)}, {rejectReason}, {solution}, "
+            "{target2bdiff(target)})"
+        ),
+        'chain_id': 'primary',
+    },
+    {
+        'type': 'logfile',
+        'filename': '@@LOG_ROOT@@/pool/share-logfile',
+        'format': "{time} {Q(remoteHost)} {username} {YN(not(rejectReason))} {dash(YN(upstreamResult))} {dash(rejectReason)} {dash(target2bdiff(target))} {solution}\n",
+    },
+)
+
+# Validate stratum workers against MPOS pool_worker. See
+# /opt/blakestream-mpos/eloipool/authentication/mpos.py
+Authentication = (
+    {'module': 'mpos'},
+)
+
+LogFile = {
+    'filename': '@@LOG_ROOT@@/pool/eloipool.log',
+    'when': 'midnight',
+    'backupCount': 7,
+}

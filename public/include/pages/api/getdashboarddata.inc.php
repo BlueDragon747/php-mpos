@@ -39,14 +39,13 @@ if ( ! $dPoolHashrateModifier = $setting->getValue('statistics_pool_hashrate_mod
 if ( ! $dPersonalHashrateModifier = $setting->getValue('statistics_personal_hashrate_modifier') ) $dPersonalHashrateModifier = 1;
 if ( ! $dNetworkHashrateModifier = $setting->getValue('statistics_network_hashrate_modifier') ) $dNetworkHashrateModifier = 1;
 
-// Fetch raw data
-$statistics->setGetCache(false);
+// Fetch raw data through the stats cache. The statistics cron warms these
+// keys; the class still falls back to SQL on cache miss.
 $dPoolHashrate = $statistics->getCurrentHashrate($interval);
 if ($dPoolHashrate > $dNetworkHashrate) $dNetworkHashrate = $dPoolHashrate;
 $dPersonalHashrate = $statistics->getUserHashrate($username, $user_id, $interval);
 $dPersonalSharerate = $statistics->getUserSharerate($username, $user_id, $interval);
 $dPersonalShareDifficulty = $statistics->getUserShareDifficulty($username, $user_id, $interval);
-$statistics->setGetCache(true);
 
 // Use caches for this one
 $aUserRoundShares = $statistics->getUserShares($username, $user_id);

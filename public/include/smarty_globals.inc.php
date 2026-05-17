@@ -41,18 +41,66 @@ if ($bitcoin->can_connect() === true) {
 }
 
 // Baseline pool hashrate for templates
-if ( ! $dPoolHashrateModifier = $setting->getValue('statistics_pool_hashrate_modifier') ) $dPoolHashrateModifier = 1;
 $iCurrentPoolHashrate =  $statistics->getCurrentHashrate();
 
 // Avoid confusion, ensure our nethash isn't higher than poolhash
 if ($iCurrentPoolHashrate > $dNetworkHashrate / 1000) $dNetworkHashrate = $iCurrentPoolHashrate;
 
-// Baseline network hashrate for templates
-if ( ! $dPersonalHashrateModifier = $setting->getValue('statistics_personal_hashrate_modifier') ) $dPersonalHashrateModifier = 1;
-if ( ! $dNetworkHashrateModifier = $setting->getValue('statistics_network_hashrate_modifier') ) $dNetworkHashrateModifier = 1;
+// Network hashrate is in raw H/s from getnetworkhashps; pool hashrate
+// is already in KH/s from statistics::getCurrentHashrate. Normalise
+// network to KH/s so the auto-scale logic below sees the same units.
+$dNetworkHashrate = $dNetworkHashrate / 1000;
+
+// Hashrate auto-scale (Blakestream-MPOS addition).
+//
+// Upstream MPOS made the operator pin a per-display modifier in the
+// `settings` table (1 → KH/s, 0.001 → MH/s, 1e-6 → GH/s, 1e-9 → TH/s).
+// That meant a small testnet pool always rendered as `0.001 GH/s` and
+// a big mainnet pool always rendered as `763984227.67 KH/s` — the
+// operator had to keep retuning. Auto-scale picks the most readable
+// magnitude based on the actual raw KH/s value. Operators who really
+// want a fixed display can still pin the corresponding settings row;
+// any pinned value (modifier matching one of the scale keys) is
+// respected via the manual override branch below.
+function _hashrate_auto_modifier($dKHs) {
+  if ($dKHs >= 1e9) return 0.000000001; // TH/s
+  if ($dKHs >= 1e6) return 0.000001;    // GH/s
+  if ($dKHs >= 1e3) return 0.001;       // MH/s
+  return 1;                              // KH/s
+}
+
+// Pick the correct label for a given modifier. Doing this with a
+// function instead of an array lookup avoids PHP's float-to-string
+// conversion booby-trap: PHP stringifies `0.000001` as `"1.0E-6"`
+// when used as an array key, so `$aHashunits[$dNetworkHashrateModifier]`
+// silently returns null for GH/s and TH/s.
+function _hashrate_unit_for($mod) {
+  // Compare with epsilon-tolerant equality so float arithmetic
+  // upstream doesn't throw the lookup off.
+  if (abs($mod - 1)               < 1e-12)  return 'KH/s';
+  if (abs($mod - 0.001)           < 1e-15)  return 'MH/s';
+  if (abs($mod - 0.000001)        < 1e-18)  return 'GH/s';
+  if (abs($mod - 0.000000001)     < 1e-21)  return 'TH/s';
+  // Fallback for any operator-pinned modifier that doesn't match
+  // one of the canonical scales — render the modifier itself so
+  // the label at least conveys something rather than being blank.
+  return 'KH/s × ' . $mod;
+}
+
+$dPoolPin     = $setting->getValue('statistics_pool_hashrate_modifier');
+$dPersonalPin = $setting->getValue('statistics_personal_hashrate_modifier');
+$dNetworkPin  = $setting->getValue('statistics_network_hashrate_modifier');
+
+$dPoolHashrateModifier     = $dPoolPin     ? (float)$dPoolPin     : _hashrate_auto_modifier($iCurrentPoolHashrate);
+$dNetworkHashrateModifier  = $dNetworkPin  ? (float)$dNetworkPin  : _hashrate_auto_modifier($dNetworkHashrate);
+// Personal modifier is set later from the user's own raw hashrate
+// (see the userdata block further down) — initialise to a safe
+// default that the rest of this scope can read.
+if ( ! $dPersonalHashrateModifier = $dPersonalPin ? (float)$dPersonalPin : null )
+  $dPersonalHashrateModifier = 1;
 
 // Apply modifier now
-$dNetworkHashrate = $dNetworkHashrate / 1000 * $dNetworkHashrateModifier;
+$dNetworkHashrate = $dNetworkHashrate * $dNetworkHashrateModifier;
 $iCurrentPoolHashrate = $iCurrentPoolHashrate * $dPoolHashrateModifier;
 
 // Share rate of the entire pool
@@ -65,14 +113,34 @@ if (!$iCurrentActiveWorkers = $worker->getCountAllActiveWorkers()) $iCurrentActi
 if (! $statistics_ajax_refresh_interval = $setting->getValue('statistics_ajax_refresh_interval')) $statistics_ajax_refresh_interval = 10;
 if (! $statistics_ajax_long_refresh_interval = $setting->getValue('statistics_ajax_long_refresh_interval')) $statistics_ajax_long_refresh_interval = 10;
 
-// Small helper array
+// Small helper array — kept for any external code that still indexes
+// it directly. NEW code should use _hashrate_unit_for() because PHP
+// converts float keys like `0.000001` to `"1.0E-6"` on lookup,
+// missing the decimal-string keys here.
 $aHashunits = array( '1' => 'KH/s', '0.001' => 'MH/s', '0.000001' => 'GH/s', '0.000000001' => 'TH/s' );
 
 // Global data for Smarty
 $aGlobal = array(
-  'hashunits' => array( 'pool' => $aHashunits[$dPoolHashrateModifier], 'network' => $aHashunits[$dNetworkHashrateModifier], 'personal' => $aHashunits[$dPersonalHashrateModifier]),
+  'hashunits' => array(
+    'pool'     => _hashrate_unit_for($dPoolHashrateModifier),
+    'network'  => _hashrate_unit_for($dNetworkHashrateModifier),
+    'personal' => _hashrate_unit_for($dPersonalHashrateModifier),
+  ),
+  // Numeric modifiers exposed to JavaScript so the SSE live-update
+  // path (sse-live.js handleStats) can scale raw kH/s into the same
+  // display units the page was rendered with.
+  'hashmods_all' => array(
+    'pool'     => $dPoolHashrateModifier,
+    'network'  => $dNetworkHashrateModifier,
+    'personal' => $dPersonalHashrateModifier,
+  ),
   'hashmods' => array( 'personal' => $dPersonalHashrateModifier ),
   'hashrate' => $iCurrentPoolHashrate,
+  // Raw KH/s before any modifier — the navbar JS scales this on
+  // every AJAX tick so the gauge label tracks unit changes (e.g.
+  // KH/s → GH/s as miners come online) instead of being baked in
+  // at page-render time.
+  'rawhashrate' => $iCurrentPoolHashrate / max($dPoolHashrateModifier, 1e-30),
   'nethashrate' => $dNetworkHashrate,
   'sharerate' => $iCurrentPoolShareRate,
   'workers' => $iCurrentActiveWorkers,
@@ -217,6 +285,13 @@ if (@$_SESSION['USERDATA']['id']) {
   $aGlobal['userdata']['shares_mm5'] = $statistics_mm5->getUserShares_mm5($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
 
   $aGlobal['userdata']['rawhashrate'] = $statistics->getUserHashrate($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
+  // Auto-scale the personal hashrate magnitude unless the operator
+  // pinned a modifier in settings. Mirrors the pool/network logic above.
+  if ( ! $dPersonalPin ) {
+    $dPersonalHashrateModifier = _hashrate_auto_modifier((float)$aGlobal['userdata']['rawhashrate']);
+    $aGlobal['hashunits']['personal'] = _hashrate_unit_for($dPersonalHashrateModifier);
+    $aGlobal['hashmods']['personal']  = $dPersonalHashrateModifier;
+  }
   $aGlobal['userdata']['hashrate'] = $aGlobal['userdata']['rawhashrate'] * $dPersonalHashrateModifier;
   $aGlobal['userdata']['sharerate'] = $statistics->getUserSharerate($_SESSION['USERDATA']['username'], $_SESSION['USERDATA']['id']);
 
@@ -351,13 +426,29 @@ if (@$_SESSION['USERDATA']['id']) {
   if ($aGlobal['userdata']['balance']['confirmed'] >= $config['ap_threshold']['max'])
     $_SESSION['POPUP'][] = array('CONTENT' => 'You have exceeded the pools configured ' . $config['currency'] . ' warning threshold. Please initiate a transfer!', 'TYPE' => 'errormsg');
   if ($user->getUserFailed($_SESSION['USERDATA']['id']) > 0)
-    $_SESSION['POPUP'][] = array('CONTENT' => 'You have ' . $user->getUserFailed($_SESSION['USERDATA']['id']) . ' failed login attempts! <a href="?page=account&action=reset_failed">Reset Counter</a>', 'TYPE' => 'errormsg');
+    $_SESSION['POPUP'][] = array('CONTENT' => $user->getUserFailed($_SESSION['USERDATA']['id']) . ' failed login attempts on your account. <a href="?page=account&action=reset_failed">Reset counter</a>.', 'TYPE' => 'errormsg');
 }
 
 if ($setting->getValue('maintenance'))
-  $_SESSION['POPUP'][] = array('CONTENT' => 'This pool is currently in maintenance mode.', 'TYPE' => 'warning');
-if ($motd = $setting->getValue('system_motd'))
-  $_SESSION['POPUP'][] = array('CONTENT' => $motd, 'TYPE' => 'info');
+  $_SESSION['POPUP'][] = array('CONTENT' => 'The pool is in maintenance mode. Mining stays online; account changes and payouts are temporarily paused.', 'TYPE' => 'warning');
+
+// Message of the Day routing — driven by `system_motd_display_mode`:
+//   always → banner pinned at the top of master.tpl for everyone
+//            (matches original MPOS behaviour).
+//   popup  → legacy 4 s auto-fade toast for logged-out viewers;
+//            dashboard.inc.php pins a card for logged-in users.
+$_motd = trim((string)$setting->getValue('system_motd'));
+$_motd_mode = (string)$setting->getValue('system_motd_display_mode');
+if (!in_array($_motd_mode, array('always', 'popup'), true)) $_motd_mode = 'always';
+$smarty->assign('MOTD_MODE', $_motd_mode);
+if ($_motd !== '') {
+  if ($_motd_mode === 'always') {
+    require_once(INCLUDE_DIR . '/safe_markdown.inc.php');
+    $smarty->assign('MOTD_BANNER', mpos_render_safe_markdown($_motd));
+  } else if (!$user->isAuthenticated(false)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => $_motd, 'TYPE' => 'info');
+  }
+}
 
 // So we can display additional info
 $smarty->assign('DEBUG', $config['DEBUG']);

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard v2 (Vite build entry — not deployed)</title>
+</head>
+<body>
+  <!--
+    Build entry only. PHP serves the real HTML in prod; this file exists so
+    `vite build` discovers the dashboard JS/CSS bundle and produces a
+    manifest entry. Do not deploy this file.
+  -->
+  <div id="app-dashboard"
+       data-api-key=""
+       data-user-id="0"
+       data-refresh-ms="10000"
+       data-long-refresh-ms="10000"
+       data-payout-system="pplns"></div>
+  <script type="module" src="./src/pages/dashboard/main.ts"></script>
+</body>
+</html>

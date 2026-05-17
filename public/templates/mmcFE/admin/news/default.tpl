@@ -4,6 +4,7 @@
   <input type="hidden" name="page" value="{$smarty.request.page}">
   <input type="hidden" name="action" value="{$smarty.request.action}">
   <input type="hidden" name="do" value="add">
+  <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
   <table width="80%">
     <tr>
       <th>Header</th>
@@ -23,16 +24,18 @@
   file="global/block_header.tpl"
   BLOCK_HEADER="{$NEWS[news].header} posted {$NEWS[news].time} by {$NEWS[news].author}"
   BUTTONS="
-    <a href='{$smarty.server.PHP_SELF}?page={$smarty.request.page}&action=news_edit&id={$NEWS[news].id}'>Edit</a>&nbsp;
-    <a href='{$smarty.server.PHP_SELF}?page={$smarty.request.page}&action={$smarty.request.action}&do=delete&id={$NEWS[news].id}'>Delete</a>
+    <a href='{$smarty.server.PHP_SELF}?page={$smarty.request.page}&action=news_edit&id={$NEWS[news].id}'>Edit</a>
   "
 }
 {if $NEWS[news].active == 0}<font size="2px">This post is <font color="red"><b>inactive</b></font><br /><br />{/if}
 {$NEWS[news].content}
 <form method="POST" action="{$smarty.server.PHP_SELF}">
   <input type="hidden" name="page" value="{$smarty.request.page}">
-  <input type="hidden" name="action" value="news_edit">
+  <input type="hidden" name="action" value="{$smarty.request.action}">
+  <input type="hidden" name="do" value="delete">
+  <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
   <input type="hidden" name="id" value="{$NEWS[news].id}">
+  <input type="submit" value="Delete" class="submit small" onclick="return confirm('Delete news entry #{$NEWS[news].id}?');">
 </form>
 {include file="global/block_footer.tpl"}
 {/section}

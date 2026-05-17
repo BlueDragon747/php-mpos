@@ -66,12 +66,12 @@ if ($config['memcache']['enabled'] && $config['mc_antidos']['enabled']) {
     $iac = (@$_REQUEST['page'] == $ac[0] && @$_REQUEST['action'] == $ac[1]) ? $iac+=1 : $iac;
   }
   $is_ajax_call = ($iac > 0) ? true : false;
-  if ($is_ajax_call && $config['mc_antidos']['protect_ajax']) {
+  if ($config['mc_antidos']['ignore_admins'] && isset($_SESSION['USERDATA']['is_admin']) && $_SESSION['USERDATA']['is_admin']) {
+    $skip_check = true;
+  } else if ($is_ajax_call && $config['mc_antidos']['protect_ajax']) {
     $per_page = 'api';
   } else if ($is_ajax_call && !$config['mc_antidos']['protect_ajax']) {
     // protect isn't on, we'll ignore it
-    $skip_check = true;
-  } else if ($config['mc_antidos']['ignore_admins'] && isset($_SESSION['USERDATA']['is_admin']) && $_SESSION['USERDATA']['is_admin']) {
     $skip_check = true;
   }
   if (!$skip_check) {
@@ -92,18 +92,23 @@ if ($config['memcache']['enabled'] && $config['mc_antidos']['enabled']) {
 }
 
 // Got past rate limiter and session manager
-// show last logged in popup if it's still set
+// show last logged in popup ONCE — and only if last login IP differs
+// from current IP (the warning case). The legacy code re-appended the
+// popup on every page request, which stacked dozens of identical
+// banners across normal nav. We now render at most once per session
+// and unset the session var immediately after.
 if (@$_GET['clp'] == 1 && @$_SESSION['last_ip_pop']) unset($_SESSION['last_ip_pop']);
 if (isset($_SESSION['last_ip_pop']) && is_array($_SESSION['last_ip_pop']) && count($_SESSION['last_ip_pop']) == 2) {
   $data = $_SESSION['last_ip_pop'];
-  $ip = filter_var($data[0], FILTER_VALIDATE_IP);
-  $time = date("l, F jS \a\\t g:i a", $data[1]);
-  $closelink = "<a href='index.php?page=dashboard&clp=1' style='float:right;padding-right:14px;'>Close</a>";
-  if (@$_SESSION['AUTHENTICATED'] && $_SESSION['last_ip_pop'][0] !== $_SERVER['REMOTE_ADDR']) {
+  if (@$_SESSION['AUTHENTICATED'] && $data[0] !== $_SERVER['REMOTE_ADDR']) {
+    $ip = filter_var($data[0], FILTER_VALIDATE_IP);
+    $time = date("l, F jS \a\\t g:i a", $data[1]);
+    $closelink = "<a href='index.php?page=dashboard&clp=1' style='float:right;padding-right:14px;'>Close</a>";
     $_SESSION['POPUP'][] = array('CONTENT' => "You last logged in from <b>$ip</b> on $time $closelink", 'TYPE' => 'warning');
-  } else {
-    $_SESSION['POPUP'][] = array('CONTENT' => "You last logged in from <b>$ip</b> on $time $closelink", 'TYPE' => 'info');
   }
+  // Show-once: drop the session var so subsequent page loads don't
+  // re-append. Operator can re-trigger by logging out and back in.
+  unset($_SESSION['last_ip_pop']);
 }
 
 // version check and config check if not disabled

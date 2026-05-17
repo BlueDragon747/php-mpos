@@ -40,10 +40,15 @@ if (empty($aAllBlocks)) {
 
 $count = 0;
 foreach ($aAllBlocks as $iIndex => $aBlock) {
-  // If we have unaccounted blocks without share_ids, they might not have been inserted yet
+  // Unaccounted block with no share_id means it was solved outside the pool
+  // (e.g. solo-mined via the daemon's own wallet). Originally MPOS aborted
+  // the entire cron here — which blocked later pool-mined blocks from ever
+  // being credited when an off-pool block appeared earlier in the unaccounted
+  // list. Mark it accounted so it's skipped permanently and continue.
   if (!$aBlock['share_id']) {
-    $log->logError('E0062: Block ' . $aBlock['id'] . ' has no share_id, not running payouts');
-    $monitoring->endCronjob($cron_name, 'E0062', 0, true);
+    $log->logWarn('E0062: Block ' . $aBlock['id'] . ' (height ' . ($aBlock['height'] ?? '?') . ') has no share_id — likely non-pool / solo-mined; marking accounted and skipping.');
+    $block->setAccounted($aBlock['id']);
+    continue;
   }
 
   // We support some dynamic share targets but fall back to our fixed value
@@ -253,19 +258,20 @@ foreach ($aAllBlocks as $iIndex => $aBlock) {
       $monitoring->endCronjob($cron_name, 'E0014', 1, true);
     }
   } else {
-    $log->logFatal('Potential double payout detected for block ' . $aBlock['id'] . '. Aborted.');
-    // Email notifications disabled - using logs only
-    // $aMailData = array(
-    //   'email' => $setting->getValue('system_error_email'),
-    //   'subject' => 'Payout processing aborted',
-    //   'Error' => 'Potential double payout detected. All payouts halted until fixed!',
-    //   'BlockID' => $aBlock['id'],
-    //   'Block Height' => $aBlock['height'],
-    //   'Block Share ID' => $aBlock['share_id']
-    // );
-    // if (!$mail->sendMail('notifications/error', $aMailData))
-    //   $log->logError("    Failed sending notifications: " . $notification->getCronError());
-    $monitoring->endCronjob($cron_name, 'E0015', 1, true);
+    // E0015: Originally a hard fatal. The triggering condition is
+    // "block already accounted OR block.height <= last_accounted.height" —
+    // the second half tripping every time the unaccounted blocks list is
+    // iterated by id but blocks were inserted out of height order (e.g.
+    // findblock processed `listsinceblock` whose return order doesn't
+    // match height order). That blocked every subsequent unaccounted
+    // block from being processed. Mark the offending block accounted so
+    // we move on; PPLNS already credited the round-shares between the
+    // last accounted upstream share and this one when it was first
+    // possible to do so, so re-running would double-pay.
+    $log->logWarn('E0015: block ' . $aBlock['id'] . ' (height ' . ($aBlock['height'] ?? '?')
+      . ') is out-of-order vs last_accounted; marking accounted and skipping.');
+    $block->setAccounted($aBlock['id']);
+    continue;
   }
 }
 

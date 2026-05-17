@@ -1,0 +1,28 @@
+# /etc/systemd/system/eloipool.service
+# sudo systemctl daemon-reload && sudo systemctl enable --now eloipool
+
+[Unit]
+Description=Blakestream Eloipool (Blakecoin stratum)
+After=network.target mariadb.service memcached.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=eloipool
+Group=eloipool
+WorkingDirectory=/home/eloipool/eloipool
+Environment=PYTHONPATH=/home/eloipool/eloipool/vendor
+ExecStart=/home/eloipool/eloipool-venv/bin/python3 /home/eloipool/eloipool/eloipool.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/blakecoin-pool/eloipool.out
+StandardError=append:/var/log/blakecoin-pool/eloipool.err
+# Tighten: run-time read-only filesystem except for the pool's own dirs.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/log/blakecoin-pool /home/eloipool/eloipool /home/eloipool/eloipool/logs
+
+[Install]
+WantedBy=multi-user.target

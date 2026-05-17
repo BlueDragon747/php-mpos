@@ -3,13 +3,13 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 // Include markdown library
 use \Michelf\Markdown;
+require_once INCLUDE_DIR . '/safe_markdown.inc.php';
 
 // Fetch active news to display
 $aNews = $news->getAllActive();
 if (is_array($aNews)) {
   foreach ($aNews as $key => $aData) {
-    // Transform Markdown content to HTML
-    $aNews[$key]['content'] = Markdown::defaultTransform($aData['content']);
+    $aNews[$key]['content'] = mpos_render_safe_markdown($aData['content']);
   }
 }
 

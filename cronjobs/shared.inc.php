@@ -22,6 +22,28 @@ define('SECURITY', '*)WT#&YHfd');
 // Whether or not to check SECHASH for validity, still checks if SECURITY defined as before if disabled
 define('SECHASH_CHECK', false);
 
+// PHP cronjobs are the production scheduler unless cronjobs-py has been
+// explicitly activated. Keep only one scheduler active against a given
+// database.
+//
+// Running both schedulers against the same DB produces double-credits
+// and (worse) double on-chain payouts, since both stacks insert Credit
+// / Debit_AP rows against the same DB. We refuse to run if the operator
+// has explicitly flipped the cronjobs-py service to active — they need
+// to disable one or the other before either runs again.
+if (getenv('MPOS_PYTHON_CRONJOBS_ACTIVE') === '1' &&
+    getenv('MPOS_PHP_CRONJOBS_OPT_IN') !== '1') {
+    fwrite(STDERR,
+        "MPOS PHP cronjobs are disabled — cronjobs-py has been activated.\n" .
+        "If you really need to run this cronjob ad-hoc (e.g. emergency\n" .
+        "reconciliation, data migration, dev work), set:\n" .
+        "    MPOS_PHP_CRONJOBS_OPT_IN=1\n" .
+        "in the environment first. WARNING: doing so while the cronjobs-py\n" .
+        "service is running will cause double-payouts.\n"
+    );
+    exit(2);
+}
+
 // Nothing below here to configure, move along...
 
 // change SECHASH every second, we allow up to 3 sec back for slow servers

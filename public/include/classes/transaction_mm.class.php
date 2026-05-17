@@ -256,32 +256,57 @@ class Transaction_mm extends Base {
    * @return data float Credit - Debit - Fees - Donation
    **/
   public function getBalance($account_id) {
-    $this->debug->append("STA " . __METHOD__, 4);
-    $stmt = $this->mysqli->prepare("
-      SELECT
-        IFNULL(ROUND((
-          SUM( IF( ( t.type IN ('Credit','Bonus') AND b.confirmations >= ? ) OR t.type = 'Credit_PPS', t.amount, 0 ) ) -
-          SUM( IF( t.type IN ('Debit_MP', 'Debit_AP'), t.amount, 0 ) ) -
-          SUM( IF( ( t.type IN ('Donation','Fee') AND b.confirmations >= ? ) OR ( t.type IN ('Donation_PPS', 'Fee_PPS', 'TXFee') ), t.amount, 0 ) )
-        ), 8), 0) AS confirmed,
-        IFNULL(ROUND((
-          SUM( IF( t.type IN ('Credit','Bonus') AND b.confirmations < ? AND b.confirmations >= 0, t.amount, 0 ) ) -
-          SUM( IF( t.type IN ('Donation','Fee') AND b.confirmations < ? AND b.confirmations >= 0, t.amount, 0 ) )
-        ), 8), 0) AS unconfirmed,
-        IFNULL(ROUND((
-          SUM( IF( t.type IN ('Credit','Bonus') AND b.confirmations = -1, t.amount, 0) ) -
-          SUM( IF( t.type IN ('Donation','Fee') AND b.confirmations = -1, t.amount, 0) )
-        ), 8), 0) AS orphaned
-      FROM $this->table AS t
-      LEFT JOIN " . $this->block->getTableName() . " AS b
-      ON t.block_id = b.id
-      WHERE t.account_id = ?
-      AND archived = 0
-      ");
-    if ($this->checkStmt($stmt) && $stmt->bind_param("iiiii", $this->config['confirmations'], $this->config['confirmations'], $this->config['confirmations'], $this->config['confirmations'], $account_id) && $stmt->execute() && $result = $stmt->get_result())
-      return $result->fetch_assoc();
-    return $this->sqlError();
-  }
+      $this->debug->append("STA " . __METHOD__, 4);
+      // Wave 2 balance: Debit_MP / Debit_AP / TXFee rows whose matching
+      // transactions_outbox row has status='broadcast' are surfaced as
+      // an `inflight` bucket instead of being subtracted from confirmed.
+      // Without this, between cronjobs-py broadcasting the payout and
+      // the chain reconciling it, the user sees a negative confirmed
+      // balance equal to the in-flight payout amount.
+      $stmt = $this->mysqli->prepare("
+        SELECT
+          IFNULL(ROUND((
+            SUM( IF( ( t.type IN ('Credit','Bonus') AND b.confirmations >= ? ) OR t.type = 'Credit_PPS', t.amount, 0 ) ) -
+            SUM( IF( t.type IN ('Debit_MP', 'Debit_AP') AND ( o.status IS NULL OR o.status != 'broadcast' ), t.amount, 0 ) ) -
+            SUM( IF(
+                  ( t.type IN ('Donation','Fee') AND b.confirmations >= ? )
+                  OR ( t.type IN ('Donation_PPS', 'Fee_PPS') )
+                  OR ( t.type = 'TXFee' AND ( o.status IS NULL OR o.status != 'broadcast' ) ),
+                  t.amount, 0
+                ) )
+          ), 8), 0) AS confirmed,
+          IFNULL(ROUND((
+            SUM( IF( t.type IN ('Debit_MP','Debit_AP','TXFee') AND o.status = 'broadcast', t.amount, 0 ) )
+          ), 8), 0) AS inflight,
+          IFNULL(ROUND((
+            SUM( IF( t.type IN ('Credit','Bonus') AND b.confirmations < ? AND b.confirmations >= 0, t.amount, 0 ) ) -
+            SUM( IF( t.type IN ('Donation','Fee') AND b.confirmations < ? AND b.confirmations >= 0, t.amount, 0 ) )
+          ), 8), 0) AS unconfirmed,
+          IFNULL(ROUND((
+            SUM( IF( t.type IN ('Credit','Bonus') AND b.confirmations = -1, t.amount, 0) ) -
+            SUM( IF( t.type IN ('Donation','Fee') AND b.confirmations = -1, t.amount, 0) )
+          ), 8), 0) AS orphaned
+        FROM $this->table AS t
+        LEFT JOIN " . $this->block->getTableName() . " AS b
+          ON t.block_id = b.id
+        LEFT JOIN transactions_outbox AS o
+          ON t.txid = o.txid AND o.slot = ?
+        WHERE t.account_id = ?
+          AND archived = 0
+        ");
+      $slot = 'mm';
+      if ($this->checkStmt($stmt) && $stmt->bind_param(
+            "iiiisi",
+            $this->config['confirmations'],
+            $this->config['confirmations'],
+            $this->config['confirmations'],
+            $this->config['confirmations'],
+            $slot,
+            $account_id
+          ) && $stmt->execute() && $result = $stmt->get_result())
+        return $result->fetch_assoc();
+      return $this->sqlError();
+    }
 
   /**
    * Get our Auto Payout queue

@@ -40,10 +40,14 @@ if (empty($aAllBlocks)) {
 
 $count = 0;
 foreach ($aAllBlocks as $iIndex => $aBlock) {
-  // If we have unaccounted blocks without share_ids, they might not have been inserted yet
+  // See pplns_payout.php for the rationale: non-pool merge-mined blocks
+  // legitimately have no pool share, and aborting the cron on the first
+  // such entry blocks every subsequent pool-credited block from being
+  // processed. Mark accounted and continue.
   if (!$aBlock['share_id']) {
-    $log->logError('E0062: Block ' . $aBlock['id'] . ' has no share_id, not running payouts [MM]');
-    $monitoring->endCronjob($cron_name, 'E0062', 0, true);
+    $log->logWarn('E0062: [MM] Block ' . $aBlock['id'] . ' (height ' . ($aBlock['height'] ?? '?') . ') has no share_id — likely non-pool / solo-mined; marking accounted and skipping.');
+    $block_mm->setAccounted($aBlock['id']);
+    continue;
   }
 
   // We support some dynamic share targets but fall back to our fixed value

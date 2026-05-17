@@ -1,23 +1,24 @@
 <script language="javascript">
+    var adminCtoken = "{$CTOKEN|escape:'javascript'|default:''}";
     function storeFee(id) {
       $.ajax({
        type: "POST",
        url: "{$smarty.server.PHP_SELF}",
-       data: "page={$smarty.request.page}&action={$smarty.request.action}&do=fee&account_id=" + id,
+       data: { page: "{$smarty.request.page|escape:'javascript'}", action: "{$smarty.request.action|escape:'javascript'}", do: "fee", account_id: id, ctoken: adminCtoken },
      });
     }
     function storeLock(id) {
       $.ajax({
        type: "POST",
        url: "{$smarty.server.PHP_SELF}",
-       data: "page={$smarty.request.page}&action={$smarty.request.action}&do=lock&account_id=" + id,
+       data: { page: "{$smarty.request.page|escape:'javascript'}", action: "{$smarty.request.action|escape:'javascript'}", do: "lock", account_id: id, ctoken: adminCtoken },
      });
     }
     function storeAdmin(id) {
       $.ajax({
        type: "POST",
        url: "{$smarty.server.PHP_SELF}",
-       data: "page={$smarty.request.page}&action={$smarty.request.action}&do=admin&account_id=" + id,
+       data: { page: "{$smarty.request.page|escape:'javascript'}", action: "{$smarty.request.action|escape:'javascript'}", do: "admin", account_id: id, ctoken: adminCtoken },
      });
     }
 </script>

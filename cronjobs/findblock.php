@@ -155,8 +155,16 @@ if (empty($aAllBlocks)) {
         $monitoring->endCronjob($cron_name, 'E0007', 0, true);
       }
       } else {
-        $log->logFatal('E0005: Unable to fetch blocks upstream share, aborted:' . $share->getCronError());
-        $monitoring->endCronjob($cron_name, 'E0005', 0, true);
+        // Upstream match failed for this block. This happens when the block
+        // was found outside the pool (e.g. `generatetoaddress` / solo-mined
+        // via the daemon's wallet) so there is no matching share row in the
+        // pool DB. Originally MPOS aborted the whole cron here, which blocked
+        // later pool-mined blocks from ever being credited when a non-pool
+        // block showed up first in `listsinceblock`. Log and skip instead;
+        // the block row is left with share_id=NULL, which `pplns_payout.php`
+        // already tolerates with `E0062: Block has no share_id`.
+        $log->logWarn('E0005: No matching upstream share for block ' . $aBlock['height'] . ' (likely non-pool / solo-mined); skipping credit, continuing.');
+        continue;
       }
 
       $log->logInfo(

@@ -1,6 +1,7 @@
 <?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
+#[\AllowDynamicProperties]
 class Payout Extends Base {
   protected $table = 'payouts';
   protected $table_mm = 'payouts_mm';
@@ -77,9 +78,33 @@ class Payout Extends Base {
    * @param strToken string Token to confirm
    * @return data mixed Inserted ID or false
    **/
-  public function createPayout($account_id=NULL, $strToken) {
-    $stmt = $this->mysqli->prepare("INSERT INTO $this->table (account_id) VALUES (?)");
-    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+  public function createPayout($account_id = NULL, $strToken = NULL) {
+    // INSERT...SELECT...WHERE NOT EXISTS makes the active-payout
+    // check atomic: a second concurrent request can't see "no active
+    // payout" and still insert a row, since both inserts race on the
+    // same row-level lock. Zero affected_rows = already-active.
+    $stmt = $this->mysqli->prepare(
+      "INSERT INTO $this->table (account_id) "
+      . "SELECT ? FROM DUAL WHERE NOT EXISTS ("
+      . "  SELECT 1 FROM $this->table WHERE account_id = ? AND completed = 0"
+      . ")"
+    );
+    $exec_ok = $stmt && $stmt->bind_param('ii', $account_id, $account_id) && $stmt->execute();
+    // MariaDB error 1467 (ER_AUTOINC_READ_FAILED) fires when extreme
+    // concurrency on this INSERT...SELECT pattern exhausts the
+    // auto-increment pre-allocation. Same race outcome as
+    // affected_rows=0 — another concurrent request already inserted
+    // the row, so treat it as "already active" rather than a raw SQL
+    // error.
+    if (!$exec_ok && $this->mysqli->errno === 1467) {
+      $this->setErrorMessage('You already have one active manual payout request.');
+      return false;
+    }
+    if ($exec_ok) {
+      if ($stmt->affected_rows === 0) {
+        $this->setErrorMessage('You already have one active manual payout request.');
+        return false;
+      }
       // twofactor - consume the token if it is enabled and valid
       if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
         $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
@@ -89,12 +114,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -103,9 +128,29 @@ class Payout Extends Base {
     return $this->sqlError('E0049');
   }
 
-  public function createPayout_mm($account_id=NULL, $strToken) {
-    $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm (account_id) VALUES (?)");
-    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+  public function createPayout_mm($account_id = NULL, $strToken = NULL) {
+    $stmt = $this->mysqli->prepare(
+      "INSERT INTO $this->table_mm (account_id) "
+      . "SELECT ? FROM DUAL WHERE NOT EXISTS ("
+      . "  SELECT 1 FROM $this->table_mm WHERE account_id = ? AND completed = 0"
+      . ")"
+    );
+    $exec_ok = $stmt && $stmt->bind_param('ii', $account_id, $account_id) && $stmt->execute();
+    // MariaDB error 1467 (ER_AUTOINC_READ_FAILED) fires when extreme
+    // concurrency on this INSERT...SELECT pattern exhausts the
+    // auto-increment pre-allocation. Same race outcome as
+    // affected_rows=0 — another concurrent request already inserted
+    // the row, so treat it as "already active" rather than a raw SQL
+    // error.
+    if (!$exec_ok && $this->mysqli->errno === 1467) {
+      $this->setErrorMessage('You already have one active manual payout request.');
+      return false;
+    }
+    if ($exec_ok) {
+      if ($stmt->affected_rows === 0) {
+        $this->setErrorMessage('You already have one active manual payout request.');
+        return false;
+      }
       // twofactor - consume the token if it is enabled and valid
       if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
         $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
@@ -115,12 +160,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -129,9 +174,29 @@ class Payout Extends Base {
     return $this->sqlError('E0049');
   }
 
-  public function createPayout_mm1($account_id=NULL, $strToken) {
-    $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm1 (account_id) VALUES (?)");
-    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+  public function createPayout_mm1($account_id = NULL, $strToken = NULL) {
+    $stmt = $this->mysqli->prepare(
+      "INSERT INTO $this->table_mm1 (account_id) "
+      . "SELECT ? FROM DUAL WHERE NOT EXISTS ("
+      . "  SELECT 1 FROM $this->table_mm1 WHERE account_id = ? AND completed = 0"
+      . ")"
+    );
+    $exec_ok = $stmt && $stmt->bind_param('ii', $account_id, $account_id) && $stmt->execute();
+    // MariaDB error 1467 (ER_AUTOINC_READ_FAILED) fires when extreme
+    // concurrency on this INSERT...SELECT pattern exhausts the
+    // auto-increment pre-allocation. Same race outcome as
+    // affected_rows=0 — another concurrent request already inserted
+    // the row, so treat it as "already active" rather than a raw SQL
+    // error.
+    if (!$exec_ok && $this->mysqli->errno === 1467) {
+      $this->setErrorMessage('You already have one active manual payout request.');
+      return false;
+    }
+    if ($exec_ok) {
+      if ($stmt->affected_rows === 0) {
+        $this->setErrorMessage('You already have one active manual payout request.');
+        return false;
+      }
       // twofactor - consume the token if it is enabled and valid
       if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
         $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
@@ -141,12 +206,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -156,9 +221,29 @@ class Payout Extends Base {
   }
 
 
-  public function createPayout_mm3($account_id=NULL, $strToken) {
-    $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm3 (account_id) VALUES (?)");
-    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+  public function createPayout_mm3($account_id = NULL, $strToken = NULL) {
+    $stmt = $this->mysqli->prepare(
+      "INSERT INTO $this->table_mm3 (account_id) "
+      . "SELECT ? FROM DUAL WHERE NOT EXISTS ("
+      . "  SELECT 1 FROM $this->table_mm3 WHERE account_id = ? AND completed = 0"
+      . ")"
+    );
+    $exec_ok = $stmt && $stmt->bind_param('ii', $account_id, $account_id) && $stmt->execute();
+    // MariaDB error 1467 (ER_AUTOINC_READ_FAILED) fires when extreme
+    // concurrency on this INSERT...SELECT pattern exhausts the
+    // auto-increment pre-allocation. Same race outcome as
+    // affected_rows=0 — another concurrent request already inserted
+    // the row, so treat it as "already active" rather than a raw SQL
+    // error.
+    if (!$exec_ok && $this->mysqli->errno === 1467) {
+      $this->setErrorMessage('You already have one active manual payout request.');
+      return false;
+    }
+    if ($exec_ok) {
+      if ($stmt->affected_rows === 0) {
+        $this->setErrorMessage('You already have one active manual payout request.');
+        return false;
+      }
       // twofactor - consume the token if it is enabled and valid
       if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
         $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
@@ -168,12 +253,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -181,9 +266,29 @@ class Payout Extends Base {
     }
     return $this->sqlError('E0049');
   }
-  public function createPayout_mm4($account_id=NULL, $strToken) {
-    $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm4 (account_id) VALUES (?)");
-    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+  public function createPayout_mm4($account_id = NULL, $strToken = NULL) {
+    $stmt = $this->mysqli->prepare(
+      "INSERT INTO $this->table_mm4 (account_id) "
+      . "SELECT ? FROM DUAL WHERE NOT EXISTS ("
+      . "  SELECT 1 FROM $this->table_mm4 WHERE account_id = ? AND completed = 0"
+      . ")"
+    );
+    $exec_ok = $stmt && $stmt->bind_param('ii', $account_id, $account_id) && $stmt->execute();
+    // MariaDB error 1467 (ER_AUTOINC_READ_FAILED) fires when extreme
+    // concurrency on this INSERT...SELECT pattern exhausts the
+    // auto-increment pre-allocation. Same race outcome as
+    // affected_rows=0 — another concurrent request already inserted
+    // the row, so treat it as "already active" rather than a raw SQL
+    // error.
+    if (!$exec_ok && $this->mysqli->errno === 1467) {
+      $this->setErrorMessage('You already have one active manual payout request.');
+      return false;
+    }
+    if ($exec_ok) {
+      if ($stmt->affected_rows === 0) {
+        $this->setErrorMessage('You already have one active manual payout request.');
+        return false;
+      }
       // twofactor - consume the token if it is enabled and valid
       if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
         $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
@@ -193,12 +298,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }
@@ -206,9 +311,29 @@ class Payout Extends Base {
     }
     return $this->sqlError('E0049');
   }
-  public function createPayout_mm5($account_id=NULL, $strToken) {
-    $stmt = $this->mysqli->prepare("INSERT INTO $this->table_mm5 (account_id) VALUES (?)");
-    if ($stmt && $stmt->bind_param('i', $account_id) && $stmt->execute()) {
+  public function createPayout_mm5($account_id = NULL, $strToken = NULL) {
+    $stmt = $this->mysqli->prepare(
+      "INSERT INTO $this->table_mm5 (account_id) "
+      . "SELECT ? FROM DUAL WHERE NOT EXISTS ("
+      . "  SELECT 1 FROM $this->table_mm5 WHERE account_id = ? AND completed = 0"
+      . ")"
+    );
+    $exec_ok = $stmt && $stmt->bind_param('ii', $account_id, $account_id) && $stmt->execute();
+    // MariaDB error 1467 (ER_AUTOINC_READ_FAILED) fires when extreme
+    // concurrency on this INSERT...SELECT pattern exhausts the
+    // auto-increment pre-allocation. Same race outcome as
+    // affected_rows=0 — another concurrent request already inserted
+    // the row, so treat it as "already active" rather than a raw SQL
+    // error.
+    if (!$exec_ok && $this->mysqli->errno === 1467) {
+      $this->setErrorMessage('You already have one active manual payout request.');
+      return false;
+    }
+    if ($exec_ok) {
+      if ($stmt->affected_rows === 0) {
+        $this->setErrorMessage('You already have one active manual payout request.');
+        return false;
+      }
       // twofactor - consume the token if it is enabled and valid
       if ($this->config['twofactor']['enabled'] && $this->config['twofactor']['options']['withdraw']) {
         $tValid = $this->token->isTokenValid($account_id, $strToken, 7);
@@ -218,12 +343,12 @@ class Payout Extends Base {
             return true;
           } else {
             $this->log->log("info", "User $account_id requested manual payout but failed to delete payout token");
-            $this->setErrorMessage('Unable to delete token');
+            $this->setErrorMessage("Couldn't consume the confirmation token. Please try the cash-out again.");
             return false;
           }
         } else {
           $this->log->log("info", "User $account_id requested manual payout using an invalid payout token");
-          $this->setErrorMessage('Invalid token');
+          $this->setErrorMessage('Your withdraw confirmation has expired. Please start the cash-out again.');
           return false;
         }
       }

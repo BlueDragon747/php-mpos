@@ -4,6 +4,7 @@
   <input type="hidden" name="action" value="{$smarty.request.action}">
   <input type="hidden" name="id" value="{$NEWS.id}">
   <input type="hidden" name="do" value="save">
+  <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
   <table width="80%">
     <tr>
       <th>

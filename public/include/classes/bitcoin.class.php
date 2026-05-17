@@ -15,7 +15,10 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
  * @author theymos - theymos @ http://bitcoin.org/smf
  */
 
-define("BITCOIN_ADDRESS_VERSION", "00");// this is a hex byte
+define("BITCOIN_ADDRESS_VERSION", "00");// this is a hex byte (legacy Bitcoin P2PKH)
+
+require_once(INCLUDE_DIR . "/lib/bech32.php");
+
 /**
  * Bitcoin utility functions class
  *
@@ -41,7 +44,7 @@ class Bitcoin {
    * @return int
    * @access private
    */
-  private function decodeHex($hex) {
+  private static function decodeHex($hex) {
     $hex = strtoupper($hex);
     $return = "0";
     for ($i = 0; $i < strlen($hex); $i++) {
@@ -59,7 +62,7 @@ class Bitcoin {
    * @return string
    * @access private
    */
-  private function encodeHex($dec) {
+  private static function encodeHex($dec) {
     $return = "";
     while (bccomp($dec, 0) == 1) {
       $dv = (string) bcdiv($dec, "16", 0);
@@ -77,7 +80,7 @@ class Bitcoin {
    * @return string
    * @access private
    */
-  private function decodeBase58($base58) {
+  private static function decodeBase58($base58) {
     $origbase58 = $base58;
 
     $return = "0";
@@ -108,7 +111,7 @@ class Bitcoin {
    * @return string
    * @access private
    */
-  private function encodeBase58($hex) {
+  private static function encodeBase58($hex) {
     if (strlen($hex) % 2 != 0) {
       die("encodeBase58: uneven number of hex characters");
     }
@@ -165,28 +168,69 @@ class Bitcoin {
   }
 
   /**
-   * Determine if a string is a valid Bitcoin address
+   * Determine if a string is a valid address.
    *
-   * @author theymos
-   * @param string $addr String to test
-   * @param string $addressversion
-   * @return boolean
-   * @access public
+   * Accepts:
+   *   - Bech32 (BIP173) segwit addresses whose HRP is in $config['segwit_hrps']
+   *     (defaults: blc, tblc — Blakecoin mainnet + testnet).
+   *   - Legacy base58check addresses whose version byte is in the accepted
+   *     list (either the single hex $addressversion for back-compat, or
+   *     $config['address_versions'] / $config['address_versions_p2sh']).
+   *
+   * This is a local fallback — MPOS's primary validation path is
+   * BitcoinClient::validateaddress() against the coin daemon. Extended here
+   * for SegWit support so bech32 addresses aren't rejected when the daemon
+   * is unreachable.
+   *
+   * @author theymos (original), extended for bech32 in the Blakecoin-segwit port
    */
   public static function checkAddress($addr, $addressversion = BITCOIN_ADDRESS_VERSION) {
-    $addr = self::decodeBase58($addr);
-    if (strlen($addr) != 50) {
+    global $config;
+
+    if (!is_string($addr) || $addr === '') {
       return false;
     }
-    $version = substr($addr, 0, 2);
-    if (hexdec($version) > hexdec($addressversion)) {
+
+    // --- Bech32 SegWit path (BIP173 + BIP141) -----------------------------
+    $hrps = isset($config['segwit_hrps']) && is_array($config['segwit_hrps'])
+      ? $config['segwit_hrps']
+      : array('blc', 'tblc');
+    $lower = strtolower($addr);
+    if ($lower === $addr && strpos($addr, '1') !== false) {
+      $hrp = substr($addr, 0, strrpos($addr, '1'));
+      if (in_array($hrp, $hrps, true) && Bech32::isValid($hrps, $addr)) {
+        return true;
+      }
+    }
+
+    // --- Legacy base58check path ------------------------------------------
+    $decoded = self::decodeBase58($addr);
+    if (strlen($decoded) != 50) {
       return false;
     }
-    $check = substr($addr, 0, strlen($addr) - 8);
+    $version = hexdec(substr($decoded, 0, 2));
+
+    // Build the accepted version list: prefer global config, else fall back
+    // to the single hex byte we were called with (legacy MPOS behaviour).
+    $accepted = array();
+    if (isset($config['address_versions']) && is_array($config['address_versions'])) {
+      $accepted = array_merge($accepted, $config['address_versions']);
+    }
+    if (isset($config['address_versions_p2sh']) && is_array($config['address_versions_p2sh'])) {
+      $accepted = array_merge($accepted, $config['address_versions_p2sh']);
+    }
+    if (empty($accepted)) {
+      $accepted[] = hexdec($addressversion);
+    }
+    if (!in_array($version, $accepted, true)) {
+      return false;
+    }
+
+    $check = substr($decoded, 0, strlen($decoded) - 8);
     $check = pack("H*", $check);
     $check = strtoupper(hash("sha256", hash("sha256", $check, true)));
     $check = substr($check, 0, 8);
-    return $check == substr($addr, strlen($addr) - 8);
+    return $check == substr($decoded, strlen($decoded) - 8);
   }
 
   /**
@@ -196,7 +240,7 @@ class Bitcoin {
    * @return string
    * @access private
    */
-  private function hash160($data) {
+  private static function hash160($data) {
     $data = pack("H*", $data);
     return strtoupper(hash("ripemd160", hash("sha256", $data, true)));
   }
