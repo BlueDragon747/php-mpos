@@ -940,7 +940,7 @@
   </header>
   <div class="bsx-card-body">
     <table class="outbox-table">
-      <thead><tr><th>Coin</th><th>State</th><th class="num">Count</th><th class="num" data-tooltip="Total amount in this state">Amount</th><th>Age</th><th class="outbox-user-col">User</th><th class="outbox-tx-col">TX</th></tr></thead>
+      <thead><tr><th>Coin</th><th>State</th><th class="num">Count</th><th class="num">Amount</th><th>Age</th><th class="outbox-user-col">User</th><th class="outbox-tx-col">TX</th></tr></thead>
       <tbody id="sys-tbody-outbox">
       {section name=o loop=$SYS_OUTBOX}
         <tr data-outbox-group="{$SYS_OUTBOX[o].group|escape}">
