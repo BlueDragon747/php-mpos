@@ -372,6 +372,17 @@ remote_step "${SCRIPT_DIR}/scripts/mainnet/30-wait-rpc.sh"
 # step (40-install-pool.sh references the mainnet eloipool config
 # template that lives in MPOS's deploy-bundle/templates/).
 # ---------------------------------------------------------------
+# Build Vue v2 frontend on the dev box so public/v2/dist/ ships with
+# the rsync below. Without this, the MPOS dashboard renders the
+# "v2 build not deployed" message.
+if [ -f "${REPO_ROOT}/frontend/package.json" ]; then
+    if ! command -v bun >/dev/null 2>&1; then
+        die "bun not found on dev box — install bun (https://bun.sh) before running deploy"
+    fi
+    say "building Vue v2 frontend"
+    ( cd "${REPO_ROOT}/frontend" && bun install --silent && bun run build )
+fi
+
 push_tree "${REPO_ROOT}" "/root/Blakestream-MPOS"
 push_tree "${ELIOPOOL_TREE}" "/root/Blakestream-Eliopool"
 remote_step "${SCRIPT_DIR}/scripts/mainnet/40-install-pool.sh"

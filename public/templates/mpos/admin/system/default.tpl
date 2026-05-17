@@ -927,15 +927,14 @@
   </div>
 </article>
 
-{if $SYS_OUTBOX}
 <article class="bsx-card outbox-card">
   <header>
     <h3>Payout</h3>
     <div class="outbox-filter-group" role="group" aria-label="Payout status">
-      <button type="button" class="outbox-filter" data-outbox-filter="pending">Pending <span id="sys-outbox-count-pending" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.pending|escape}</span></button>
-      <button type="button" class="outbox-filter" data-outbox-filter="broadcast">Broadcasted <span id="sys-outbox-count-broadcast" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.broadcast|escape}</span></button>
-      <button type="button" class="outbox-filter" data-outbox-filter="reconciled">Reconciled <span id="sys-outbox-count-reconciled" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.reconciled|escape}</span></button>
-      <button type="button" class="outbox-filter" data-outbox-filter="other"{if !$SYS_OUTBOX_COUNTS.other} hidden{/if} data-tooltip="Abandoned or unknown payout states">Other <span id="sys-outbox-count-other" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.other|escape}</span></button>
+      <button type="button" class="outbox-filter" data-outbox-filter="pending">Pending <span id="sys-outbox-count-pending" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.pending|default:"0"|escape}</span></button>
+      <button type="button" class="outbox-filter" data-outbox-filter="broadcast">Broadcasted <span id="sys-outbox-count-broadcast" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.broadcast|default:"0"|escape}</span></button>
+      <button type="button" class="outbox-filter" data-outbox-filter="reconciled">Reconciled <span id="sys-outbox-count-reconciled" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.reconciled|default:"0"|escape}</span></button>
+      <button type="button" class="outbox-filter" data-outbox-filter="other"{if !$SYS_OUTBOX_COUNTS.other} hidden{/if} data-tooltip="Abandoned or unknown payout states">Other <span id="sys-outbox-count-other" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.other|default:"0"|escape}</span></button>
     </div>
   </header>
   <div class="bsx-card-body">
@@ -973,12 +972,11 @@
           </td>
         </tr>
       {/section}
-        <tr id="sys-outbox-empty" hidden><td colspan="7" class="empty-state">No payouts in this state.</td></tr>
+        <tr id="sys-outbox-empty"{if $SYS_OUTBOX} hidden{/if}><td colspan="7" class="empty-state">No payouts yet.</td></tr>
       </tbody>
     </table>
   </div>
 </article>
-{/if}
 
 </div>{* /grid2 daemons + outbox *}
 
