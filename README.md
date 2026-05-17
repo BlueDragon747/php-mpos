@@ -108,11 +108,11 @@ The following feature have been implemented so far:
 Installation
 ============
 
-For the Blakestream mainnet deployment path, use this fork and the
-automated deploy bundle:
+For the Blakestream mainnet deployment path, use the automated deploy
+bundle:
 
 ```bash
-git clone https://github.com/SidGrip/php-mpos.git php-mpos
+git clone https://github.com/BlueDragon747/php-mpos.git php-mpos
 
 cd php-mpos
 export MPOS_DOMAIN=pool.example.com
@@ -126,7 +126,7 @@ The deploy pulls the six coin daemon images directly from Docker Hub as
 `MPOS_IMAGE_TAG` when testing another image namespace or tag.
 
 Eliopool is cloned automatically from
-`https://github.com/SidGrip/eloipool_Blakecoin.git` branch `master`
+`https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `master`
 unless you set `ELIOPOOL_TREE` to a local checkout.
 
 See [deploy-bundle/README.md](deploy-bundle/README.md) for deploy details.

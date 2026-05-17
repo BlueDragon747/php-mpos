@@ -1,9 +1,8 @@
 # Operator help
 
-Quick reference for running this MPOS deploy on your own host. The
-upstream BlueDragon `php-mpos` repo ships with no installer; this fork
-adds `deploy-bundle/` so you can stand up the full 6-coin merge-mined
-stack with a single SSH-driven script.
+Quick reference for running the Blakestream MPOS deploy on your own host.
+The included `deploy-bundle/` stands up the full 6-coin merge-mined stack
+with a single SSH-driven script.
 
 ## What you get
 
@@ -23,9 +22,9 @@ stack with a single SSH-driven script.
 - A local checkout of `Blakestream-Containers` for the daemon image
   build. Export its path as `CONTAINERS_REPO` (required).
 - The deploy auto-clones the eloipool half from
-  `https://github.com/SidGrip/eloipool_Blakecoin.git` (branch `15.21`).
+  `https://github.com/BlueDragon747/eloipool_Blakecoin.git` (branch `master`).
   If you want to deploy from a local checkout instead, export
-  `ELIOPOOL_TREE=/path/to/Blakestream-Eliopool-15.21`.
+  `ELIOPOOL_TREE=/path/to/eloipool_Blakecoin`.
 - `ssh-copy-id <your-pool-host>` first so the deploy script has
   passwordless key auth.
 
@@ -128,9 +127,8 @@ BBTC, ELT, UMO, and LIT.
 
 ## Upstream tracking
 
-This is a fork of [`BlueDragon747/php-mpos`](https://github.com/BlueDragon747/php-mpos)
-(itself a fork of [`MPOS/php-mpos`](https://github.com/MPOS/php-mpos)).
-The eloipool half is a fork of
-[`BlueDragon747/eloipool_Blakecoin`](https://github.com/BlueDragon747/eloipool_Blakecoin),
-published as
-[`SidGrip/eloipool_Blakecoin`](https://github.com/SidGrip/eloipool_Blakecoin).
+The MPOS repo is tracked at
+[`BlueDragon747/php-mpos`](https://github.com/BlueDragon747/php-mpos).
+The eloipool half is pulled from
+[`BlueDragon747/eloipool_Blakecoin`](https://github.com/BlueDragon747/eloipool_Blakecoin)
+unless `ELIOPOOL_TREE` points at a local checkout.

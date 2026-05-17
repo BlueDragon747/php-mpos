@@ -5,21 +5,17 @@
 ServerName = '@@SERVER_NAME@@'
 NoInteractive = True
 
-# Mainnet ShareTarget floored at diff 512. The Blakecoin ASIC family
-# operates cleanly at diff 512+ on AT1 / EU3 (vardiff 512-3800 range);
-# our pool was previously running at diff 1-350 which sat right on the
-# bdiff-1 floor and tripped H-not-zero rejects. Vardiff retargets up
-# from this floor as miner share rate justifies. Bdiff-1 floor stays
-# on as a sanity net.
+# ShareTarget floor at diff 1024, tuned for Blake256r8 ASICs in the
+# 70-150 GH/s range. Bdiff-1 floor stays on as a sanity net.
 SkipBdiff1Floor = False
-ShareTarget = 0x00000000007fff80000000000000000000000000000000000000000000000000
+ShareTarget = 0x00000000003fffc0000000000000000000000000000000000000000000000000
 
-# Vardiff on. Each miner's stream gets adjusted toward
-# DynamicTargetGoal shares per DynamicTargetWindow seconds, with a
-# DynamicTargetQuick fast-path for new connections.
+# Per-user vardiff. DynamicTargetGoal is shares-per-minute (eloipool
+# multiplies by window/60 internally); goal=1 settles a 70 GH/s miner
+# at the 1024 floor and ramps larger miners above it.
 DynamicTargetting       = 2
 AllowShareDifficultyAboveNetwork = True
-DynamicTargetGoal       = 8
+DynamicTargetGoal       = 1
 DynamicTargetWindow     = 120
 DynamicTargetQuick      = True
 

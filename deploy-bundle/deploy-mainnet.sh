@@ -35,8 +35,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/SidGrip/php-mpos.git}"
-ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/SidGrip/eloipool_Blakecoin.git}"
+MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/BlueDragon747/php-mpos.git}"
+ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
 ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-master}"
 ELIOPOOL_TMPROOT=""
 ENVRC=""

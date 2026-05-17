@@ -129,3 +129,22 @@ onBeforeUnmount(() => {
 <style scoped>
 .bsx-hashrate-chart { width: 100%; }
 </style>
+
+<style>
+.jqplot-highlighter-tooltip {
+  background: rgba(20, 23, 28, 0.96) !important;
+  border: 1px solid rgba(79, 195, 247, 0.35) !important;
+  color: #cdd !important;
+  padding: 6px 10px !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
+}
+[data-theme="light"] .jqplot-highlighter-tooltip {
+  background: #ffffff !important;
+  border-color: rgba(21, 101, 192, 0.40) !important;
+  color: #1f2933 !important;
+  box-shadow: 0 4px 12px rgba(21, 101, 192, 0.15) !important;
+}
+</style>
