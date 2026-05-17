@@ -87,7 +87,7 @@ within budget when all 6 daemons run concurrently.
 Run mainnet deployment from a clone of:
 
 ```text
-https://github.com/SidGrip/php-mpos
+https://github.com/BlueDragon747/php-mpos
 ```
 
 `deploy-mainnet.sh` pulls the six coin daemon images directly from
@@ -106,12 +106,12 @@ Set `MPOS_DOCKER_HUB` or `MPOS_IMAGE_TAG` only when testing images from
 another Docker namespace or tag.
 
 Eliopool is pulled from
-`https://github.com/SidGrip/eloipool_Blakecoin.git` branch `master` when
+`https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `master` when
 `ELIOPOOL_TREE` is unset. To deploy from a local Eliopool checkout
 instead:
 
 ```bash
-git clone https://github.com/SidGrip/eloipool_Blakecoin.git Blakestream-Eliopool
+git clone https://github.com/BlueDragon747/eloipool_Blakecoin.git Blakestream-Eliopool
 export ELIOPOOL_TREE="$(cd Blakestream-Eliopool && pwd)"
 ```
 
@@ -146,13 +146,13 @@ need to change `MPOS_DOMAIN` (for non-catch-all nginx vhosts) and
 ## Dependencies
 
 - Mainnet deployment must be run from a clone of
-  `https://github.com/SidGrip/php-mpos`.
+  `https://github.com/BlueDragon747/php-mpos`.
 - Mainnet daemon images are pulled from Docker Hub. The default image set is
   `sidgrip/{blakecoin,photon,blakebitcoin,electron,lithium,universalmolecule}:latest`.
   Override with `MPOS_DOCKER_HUB` and `MPOS_IMAGE_TAG` if needed.
 - This bundle expects an `eloipool_Blakecoin` tree available
   at deploy time. By default the deploy script auto-clones it from
-  `https://github.com/SidGrip/eloipool_Blakecoin.git` (branch `master`)
+  `https://github.com/BlueDragon747/eloipool_Blakecoin.git` (branch `master`)
   into a temp directory; override with `ELIOPOOL_TREE=/path/to/checkout`
   to use a local copy instead. It rsyncs the eloipool tree from there
   rather than maintaining a parallel copy.
