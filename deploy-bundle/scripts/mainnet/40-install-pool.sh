@@ -9,7 +9,7 @@ LOG_ROOT=/var/log/blakestream-mpos
 WEB_ROOT=/var/www/blakestream-mpos
 MPOS_REPO=/root/Blakestream-MPOS
 ELOIPOOL_TREE=/root/Blakestream-Eliopool
-ELOIPOOL_SRC="${ELOIPOOL_TREE}/deploy-bundle/eloipool"
+ELOIPOOL_SRC="${ELOIPOOL_TREE}"
 
 [ -d "$ELOIPOOL_SRC" ] || { echo "missing $ELOIPOOL_SRC" >&2; exit 1; }
 [ -d "$MPOS_REPO" ] || { echo "missing $MPOS_REPO" >&2; exit 1; }
