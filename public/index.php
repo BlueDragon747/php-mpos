@@ -38,6 +38,10 @@ define("BASEPATH", dirname(__FILE__) . "/");
 
 // all our includes and config etc are now in bootstrap
 include_once('include/bootstrap.php');
+$bsxTiming = array(
+  'start' => $dStartTime,
+  'bootstrap' => microtime(true)
+);
 
 // switch to https if config option is enabled
 $hts = ($config['https_only'] && (!empty($_SERVER['QUERY_STRING']))) ? "https://".$_SERVER['SERVER_NAME'].$_SERVER['SCRIPT_NAME']."?".$_SERVER['QUERY_STRING'] : "https://".$_SERVER['SERVER_NAME'].$_SERVER['SCRIPT_NAME'];
@@ -90,6 +94,7 @@ if ($config['memcache']['enabled'] && $config['mc_antidos']['enabled']) {
     }
   }
 }
+$bsxTiming['rate_limit'] = microtime(true);
 
 // Got past rate limiter and session manager
 // show last logged in popup ONCE — and only if last login IP differs
@@ -118,6 +123,7 @@ if (@$_SESSION['USERDATA']['is_admin'] && $user->isAdmin(@$_SESSION['USERDATA'][
     require_once(INCLUDE_DIR . '/admin_checks.php');
   }
 }
+$bsxTiming['admin_checks'] = microtime(true);
 
 // Create our pages array from existing files
 if (is_dir(INCLUDE_DIR . '/pages/')) {
@@ -160,6 +166,7 @@ if ($config['csrf']['enabled'] && isset($_POST['ctoken']) && !empty($_POST['ctok
 if ($config['csrf']['enabled']) $smarty->assign('CTOKEN', $csrftoken->getBasic($user->getCurrentIP(), $arrPages[$page]));
 
 // Load the page code setting the content for the page OR the page action instead if set
+$bsxTiming['controller_start'] = microtime(true);
 if (!empty($action)) {
   $debug->append('Loading Action: ' . $action . ' -> ' . $arrActions[$action], 1);
   require_once(PAGES_DIR . '/' . $page . '/' . $arrActions[$action]);
@@ -167,6 +174,7 @@ if (!empty($action)) {
   $debug->append('Loading Page: ' . $page . ' -> ' . $arrPages[$page], 1);
   require_once(PAGES_DIR . '/' . $arrPages[$page]);
 }
+$bsxTiming['controller_end'] = microtime(true);
 
 define('PAGE', $page);
 define('ACTION', $action);
@@ -176,17 +184,64 @@ $smarty->assign("PAGE", $page);
 $smarty->assign("ACTION", $action);
 
 // Now with all loaded and processed, setup some globals we need for smarty templates
+$bsxTiming['globals_start'] = microtime(true);
 if ($page != 'api') require_once(INCLUDE_DIR . '/smarty_globals.inc.php');
+$bsxTiming['globals_end'] = microtime(true);
 
 // Load debug information into template
 $debug->append("Loading debug information into template", 4);
+$bsxTiming['render_start'] = microtime(true);
+$bsxTimingMs = array(
+  'bootstrap' => round(($bsxTiming['bootstrap'] - $bsxTiming['start']) * 1000, 1),
+  'rate_limit' => round(($bsxTiming['rate_limit'] - $bsxTiming['bootstrap']) * 1000, 1),
+  'admin_checks' => round(($bsxTiming['admin_checks'] - $bsxTiming['rate_limit']) * 1000, 1),
+  'controller' => round(($bsxTiming['controller_end'] - $bsxTiming['controller_start']) * 1000, 1),
+  'globals' => round(($bsxTiming['globals_end'] - $bsxTiming['globals_start']) * 1000, 1),
+  'pre_render_total' => round(($bsxTiming['render_start'] - $bsxTiming['start']) * 1000, 1)
+);
+$debug->append(
+  'Request timing page=' . $page .
+  ' action=' . ($action !== '' ? $action : '-') .
+  ' bootstrap=' . $bsxTimingMs['bootstrap'] . 'ms' .
+  ' rate_limit=' . $bsxTimingMs['rate_limit'] . 'ms' .
+  ' admin_checks=' . $bsxTimingMs['admin_checks'] . 'ms' .
+  ' controller=' . $bsxTimingMs['controller'] . 'ms' .
+  ' globals=' . $bsxTimingMs['globals'] . 'ms' .
+  ' pre_render_total=' . $bsxTimingMs['pre_render_total'] . 'ms',
+  3
+);
+if (!headers_sent()) {
+  header(
+    'Server-Timing: bootstrap;dur=' . $bsxTimingMs['bootstrap'] .
+    ', rate_limit;dur=' . $bsxTimingMs['rate_limit'] .
+    ', admin_checks;dur=' . $bsxTimingMs['admin_checks'] .
+    ', controller;dur=' . $bsxTimingMs['controller'] .
+    ', globals;dur=' . $bsxTimingMs['globals'] .
+    ', pre_render;dur=' . $bsxTimingMs['pre_render_total']
+  );
+}
+if ($bsxTimingMs['pre_render_total'] >= 1000) {
+  error_log(
+    'mpos slow request page=' . $page .
+    ' action=' . ($action !== '' ? $action : '-') .
+    ' pre_render_ms=' . $bsxTimingMs['pre_render_total'] .
+    ' controller_ms=' . $bsxTimingMs['controller'] .
+    ' globals_ms=' . $bsxTimingMs['globals']
+  );
+}
+$smarty->assign('REQUEST_TIMINGS', $bsxTimingMs);
 $smarty->assign('DebuggerInfo', $debug->getDebugInfo());
 $smarty->assign('RUNTIME', (microtime(true) - $dStartTime) * 1000);
 
+if ($page != 'api' && session_id()) {
+  $smarty->assign('PAGE_POPUPS', isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : array());
+  $smarty->assign('USERDATA', isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array());
+  $smarty->assign('AUTHENTICATED', !empty($_SESSION['AUTHENTICATED']));
+  unset($_SESSION['POPUP']);
+  session_write_close();
+}
+
 // Display our page
 if (!@$supress_master) $smarty->display($master_template, $smarty_cache_key);
-
-// Unset any temporary values here
-unset($_SESSION['POPUP']);
 
 ?>

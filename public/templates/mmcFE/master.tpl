@@ -54,9 +54,9 @@
           {/if}
         </div>
         <div class="sidebar_content" id="sb1" style="margin-left: 13px">
-          {if is_array($smarty.session.POPUP|default)}
-            {section name=popup loop=$smarty.session.POPUP}
-              <div class="message {$smarty.session.POPUP[popup].TYPE|default:"success"}"><p>{$smarty.session.POPUP[popup].CONTENT}</p></div>
+          {if is_array($PAGE_POPUPS|default)}
+            {section name=popup loop=$PAGE_POPUPS}
+              <div class="message {$PAGE_POPUPS[popup].TYPE|default:"success"}"><p>{$PAGE_POPUPS[popup].CONTENT}</p></div>
             {/section}
           {/if}
           {if file_exists($smarty.current_dir|cat:"/$PAGE/$ACTION/$CONTENT")}{include file="$PAGE/$ACTION/$CONTENT"}{else}Missing template for this page{/if}

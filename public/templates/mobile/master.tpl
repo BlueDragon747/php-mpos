@@ -47,7 +47,7 @@
 {include file="global/header.tpl"}
 {include file="global/navigation.tpl"}
       </div><!-- /header -->
-      {if is_array($smarty.session.POPUP|default)}
+      {if is_array($PAGE_POPUPS|default)}
       <a href="#status" data-rel="popup"></a>
       <div data-role="popup" id="status" data-transition="pop">
         <p>Test</p>
