@@ -5,7 +5,7 @@
       <tr>
         <th align="left">Worker</th>
         <th align="right">Hashrate</th>
-        <th align="right">Difficulty</th>
+        <th align="right">Avg Share Diff</th>
       </tr>
       </thead>
       <tbody id="b-workers">

@@ -68,6 +68,7 @@ export interface WorkerRow {
   id: number;
   username: string;
   hashrate: number;
+  difficulty?: number;
   sharerate: number;
   shares: { valid: number; invalid: number };
   monitor: boolean;

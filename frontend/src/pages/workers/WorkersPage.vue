@@ -35,8 +35,8 @@ function fmtHashrate(khs: number): string {
   return Math.round(khs).toLocaleString('en-US');
 }
 function fmtDifficulty(d: number): string {
-  if (!Number.isFinite(d)) return '0.00';
-  return d.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (!Number.isFinite(d)) return '0';
+  return Math.round(d).toLocaleString('en-US');
 }
 
 // `data[<id>][monitor]` is omitted from POST when the checkbox is
@@ -259,7 +259,7 @@ async function onDeleteWorker(id: number) {
                   <th class="th-pw">Password</th>
                   <th v-if="!i.disableNotifications" class="th-monitor">Monitor</th>
                   <th class="th-hashrate">Hashrate</th>
-                  <th class="th-diff">Difficulty</th>
+                  <th class="th-diff">Avg Share Diff</th>
                   <th class="th-action"></th>
                 </tr>
               </thead>

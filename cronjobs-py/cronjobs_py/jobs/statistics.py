@@ -48,7 +48,7 @@ HASHRATE_WORKER_EMA_STATE = "getCurrentWorkerHashrate_ema_state"
 
 _EMA_FAST_RESPONSE_THRESHOLD = 0.20   # |sample - prev_ema| / prev_ema > 0.20
 _EMA_FAST_RESPONSE_DIVISOR = 5         # effective tau on big change = tau / 5
-_WORKER_STALE_SECONDS = 120            # no shares in this many sec → "going dormant"
+_WORKER_STALE_SECONDS = 300            # no shares in this many sec → "going dormant"
 
 
 def _ema_step(prev_value, prev_ts, sample, now_ts, tau, *, force_fast=False):

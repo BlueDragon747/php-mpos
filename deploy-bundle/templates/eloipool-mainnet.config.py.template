@@ -5,19 +5,22 @@
 ServerName = '@@SERVER_NAME@@'
 NoInteractive = True
 
-# ShareTarget floor at diff 1024, tuned for Blake256r8 ASICs in the
-# 70-150 GH/s range. Bdiff-1 floor stays on as a sanity net.
+# ShareTarget floor at diff 512, tuned for Blake256r8 ASICs in the
+# 70-150 GH/s range. This gives a 72 GH/s miner roughly 2 shares/min
+# for smoother hashrate samples while keeping DB load low.
+# Bdiff-1 floor stays on as a sanity net.
 SkipBdiff1Floor = False
-ShareTarget = 0x00000000003fffc0000000000000000000000000000000000000000000000000
+ShareTarget = 0x00000000007fff80000000000000000000000000000000000000000000000000
 
 # Per-user vardiff. DynamicTargetGoal is shares-per-minute (eloipool
-# multiplies by window/60 internally); goal=1 settles a 70 GH/s miner
-# at the 1024 floor and ramps larger miners above it.
+# multiplies by window/60 internally); goal=2 keeps a 70-75 GH/s miner
+# near the diff-512 floor and ramps larger miners above it. Quick
+# retargeting is disabled to avoid short-burst overshoots to 2048/4096.
 DynamicTargetting       = 2
 AllowShareDifficultyAboveNetwork = True
-DynamicTargetGoal       = 1
+DynamicTargetGoal       = 2
 DynamicTargetWindow     = 120
-DynamicTargetQuick      = True
+DynamicTargetQuick      = False
 
 WorkQueueSizeRegular  = (0x100,  0x1000)
 WorkQueueSizeClear    = (0x1000, 0x2000)

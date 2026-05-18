@@ -14,6 +14,11 @@ function formatHashrate(khs: number): string {
   const s = autoScaleHashrate(khs);
   return `${s.value.toFixed(2)} ${s.unit}`;
 }
+
+function formatDifficulty(diff?: number): string {
+  if (!Number.isFinite(diff)) return '—';
+  return Math.round(diff as number).toLocaleString('en-US');
+}
 </script>
 
 <template>
@@ -22,7 +27,7 @@ function formatHashrate(khs: number): string {
       <tr>
         <th class="left">Worker</th>
         <th class="right">Hashrate</th>
-        <th class="right">Difficulty</th>
+        <th class="right">Avg Share Diff</th>
       </tr>
     </thead>
     <tbody>
@@ -35,7 +40,7 @@ function formatHashrate(khs: number): string {
       <tr v-for="w in workers" :key="w.id">
         <td class="left">{{ w.username }}</td>
         <td class="right">{{ formatHashrate(w.hashrate) }}</td>
-        <td class="right">{{ (w as any).difficulty ?? '—' }}</td>
+        <td class="right">{{ formatDifficulty(w.difficulty) }}</td>
       </tr>
     </tbody>
   </table>
