@@ -76,7 +76,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       'value'    => $key,
       'currency' => $slot['currency'],
       'name'     => $slot['coin_name'],
-      'label'    => $slot['currency'] . ' - ' . $slot['coin_name'],
+      'label'    => $slot['coin_name'],
     );
   }
 

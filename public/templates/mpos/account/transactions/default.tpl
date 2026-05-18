@@ -63,6 +63,23 @@
     /* swap the SVG arrow to a dark stroke so it's visible on white */
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M3 5l3 3 3-3' fill='none' stroke='%231f2933' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   }
+  [data-theme="light"] #bsx-v2-shell .tx-summary-coin-trigger {
+    background-color: rgba(25, 118, 210, 0.06);
+    border-color: rgba(25, 118, 210, 0.58);
+    border-right-color: rgba(198, 40, 40, 0.48);
+    box-shadow: 0 0 0 1px rgba(25, 118, 210, 0.10) inset;
+    color: #1f2933;
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-summary-coin-trigger:hover,
+  [data-theme="light"] #bsx-v2-shell .tx-summary-coin-trigger:focus {
+    background-color: rgba(25, 118, 210, 0.10);
+    border-color: rgba(25, 118, 210, 0.70);
+    border-right-color: rgba(198, 40, 40, 0.58);
+  }
+  [data-theme="light"] #bsx-v2-shell .tx-summary-coin-caret {
+    border-right-color: #1f2933;
+    border-bottom-color: #1f2933;
+  }
   [data-theme="light"] #bsx-v2-shell .tx-filter-input {
     background: #ffffff;
     border-color: rgba(0, 0, 0, 0.18);
