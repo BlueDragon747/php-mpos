@@ -201,4 +201,18 @@ ON DUPLICATE KEY UPDATE pass = VALUES(pass), pin = VALUES(pin), email = VALUES(e
                         is_admin = 1, is_locked = 0;
 SQL
 
+# eloipool was started in step 40 BEFORE the MPOS schema existed, so
+# its authentication.mpos module failed its first SELECT against the
+# pool_worker table. Restart it now (and mergeminer, which talks to
+# eloipool's jsonrpc) so the auth module reconnects with the schema
+# now in place.
+if systemctl is-active --quiet blakestream-mpos-eloipool.service; then
+    say "restarting eloipool now that MPOS schema is ready"
+    systemctl restart blakestream-mpos-eloipool.service
+fi
+if systemctl is-active --quiet blakestream-mpos-mergeminer.service; then
+    say "restarting merged-mine-proxy to re-handshake with eloipool"
+    systemctl restart blakestream-mpos-mergeminer.service
+fi
+
 say "step 50 done — http://${HOST_IP}:${MPOS_HTTP_PORT}/"

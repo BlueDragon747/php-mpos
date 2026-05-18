@@ -56,8 +56,16 @@ chmod 755 "${LOG_ROOT}"
 
 systemctl daemon-reload
 systemctl enable --now blakestream-mpos-backup.timer
-say "smoke-test backup service"
-systemctl start blakestream-mpos-backup.service
+# Run the first backup synchronously and bypass the schedule-window
+# check (the regular timer fires every 30 min but the script normally
+# skips unless within ±30 min of the configured hour). Without this,
+# 99-verify reports "latest backup artifact missing". Run backup.sh
+# directly so we can pass BACKUP_FORCE=1 into the process env (systemd
+# unit's Environment= doesn't easily plumb to a transient one-shot).
+say "running first backup synchronously (force, bypass schedule window)"
+BACKUP_FORCE=1 /opt/blakestream-mpos/bin/backup.sh /var/backups/blakestream-mpos \
+    >>"${LOG_ROOT}/backup.log" 2>&1 \
+    || say "  WARN: first backup exited non-zero — check ${LOG_ROOT}/backup.log"
 
 say "step 90 done — daily backup timer installed."
 say "  output:    /var/backups/blakestream-mpos/"

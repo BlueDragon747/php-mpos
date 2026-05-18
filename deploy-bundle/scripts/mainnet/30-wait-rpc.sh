@@ -23,7 +23,7 @@ for coin in blc pho bbtc elt lit umo; do
     end=$(( $(date +%s) + PER_COIN_DEADLINE ))
     last_msg=""
     while :; do
-        if curl -fsSL --max-time 3 -u "${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}" \
+        if curl -fsSL --max-time 60 -u "${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}" \
                 --data '{"jsonrpc":"1.0","id":"deploy","method":"getblockcount"}' \
                 -H 'content-type: text/plain' \
                 "http://127.0.0.1:${port}/" >/tmp/rpc-resp 2>/dev/null; then

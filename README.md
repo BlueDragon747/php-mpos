@@ -108,8 +108,8 @@ The following feature have been implemented so far:
 Installation
 ============
 
-For the Blakestream mainnet deployment path, use the automated deploy
-bundle:
+For the Blakestream mainnet deployment path, clone this repo on the pool
+server and run the automated deploy bundle locally:
 
 ```bash
 git clone https://github.com/BlueDragon747/php-mpos.git php-mpos
@@ -118,12 +118,85 @@ cd php-mpos
 export MPOS_DOMAIN=pool.example.com
 export MPOS_ADMIN_EMAIL=admin@example.com
 
+# If you are already root, drop the sudo -E prefix.
+# No host argument means install on this local server.
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+```
+
+If you prefer to deploy from a separate workstation over SSH, use the same
+repo clone and pass the target host:
+
+```bash
+cd php-mpos
+export MPOS_DOMAIN=pool.example.com
+export MPOS_ADMIN_EMAIL=admin@example.com
+
 bash deploy-bundle/deploy-mainnet.sh root@your-vps
 ```
 
-The deploy pulls the six coin daemon images directly from Docker Hub as
-`sidgrip/<coin>:latest` by default. Override with `MPOS_DOCKER_HUB` or
-`MPOS_IMAGE_TAG` when testing another image namespace or tag.
+The deploy runs the six coin daemons from Docker images. By default it
+pulls `sidgrip/<coin>:latest` from Docker Hub. To build daemon images on
+the pool server instead, disable daemon image pulls:
+
+```bash
+export MPOS_PULL_DAEMON_IMAGES=0
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+```
+
+That source-build path clones:
+`BlueDragon747/Blakecoin`, `BlueDragon747/photon`,
+`BlakeBitcoin/BlakeBitcoin`, `BlueDragon747/Electron-ELT`,
+`BlueDragon747/universalmol`, and `BlueDragon747/lithium` from their
+`master` branches, builds daemon binaries in Docker, then tags local
+runtime images as `local/<coin>:15.21-local`.
+
+Source builds require Docker and enough disk for six source trees and build
+outputs; plan for about 15 GB free under `/root/blakestream-daemon-builds`.
+
+If you already built or loaded images yourself, point the deploy at those
+image names and disable pulls:
+
+```bash
+export MPOS_DOCKER_HUB=local
+export MPOS_IMAGE_TAG=15.21-test
+export MPOS_PULL_DAEMON_IMAGES=0
+export SKIP_DAEMON_IMAGE_BUILD=1
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+```
+
+`SKIP_DAEMON_IMAGE_BUILD=1` expects images to already be tagged as
+`${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG}` on the target server.
+
+Bootstrap options:
+
+```bash
+# Default: download bootstrap.dat files from https://bootstrap.blakestream.io
+# If you are already root, use `bash deploy-bundle/deploy-mainnet.sh`.
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+
+# Use a local or private bootstrap mirror. The mirror must expose:
+#   /Blakecoin/bootstrap.dat
+#   /Photon/bootstrap.dat
+#   /BlakeBitcoin/bootstrap.dat
+#   /Electron/bootstrap.dat
+#   /UniversalMolecule/bootstrap.dat
+#   /Lithium/bootstrap.dat
+export BOOTSTRAP_URL=http://127.0.0.1:8080
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+
+# Use pre-seeded bootstrap.dat files already placed in the daemon datadirs:
+#   /root/.blakecoin/bootstrap.dat
+#   /root/.photon/bootstrap.dat
+#   /root/.blakebitcoin/bootstrap.dat
+#   /root/.electron/bootstrap.dat
+#   /root/.universalmolecule/bootstrap.dat
+#   /root/.lithium/bootstrap.dat
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+
+# Skip bootstrap replay and let daemons sync from peers instead.
+export SKIP_BOOTSTRAP=1
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+```
 
 Eliopool is cloned automatically from
 `https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `master`

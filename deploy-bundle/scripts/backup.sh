@@ -108,19 +108,23 @@ SCHED_M=$(read_setting backup_schedule_minute 30)
 BACKUP_RETENTION_DAYS=$(read_setting backup_retention_days 14)
 export BACKUP_RETENTION_DAYS
 
-NOW_H=$(date -u +%-H)
-NOW_M=$(date -u +%-M)
-TARGET_MOD=$((10#$SCHED_H * 60 + 10#$SCHED_M))
-NOW_MOD=$((10#$NOW_H * 60 + 10#$NOW_M))
-DELTA=$(( NOW_MOD - TARGET_MOD ))
-if [ "$DELTA" -lt 0 ]; then DELTA=$((DELTA + 1440)); fi
-if [ "$DELTA" -ge 30 ]; then
-    echo "==> outside backup window (target ${SCHED_H}:${SCHED_M} UTC, now ${NOW_H}:${NOW_M}, delta=${DELTA}m); skipping"
-    exit 0
+if [ "${BACKUP_FORCE:-0}" = "1" ]; then
+    echo "==> BACKUP_FORCE=1; bypassing schedule window + age debounce"
+else
+    NOW_H=$(date -u +%-H)
+    NOW_M=$(date -u +%-M)
+    TARGET_MOD=$((10#$SCHED_H * 60 + 10#$SCHED_M))
+    NOW_MOD=$((10#$NOW_H * 60 + 10#$NOW_M))
+    DELTA=$(( NOW_MOD - TARGET_MOD ))
+    if [ "$DELTA" -lt 0 ]; then DELTA=$((DELTA + 1440)); fi
+    if [ "$DELTA" -ge 30 ]; then
+        echo "==> outside backup window (target ${SCHED_H}:${SCHED_M} UTC, now ${NOW_H}:${NOW_M}, delta=${DELTA}m); skipping"
+        exit 0
+    fi
 fi
 
 LATEST="${OUT_DIR}/latest.tar.gz"
-if [ -e "$LATEST" ]; then
+if [ "${BACKUP_FORCE:-0}" != "1" ] && [ -e "$LATEST" ]; then
     LAST_MTIME=$(stat -c %Y "$LATEST" 2>/dev/null || echo 0)
     NOW_EPOCH=$(date +%s)
     AGE=$(( NOW_EPOCH - LAST_MTIME ))
