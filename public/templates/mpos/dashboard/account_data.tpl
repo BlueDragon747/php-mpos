@@ -103,7 +103,7 @@
       <tr>
         <th align="left">Worker</th>
         <th align="right">Hashrate</th>
-        <th align="right" style="padding-right: 10px;">Difficulty</th>
+        <th align="right" style="padding-right: 10px;">Avg Share Diff</th>
       </tr>
       </thead>
       <tbody id="b-workers">

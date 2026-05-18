@@ -7,8 +7,10 @@ $api->isActive();
 // Check user token
 $user_id = $api->checkAccess($user->checkApiKey($_REQUEST['api_key']), @$_REQUEST['id']);
 
-// Fetch data interval from admin settings
-if ( ! $interval = $setting->getValue('statistics_ajax_data_interval')) $interval = 300;
+// Match the worker table's raw share-difficulty window to the same
+// sampling window the cron uses before EMA smoothing hashrate.
+if ( ! $interval = $setting->getValue('hashrate_window_seconds')) $interval = 900;
+$interval = max(60, (int)$interval);
 
 // Output JSON format
 echo $api->get_json($worker->getWorkers($user_id, $interval));

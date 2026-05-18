@@ -129,38 +129,37 @@ class Worker extends Base {
       }
     }
     $stmt = $this->mysqli->prepare("
-      SELECT id, username, password, monitor,
-       ( SELECT COUNT(id) FROM " . $this->share->getTableName() . " WHERE username = w.username AND time > DATE_SUB(now(), INTERVAL ? SECOND)) AS count_all,
-       ( SELECT COUNT(id) FROM " . $this->share->getArchiveTableName() . " WHERE username = w.username AND time > DATE_SUB(now(), INTERVAL ? SECOND)) AS count_all_archive,
-       (
-         SELECT
-          IFNULL(ROUND(SUM(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
-          FROM " . $this->share->getTableName() . "
-          WHERE
-            username = w.username
-          AND time > DATE_SUB(now(), INTERVAL ? SECOND)
-          AND our_result = 'Y'
-      ) + (
-        SELECT
-          IFNULL(ROUND(SUM(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
-          FROM " . $this->share->getArchiveTableName() . "
-          WHERE
-            username = w.username
-          AND time > DATE_SUB(now(), INTERVAL ? SECOND)
-          AND our_result = 'Y'
-      ) AS hashrate,
-      (
-        SELECT IFNULL(ROUND(SUM(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) / count_all, 2), 0)
-        FROM " . $this->share->getTableName() . "
-        WHERE username = w.username AND time > DATE_SUB(now(), INTERVAL ? SECOND)
-      ) + (
-        SELECT IFNULL(ROUND(SUM(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) / count_all_archive, 2), 0)
-        FROM " . $this->share->getArchiveTableName() . "
-        WHERE username = w.username AND time > DATE_SUB(now(), INTERVAL ? SECOND)
-      ) AS difficulty
+      SELECT w.id, w.username, w.password, w.monitor,
+             IFNULL(s.count_all, 0) AS count_all,
+             IFNULL(s.count_all_archive, 0) AS count_all_archive,
+             IFNULL(ROUND(s.valid_difficulty * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate,
+             IFNULL(ROUND(s.valid_difficulty / NULLIF(s.valid_count, 0), 2), 0) AS difficulty
       FROM $this->table AS w
-      WHERE account_id = ?");
-    if ($this->checkStmt($stmt) && $stmt->bind_param('iiiiiiiii', $interval, $interval, $interval, $interval, $interval, $interval, $interval, $interval, $account_id) && $stmt->execute() && $result = $stmt->get_result()) {
+      LEFT JOIN (
+        SELECT username,
+               SUM(live_count) AS count_all,
+               SUM(archive_count) AS count_all_archive,
+               SUM(IF(our_result='Y', share_difficulty, 0)) AS valid_difficulty,
+               SUM(IF(our_result='Y', 1, 0)) AS valid_count
+        FROM (
+          SELECT username, our_result,
+                 IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty) AS share_difficulty,
+                 1 AS live_count,
+                 0 AS archive_count
+          FROM " . $this->share->getTableName() . "
+          WHERE time > DATE_SUB(now(), INTERVAL ? SECOND)
+          UNION ALL
+          SELECT username, our_result,
+                 IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty) AS share_difficulty,
+                 0 AS live_count,
+                 1 AS archive_count
+          FROM " . $this->share->getArchiveTableName() . "
+          WHERE time > DATE_SUB(now(), INTERVAL ? SECOND)
+        ) AS recent
+        GROUP BY username
+      ) AS s ON s.username = w.username
+      WHERE w.account_id = ?");
+    if ($this->checkStmt($stmt) && $stmt->bind_param('iiii', $interval, $interval, $interval, $account_id) && $stmt->execute() && $result = $stmt->get_result()) {
       $rows = $result->fetch_all(MYSQLI_ASSOC);
       // Substitute EMA-smoothed hashrate when the cron has cached one
       // for this exact worker username; raw SQL value stays for any

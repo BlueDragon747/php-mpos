@@ -37,7 +37,7 @@ $aSettings['website'][] = array(
   'size' => 6,
   'default' => 300,
   'name' => 'hashrate_ema_tau_seconds', 'value' => $setting->getValue('hashrate_ema_tau_seconds'),
-  'tooltip' => 'EMA time constant for the displayed hashrate. Half-life ≈ 0.7 × this value. Larger = steadier number that lags real changes; smaller = jumpier number that reacts faster. Default 300 (~3.5 min half-life), minimum 60.'
+  'tooltip' => 'EMA time constant for the displayed hashrate. Half-life ≈ 0.7 × this value. Larger = steadier number that lags real changes; smaller = jumpier number that reacts faster. Default 300 (~3.5 min half-life), minimum 60. Diff-512 share floor works well with 300; diff-1024 may need 600.'
 );
 $aSettings['website'][] = array(
   'display' => 'Website Name', 'type' => 'text',

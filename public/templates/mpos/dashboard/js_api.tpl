@@ -172,7 +172,8 @@ $(document).ready(function(){
     for (var i = j = 0; i < length; i++) {
       if (workers[i].hashrate > 0) {
         j++;
-        $('#b-workers').append('<tr><td>' + workers[i].username + '</td><td align="right">' + workers[i].hashrate + '</td><td align="right">' + workers[i].difficulty + '</td></tr>');
+        var displayDifficulty = Math.round(parseFloat(workers[i].difficulty || 0));
+        $('#b-workers').append('<tr><td>' + workers[i].username + '</td><td align="right">' + workers[i].hashrate + '</td><td align="right">' + displayDifficulty + '</td></tr>');
       }
     }
     if (j == 0) { $('#b-workers').html('<tr><td colspan="3" align="center">No active workers</td></tr>'); }
