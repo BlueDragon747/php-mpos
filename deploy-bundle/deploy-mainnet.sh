@@ -3,7 +3,7 @@
 #
 # Pipeline (per the operator's spec, top-down):
 #
-#   1. Pull the six mainnet daemon images from Docker Hub.
+#   1. Pull or reuse the six mainnet daemon Docker images.
 #   2. Create data folders, render configs with active mainnet peer
 #      addnodes (from explorer.blakestream.io), and start the 6 daemons.
 #   3. If bootstrap is enabled, replay each coin's bootstrap.dat
@@ -21,14 +21,20 @@
 #      can be enabled per-host for rebase soak windows.)
 #
 # Usage:
+#   sudo bash deploy-bundle/deploy-mainnet.sh
 #   bash deploy-bundle/deploy-mainnet.sh <ssh-host>
 #   bash deploy-bundle/deploy-mainnet.sh <your-host-alias>
 #
-# Pre-reqs (on this dev box, NOT the VPS):
-#   - SSH key auth to <ssh-host> as root (use ssh-copy-id first)
-#   - rsync, ssh, curl, git
+# Pre-reqs (local mode, on the pool server):
+#   - Run as root or through sudo
+#   - Repo cloned locally
+#   - rsync, curl, git, bun
 #
-# Pre-reqs (on the VPS): nothing — this script installs everything.
+# Pre-reqs (SSH mode, on this dev box, NOT the VPS):
+#   - SSH key auth to <ssh-host> as root (use ssh-copy-id first)
+#   - rsync, ssh, curl, git, bun
+#
+# Pre-reqs (SSH mode, on the VPS): nothing — this script installs everything.
 
 set -euo pipefail
 
@@ -52,12 +58,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ "${1:-}" = "" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     cat <<EOF
-Usage: $0 <ssh-host>
+Usage:
+  $0              # local install on this server
+  $0 <ssh-host>   # remote install over SSH
 
-Deploy a mainnet Blakestream-MPOS pool to <ssh-host> via SSH.
+Deploy a mainnet Blakestream-MPOS pool.
 
+  $0                   # run on the pool server from a local repo clone
   $0 <your-host-alias> # SSH alias from ~/.ssh/config
   $0 root@1.2.3.4      # raw user@host
 
@@ -71,15 +80,36 @@ Source repos:
     ${ELIOPOOL_REPO_URL} branch ${ELIOPOOL_BRANCH}
 
 Daemon images:
-  The six coin daemons are pulled directly from Docker Hub:
+  The six coin daemons are pulled directly from Docker Hub by default:
 
     \${MPOS_DOCKER_HUB:-sidgrip}/<coin>:\${MPOS_IMAGE_TAG:-latest}
 
+  To clone the coin repos and build local runtime images on the target
+  server instead of pulling daemon images:
+
+    MPOS_PULL_DAEMON_IMAGES=0
+
 Tunables (env):
   MPOS_DOCKER_HUB     Docker Hub org/user for coin daemon images
-                       (default: sidgrip).
+                       (default: sidgrip when pulling, local when building).
   MPOS_IMAGE_TAG      Docker image tag for all daemon images
-                       (default: latest).
+                       (default: latest when pulling, 15.21-local when building).
+  MPOS_PULL_DAEMON_IMAGES
+                       1 pulls daemon images; 0 clones coin repos and builds
+                       local daemon images first (default: 1).
+  MPOS_DAEMON_SOURCE_REF
+                       Branch/tag used for source builds (default: master).
+  MPOS_DAEMON_BUILD_ROOT
+                       Source-build working directory
+                       (default: /root/blakestream-daemon-builds).
+  MPOS_DAEMON_BUILD_JOBS
+                       Parallel build jobs (default: CPU cores - 1).
+  MPOS_DAEMON_BUILD_DOCKER_MODE
+                       pull uses prebuilt native-base build image; build builds
+                       the native-base image locally (default: pull).
+  SKIP_DAEMON_IMAGE_BUILD
+                       With MPOS_PULL_DAEMON_IMAGES=0, skip source builds and
+                       use already-loaded local daemon images (default: 0).
   MPOS_EXPLORER_API_BASE
                        Explorer API used to fetch addnode peers
                        (default: https://explorer.blakestream.io/api).
@@ -94,7 +124,8 @@ Tunables (env):
   MPOS_DOMAIN          Public domain (default: _, catch-all)
   MPOS_HTTP_PORT       Web UI port (default: 80)
   MPOS_STRATUM_PORT    Stratum bind port (default: 3334)
-  MPOS_SSH_PORT        SSH port to keep open in UFW (default: ssh -G)
+  MPOS_SSH_PORT        SSH port to keep open in UFW
+                       (default: 22 in local mode; ssh -G in SSH mode)
   MPOS_DB_PASS         DB password (default: random 32 hex)
   MPOS_ADMIN_USER      Admin login (default: admin)
   MPOS_ADMIN_PASS      Admin password (default: random 32 hex)
@@ -118,12 +149,56 @@ Tunables (env):
   TIP_CATCH_LAG        Allowed blocks behind peer-reported tip (default: 5)
   SKIP_DAEMONS         Skip daemon image pull/config/start (already done)
   SKIP_BOOTSTRAP       Skip sequential bootstrap.dat replay (rely on p2p sync)
+
+Daemon image examples:
+  # Default: pull sidgrip/<coin>:latest
+  $0
+
+  # Clone coin repos and build local/<coin>:15.21-local runtime images
+  MPOS_PULL_DAEMON_IMAGES=0 $0
+
+  # Use already-loaded custom images without pulling or building
+  MPOS_DOCKER_HUB=local MPOS_IMAGE_TAG=15.21-test \\
+  MPOS_PULL_DAEMON_IMAGES=0 SKIP_DAEMON_IMAGE_BUILD=1 $0
+
+Source-build notes:
+  - Requires Docker and enough disk for six source trees/build outputs.
+  - Plan for about 15 GB free under MPOS_DAEMON_BUILD_ROOT.
+  - SKIP_DAEMON_IMAGE_BUILD=1 assumes images are already tagged as:
+    \${MPOS_DOCKER_HUB}/<coin>:\${MPOS_IMAGE_TAG}
+
+Bootstrap examples:
+  # Default public bootstrap pull
+  $0
+
+  # Local/private bootstrap mirror with per-coin subdirs
+  BOOTSTRAP_URL=http://127.0.0.1:8080 $0
+
+  # Skip bootstrap replay and sync from peers
+  SKIP_BOOTSTRAP=1 $0
 EOF
     exit 0
 fi
 
 say() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
+
+LOCAL_DEPLOY=0
+HOST="${1:-}"
+case "${HOST}" in
+    "")
+        LOCAL_DEPLOY=1
+        HOST="localhost"
+        ;;
+    --local|-local|local|localhost|127.0.0.1)
+        LOCAL_DEPLOY=1
+        HOST="localhost"
+        ;;
+esac
+
+if [ "${LOCAL_DEPLOY}" = "1" ] && [ "$(id -u)" != "0" ]; then
+    die "local install must be run as root (use sudo -E bash deploy-bundle/deploy-mainnet.sh)"
+fi
 
 # Eliopool: prefer a local checkout if ELIOPOOL_TREE is set; otherwise
 # auto-clone the published repo into a temp dir so the deploy is
@@ -134,17 +209,28 @@ if [ -z "${ELIOPOOL_TREE:-}" ]; then
     git clone --depth 1 -b "${ELIOPOOL_BRANCH}" "${ELIOPOOL_REPO_URL}" "${ELIOPOOL_TREE}"
 fi
 
-HOST="$1"
-
-# Pre-flight: paths exist locally, ssh works, sudo works on remote.
+# Pre-flight: paths exist locally. SSH mode also verifies remote auth.
 [ -d "${ELIOPOOL_TREE}" ] || die "eloipool_Blakecoin checkout not found at ${ELIOPOOL_TREE}"
 
-say "checking SSH auth to ${HOST}"
-ssh -o BatchMode=yes -o ConnectTimeout=10 "${HOST}" 'echo ok' >/dev/null \
-    || die "ssh to ${HOST} failed (need passwordless key auth - run ssh-copy-id first)"
+host_run() {
+    if [ "${LOCAL_DEPLOY}" = "1" ]; then
+        bash -lc "$1"
+    else
+        ssh "${HOST}" "$1"
+    fi
+}
 
-SSH_PORT_DETECTED="$(ssh -G "${HOST}" 2>/dev/null | awk '/^port / {print $2; exit}')"
-export MPOS_SSH_PORT="${MPOS_SSH_PORT:-${SSH_PORT_DETECTED:-22}}"
+if [ "${LOCAL_DEPLOY}" = "1" ]; then
+    say "local deploy mode on this server"
+    export MPOS_SSH_PORT="${MPOS_SSH_PORT:-22}"
+else
+    say "checking SSH auth to ${HOST}"
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "${HOST}" 'echo ok' >/dev/null \
+        || die "ssh to ${HOST} failed (need passwordless key auth - run ssh-copy-id first)"
+
+    SSH_PORT_DETECTED="$(ssh -G "${HOST}" 2>/dev/null | awk '/^port / {print $2; exit}')"
+    export MPOS_SSH_PORT="${MPOS_SSH_PORT:-${SSH_PORT_DETECTED:-22}}"
+fi
 
 # random_hex producing N hex characters (8 = 32 bits, 32 = 128 bits, ...)
 random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$1"; }
@@ -161,8 +247,8 @@ say "checking for prior deploy state on ${HOST}"
 # step 20 and step 99) the env's MPOS_NODE_RPC_PASS would not match
 # what the daemons authenticate against; reading from the conf is
 # always correct.
-DAEMON_RPC_USER="$(ssh "${HOST}" 'grep -m1 ^rpcuser= /root/.blakecoin/blakecoin.conf 2>/dev/null | cut -d= -f2' || true)"
-DAEMON_RPC_PASS="$(ssh "${HOST}" 'grep -m1 ^rpcpassword= /root/.blakecoin/blakecoin.conf 2>/dev/null | cut -d= -f2' || true)"
+DAEMON_RPC_USER="$(host_run 'grep -m1 ^rpcuser= /root/.blakecoin/blakecoin.conf 2>/dev/null | cut -d= -f2' || true)"
+DAEMON_RPC_PASS="$(host_run 'grep -m1 ^rpcpassword= /root/.blakecoin/blakecoin.conf 2>/dev/null | cut -d= -f2' || true)"
 if [ -n "${DAEMON_RPC_USER}" ] && [ -n "${DAEMON_RPC_PASS}" ]; then
     say "adopting RPC creds from /root/.blakecoin/blakecoin.conf"
     : "${MPOS_NODE_RPC_USER:=${DAEMON_RPC_USER}}"
@@ -170,7 +256,7 @@ if [ -n "${DAEMON_RPC_USER}" ] && [ -n "${DAEMON_RPC_PASS}" ]; then
     export MPOS_NODE_RPC_USER MPOS_NODE_RPC_PASS
 fi
 
-LIVE_STRATUM_PORT="$(ssh "${HOST}" "python3 - <<'PY' 2>/dev/null || true
+LIVE_STRATUM_PORT="$(host_run "python3 - <<'PY' 2>/dev/null || true
 import re
 from pathlib import Path
 cfg = Path('/opt/blakestream-mpos/eloipool/config.py')
@@ -186,7 +272,7 @@ if [ -z "${MPOS_STRATUM_PORT+x}" ] && [[ "${LIVE_STRATUM_PORT}" =~ ^[1-9][0-9]{0
     export MPOS_STRATUM_PORT
 fi
 
-PRIOR_ENV="$(ssh "${HOST}" 'cat /root/.mpos-deploy.env 2>/dev/null' || true)"
+PRIOR_ENV="$(host_run 'cat /root/.mpos-deploy.env 2>/dev/null' || true)"
 if [ -n "${PRIOR_ENV}" ]; then
     say "found prior /root/.mpos-deploy.env - adopting non-RPC values "
     say "  for keys the operator hasn't overridden in this run"
@@ -239,8 +325,19 @@ export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 32)}"
 export MPOS_API_TOKEN="${MPOS_API_TOKEN:-$(random_hex 16)}"
 export MPOS_NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 export MPOS_NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-$(random_hex 24)}"
-export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
+export MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
+if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
+    export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-15.21-local}"
+else
+    export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
+fi
+export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
+export MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
+export MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
+export MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
+export SKIP_DAEMON_IMAGE_BUILD="${SKIP_DAEMON_IMAGE_BUILD:-0}"
 export MPOS_EXPLORER_API_BASE="${MPOS_EXPLORER_API_BASE:-https://explorer.blakestream.io/api}"
 export BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
 export BOOTSTRAP_IMPORT_TIMEOUT_S="${BOOTSTRAP_IMPORT_TIMEOUT_S:-21600}"
@@ -284,6 +381,14 @@ require_pattern MPOS_NODE_RPC_USER "${MPOS_NODE_RPC_USER}" '[A-Za-z0-9_@%+=:,./-
 require_pattern MPOS_NODE_RPC_PASS "${MPOS_NODE_RPC_PASS}" '[A-Za-z0-9_@%+=:,./-]{16,128}'
 require_pattern MPOS_DOCKER_HUB   "${MPOS_DOCKER_HUB}"   '[A-Za-z0-9._:/-]{1,253}'
 require_pattern MPOS_IMAGE_TAG    "${MPOS_IMAGE_TAG}"    '[A-Za-z0-9._-]{1,128}'
+require_pattern MPOS_PULL_DAEMON_IMAGES "${MPOS_PULL_DAEMON_IMAGES}" '[01]'
+require_pattern MPOS_DAEMON_SOURCE_REF "${MPOS_DAEMON_SOURCE_REF}" '[A-Za-z0-9._/-]{1,128}'
+require_pattern MPOS_DAEMON_BUILD_ROOT "${MPOS_DAEMON_BUILD_ROOT}" '/[A-Za-z0-9._/-]+'
+if [ -n "$MPOS_DAEMON_BUILD_JOBS" ]; then
+    require_pattern MPOS_DAEMON_BUILD_JOBS "${MPOS_DAEMON_BUILD_JOBS}" '[1-9][0-9]{0,2}'
+fi
+require_pattern MPOS_DAEMON_BUILD_DOCKER_MODE "${MPOS_DAEMON_BUILD_DOCKER_MODE}" '(pull|build)'
+require_pattern SKIP_DAEMON_IMAGE_BUILD "${SKIP_DAEMON_IMAGE_BUILD}" '[01]'
 require_pattern MPOS_EXPLORER_API_BASE "${MPOS_EXPLORER_API_BASE}" 'https?://[A-Za-z0-9._:/%-]+'
 require_pattern BOOTSTRAP_URL     "${BOOTSTRAP_URL}"     'https?://[A-Za-z0-9._:/%-]+'
 require_pattern BOOTSTRAP_IMPORT_TIMEOUT_S "${BOOTSTRAP_IMPORT_TIMEOUT_S}" '[1-9][0-9]{0,5}'
@@ -308,7 +413,11 @@ ENVRC=$(mktemp)
                MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_EMAIL \
                MPOS_SALT MPOS_SALTY MPOS_API_TOKEN \
                MPOS_NODE_RPC_USER MPOS_NODE_RPC_PASS \
-               MPOS_DOCKER_HUB MPOS_IMAGE_TAG MPOS_EXPLORER_API_BASE \
+               MPOS_DOCKER_HUB MPOS_IMAGE_TAG MPOS_PULL_DAEMON_IMAGES \
+               MPOS_DAEMON_SOURCE_REF \
+               MPOS_DAEMON_BUILD_ROOT MPOS_DAEMON_BUILD_JOBS \
+               MPOS_DAEMON_BUILD_DOCKER_MODE SKIP_DAEMON_IMAGE_BUILD \
+               MPOS_EXPLORER_API_BASE \
                BOOTSTRAP_URL \
                BOOTSTRAP_IMPORT_TIMEOUT_S BOOTSTRAP_IMPORT_SLEEP_S \
                BOOTSTRAP_DOWNLOAD_ATTEMPTS BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S \
@@ -320,41 +429,131 @@ ENVRC=$(mktemp)
 } > "$ENVRC"
 
 say "deploy.env: ${ENVRC}"
-say "running mainnet deploy against ${HOST}"
+if [ "${LOCAL_DEPLOY}" = "1" ]; then
+    say "running mainnet deploy locally"
+else
+    say "running mainnet deploy against ${HOST}"
+fi
 
-# Helper: rsync a local tree to the VPS.
+# Helper: stage a local tree for the installer scripts.
 push_tree() {
     local src="$1" dst="$2"
-    say "rsync ${src} -> ${HOST}:${dst}"
-    rsync -a --delete \
-        --exclude='.venv' --exclude='__pycache__' --exclude='*.egg-info' \
-        --exclude='.venv-test' --exclude='node_modules' --exclude='.git' \
-        "${src}/" "${HOST}:${dst}/"
+    local excludes=(
+        --exclude='.venv' --exclude='__pycache__' --exclude='*.egg-info'
+        --exclude='.venv-test' --exclude='node_modules' --exclude='.git'
+    )
+    if [ "${LOCAL_DEPLOY}" = "1" ]; then
+        say "rsync ${src} -> ${dst}"
+        mkdir -p "$dst"
+        if [ "$(realpath "$src")" = "$(realpath -m "$dst")" ]; then
+            say "source and destination are the same; skipping ${dst}"
+            return 0
+        fi
+        rsync -a --delete "${excludes[@]}" "${src}/" "${dst}/"
+    else
+        say "rsync ${src} -> ${HOST}:${dst}"
+        rsync -a --delete "${excludes[@]}" "${src}/" "${HOST}:${dst}/"
+    fi
 }
 
-# Helper: run a remote step with the env.
-remote_step() {
+# Helper: run a deploy step with the generated env. Any args after the
+# script path are forwarded to the step script verbatim (e.g. --prefetch).
+deploy_step() {
     local script="$1"
+    shift
     local name; name=$(basename "$script")
-    say "remote: ${name}"
-    scp -q "$ENVRC" "${HOST}:/root/.mpos-deploy.env"
-    scp -q "$script" "${HOST}:/tmp/${name}"
-    # shellcheck disable=SC2029
-    ssh "${HOST}" "set -e; source /root/.mpos-deploy.env; bash /tmp/${name}"
+    local args="$*"
+    local args_display="${args:+ ${args}}"
+    if [ "${LOCAL_DEPLOY}" = "1" ]; then
+        say "local: ${name}${args_display}"
+        install -o root -g root -m 0600 "$ENVRC" /root/.mpos-deploy.env
+        ( set -e; source /root/.mpos-deploy.env; bash "$script" $args )
+    else
+        say "remote: ${name}${args_display}"
+        scp -q "$ENVRC" "${HOST}:/root/.mpos-deploy.env"
+        scp -q "$script" "${HOST}:/tmp/${name}"
+        # shellcheck disable=SC2029
+        ssh "${HOST}" "set -e; source /root/.mpos-deploy.env; bash /tmp/${name} ${args}"
+    fi
 }
 
 # ---------------------------------------------------------------
 # Step 1: VPS system deps — Docker + LAMP + memcached
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/10-vps-system-deps.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/10-vps-system-deps.sh"
 
 # ---------------------------------------------------------------
-# Step 2: Pull Docker Hub daemon images and start containers
+# Step 2: Pull or build daemon images, then start containers
+#
+# When source-building daemons (MPOS_PULL_DAEMON_IMAGES=0), the
+# bootstrap downloads run in the background concurrently with the
+# 30-60 min compile phase, saving wall time. The prefetch is
+# idempotent — Phase A in the regular step 21 invocation re-verifies
+# size and re-fetches anything missing.
 # ---------------------------------------------------------------
+PREFETCH_PID=""
+PREFETCH_LOG=""
 if [ "${SKIP_DAEMONS}" != "1" ]; then
-    remote_step "${SCRIPT_DIR}/scripts/mainnet/20-deploy-daemons.sh"
+    if [ "${MPOS_PULL_DAEMON_IMAGES}" = "0" ] && [ "${SKIP_DAEMON_IMAGE_BUILD}" != "1" ]; then
+        if [ "${SKIP_BOOTSTRAP}" != "1" ]; then
+            PREFETCH_LOG="/tmp/bootstrap-prefetch.log"
+            say "starting bootstrap prefetch in background (parallel with image build); log: ${PREFETCH_LOG}"
+            (
+                # Reset the parent's EXIT trap — otherwise the subshell's
+                # exit fires cleanup() and removes $ENVRC mid-deploy when
+                # prefetch finishes fast (e.g. bootstraps already cached).
+                trap - EXIT
+                deploy_step "${SCRIPT_DIR}/scripts/mainnet/21-bootstrap-coins.sh" --prefetch
+            ) >"$PREFETCH_LOG" 2>&1 &
+            PREFETCH_PID=$!
+        fi
+        deploy_step "${SCRIPT_DIR}/scripts/mainnet/19-build-daemon-images.sh"
+        if [ -n "$PREFETCH_PID" ]; then
+            say "image build done; bootstrap prefetch still running (pid ${PREFETCH_PID})"
+            # Mirror prefetch headline lines and a 30s per-coin size
+            # heartbeat into the main log so the user sees progress
+            # instead of a silent wait while the 13G+ of bootstraps
+            # download.
+            prev_lines=0
+            prev_announce=$(date +%s)
+            while kill -0 "$PREFETCH_PID" 2>/dev/null; do
+                if [ -f "$PREFETCH_LOG" ]; then
+                    cur_lines=$(wc -l < "$PREFETCH_LOG" 2>/dev/null || echo 0)
+                    if [ "$cur_lines" -gt "$prev_lines" ]; then
+                        sed -n "$((prev_lines+1)),${cur_lines}p" "$PREFETCH_LOG" 2>/dev/null \
+                            | sed 's/\x1b\[[0-9;]*m//g' \
+                            | grep -E '^(==>|✓|!!)' \
+                            | sed 's/^/   [prefetch] /'
+                        prev_lines=$cur_lines
+                    fi
+                fi
+                now=$(date +%s)
+                if [ "$((now - prev_announce))" -ge 30 ]; then
+                    for d in /root/.blakecoin /root/.photon /root/.blakebitcoin \
+                             /root/.electron /root/.lithium /root/.universalmolecule; do
+                        if [ -f "$d/bootstrap.dat.tmp" ]; then
+                            size=$(du -h "$d/bootstrap.dat.tmp" 2>/dev/null | cut -f1)
+                            coin=${d#/root/.}
+                            printf '   [prefetch] downloading %-20s %s\n' "${coin}" "${size}"
+                        fi
+                    done
+                    prev_announce=$now
+                fi
+                sleep 5
+            done
+            if wait "$PREFETCH_PID"; then
+                say "bootstrap prefetch finished cleanly"
+            else
+                say "bootstrap prefetch failed; step 21 Phase A will retry sequentially"
+            fi
+            PREFETCH_PID=""
+        fi
+    elif [ "${MPOS_PULL_DAEMON_IMAGES}" = "0" ]; then
+        say "SKIP_DAEMON_IMAGE_BUILD=1 - using already-loaded daemon images"
+    fi
+    deploy_step "${SCRIPT_DIR}/scripts/mainnet/20-deploy-daemons.sh"
     if [ "${SKIP_BOOTSTRAP}" != "1" ]; then
-        remote_step "${SCRIPT_DIR}/scripts/mainnet/21-bootstrap-coins.sh"
+        deploy_step "${SCRIPT_DIR}/scripts/mainnet/21-bootstrap-coins.sh"
     else
         say "SKIP_BOOTSTRAP=1 - skipping sequential daemon bootstrap"
     fi
@@ -365,7 +564,7 @@ fi
 # ---------------------------------------------------------------
 # Step 3: Wait for every daemon's mainnet RPC to respond
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/30-wait-rpc.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/30-wait-rpc.sh"
 
 # ---------------------------------------------------------------
 # Step 4: Push both MPOS and Eliopool trees BEFORE the pool install
@@ -377,57 +576,76 @@ remote_step "${SCRIPT_DIR}/scripts/mainnet/30-wait-rpc.sh"
 # "v2 build not deployed" message.
 if [ -f "${REPO_ROOT}/frontend/package.json" ]; then
     if ! command -v bun >/dev/null 2>&1; then
-        die "bun not found on dev box — install bun (https://bun.sh) before running deploy"
+        if [ "${LOCAL_DEPLOY}" = "1" ]; then
+            die "bun missing on this server — step 10 should have installed it; check /tmp/bun-install.log"
+        else
+            die "bun not found on dev box — install bun (https://bun.sh) before running deploy"
+        fi
     fi
     say "building Vue v2 frontend"
-    ( cd "${REPO_ROOT}/frontend" && bun install --silent && bun run build )
+    # build:fast skips the vue-tsc type check (a Node binary). We run
+    # the deploy with bun only; the typecheck is available to developers
+    # locally via `bun run typecheck`.
+    ( cd "${REPO_ROOT}/frontend" && bun install --silent && bun run build:fast )
 fi
 
 push_tree "${REPO_ROOT}" "/root/Blakestream-MPOS"
 push_tree "${ELIOPOOL_TREE}" "/root/Blakestream-Eliopool"
-remote_step "${SCRIPT_DIR}/scripts/mainnet/40-install-pool.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/40-install-pool.sh"
 
 # ---------------------------------------------------------------
 # Step 5: Install MPOS web stack (tree already pushed above).
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/50-install-mpos.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/50-install-mpos.sh"
 
 # ---------------------------------------------------------------
 # Step 6: Stage PHP cron tree for ad-hoc diagnostics only
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/60-install-php-cron.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/60-install-php-cron.sh"
 
 # ---------------------------------------------------------------
 # Step 7: Install cronjobs-py as authoritative scheduler
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/70-install-cronjobs-py.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/70-install-cronjobs-py.sh"
 
 # ---------------------------------------------------------------
 # Step 7.5: Install the SSE dashboard side-car
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/75-install-sse.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/75-install-sse.sh"
 
 # ---------------------------------------------------------------
 # Step 8: Open firewall, install logrotate, install daily backup,
 #          run final verify pass.
 # ---------------------------------------------------------------
-remote_step "${SCRIPT_DIR}/scripts/mainnet/80-firewall.sh"
-remote_step "${SCRIPT_DIR}/scripts/mainnet/85-install-logrotate.sh"
-remote_step "${SCRIPT_DIR}/scripts/mainnet/90-install-backup.sh"
-remote_step "${SCRIPT_DIR}/scripts/mainnet/99-verify.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/80-firewall.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/85-install-logrotate.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/90-install-backup.sh"
+deploy_step "${SCRIPT_DIR}/scripts/mainnet/99-verify.sh"
 
-VPS_IP=$(ssh "${HOST}" 'hostname -I | awk "{print \$1}"')
+VPS_IP=$(host_run 'hostname -I | awk "{print \$1}"')
 say "deploy complete"
 echo
 echo "  Web UI:        http://${VPS_IP}:${MPOS_HTTP_PORT}/"
 echo "  Stratum:       stratum+tcp://${VPS_IP}:${MPOS_STRATUM_PORT}"
 echo "  Admin user:    ${MPOS_ADMIN_USER}"
+echo "  Admin pass:    ${MPOS_ADMIN_PASS}"
 echo "  Admin email:   ${MPOS_ADMIN_EMAIL}"
-echo "  Saved on VPS:  /root/.mpos-deploy.env"
-echo "  Secrets:       ssh ${HOST} 'sed -n \"1,80p\" /root/.mpos-deploy.env'"
+echo "  Saved env:     /root/.mpos-deploy.env"
+if [ "${LOCAL_DEPLOY}" = "1" ]; then
+    echo "  Secrets:       sudo sed -n \"1,80p\" /root/.mpos-deploy.env"
+else
+    echo "  Secrets:       ssh ${HOST} 'sed -n \"1,80p\" /root/.mpos-deploy.env'"
+fi
 echo
 echo "  Logs:"
-echo "    daemons:     ssh ${HOST} 'docker ps; docker logs blc --tail 30'"
-echo "    eloipool:    ssh ${HOST} 'journalctl -u blakestream-mpos-eloipool -fn 50'"
-echo "    cronjobs-py: ssh ${HOST} 'tail -f /var/log/blakestream-mpos/cronjobs.stdout'"
-echo "    PHP ad-hoc:  ssh ${HOST} 'ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true'"
+if [ "${LOCAL_DEPLOY}" = "1" ]; then
+    echo "    daemons:     docker ps; docker logs blc --tail 30"
+    echo "    eloipool:    journalctl -u blakestream-mpos-eloipool -fn 50"
+    echo "    cronjobs-py: tail -f /var/log/blakestream-mpos/cronjobs.stdout"
+    echo "    PHP ad-hoc:  ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true"
+else
+    echo "    daemons:     ssh ${HOST} 'docker ps; docker logs blc --tail 30'"
+    echo "    eloipool:    ssh ${HOST} 'journalctl -u blakestream-mpos-eloipool -fn 50'"
+    echo "    cronjobs-py: ssh ${HOST} 'tail -f /var/log/blakestream-mpos/cronjobs.stdout'"
+    echo "    PHP ad-hoc:  ssh ${HOST} 'ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true'"
+fi
