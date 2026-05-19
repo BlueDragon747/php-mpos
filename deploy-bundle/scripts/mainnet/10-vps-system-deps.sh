@@ -17,10 +17,14 @@ PHP_VER="8.3"
 say "apt update"
 apt-get -qq update
 
-# Core LAMP + helpers + Docker prereqs.
+# Core LAMP + helpers + Docker prereqs. git/ufw/cron/logrotate are
+# present on most Ubuntu base images but minimal cloud installs may
+# omit them; the daemon source-build step needs git, step 80 needs ufw,
+# step 60 needs cron, step 85 needs logrotate.
 say "apt install (LAMP + helpers + docker prereqs)"
 apt-get -qq install -y \
     curl jq wget rsync xxd ca-certificates gnupg lsb-release sudo \
+    git ufw cron logrotate \
     nginx \
     mariadb-server \
     php${PHP_VER}-cli php${PHP_VER}-fpm php${PHP_VER}-mysql \
@@ -45,6 +49,17 @@ if ! command -v docker >/dev/null 2>&1; then
     say "docker installed; version: $(docker --version)"
 else
     say "docker already installed: $(docker --version)"
+fi
+
+# bun (used to build the Vue v2 frontend in deploy-mainnet.sh).
+if ! command -v bun >/dev/null 2>&1; then
+    say "installing bun system-wide"
+    BUN_INSTALL=/usr/local bash -c 'curl -fsSL https://bun.sh/install | bash' \
+        >/tmp/bun-install.log 2>&1 \
+        || { cat /tmp/bun-install.log >&2; exit 1; }
+    say "bun installed: $(/usr/local/bin/bun --version)"
+else
+    say "bun already installed: $(bun --version)"
 fi
 
 # MariaDB on

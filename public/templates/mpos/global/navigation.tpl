@@ -5,12 +5,7 @@
       <li class="icon-gauge"><a href="{$smarty.server.SCRIPT_NAME}?page=dashboard">Dashboard</a></li>
       <li class="icon-user"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=edit">Edit Account</a></li>
       <li class="icon-photo"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=workers">My Workers</a></li>
-      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions">{$GLOBAL.config.currency} Transactions</a></li>
-      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions_mm">{$GLOBAL.config.currency_mm} Transactions</a></li>
-      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions_mm1">{$GLOBAL.config.currency_mm1} Transactions</a></li>
-      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions_mm3">{$GLOBAL.config.currency_mm3} Transactions</a></li>
-      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions_mm4">{$GLOBAL.config.currency_mm4} Transactions</a></li>
-      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions_mm5">{$GLOBAL.config.currency_mm5} Transactions</a></li>
+      <li class="icon-indent-left"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=transactions">Transactions</a></li>
     {if !$GLOBAL.config.disable_notifications}<li class="icon-megaphone"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=notifications">Notifications</a></li>{/if}
     {if !$GLOBAL.config.disable_invitations}<li class="icon-plus"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=invitations">Invitations</a></li>{/if}
       <li class="icon-barcode"><a href="{$smarty.server.SCRIPT_NAME}?page=account&action=qrcode">QR Codes</a></li>

@@ -6,10 +6,35 @@ pass() { printf '   \033[1;32m[OK]\033[0m   %s\n' "$*"; }
 fail() { printf '   \033[1;31m[FAIL]\033[0m %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT+1)); }
 FAIL_COUNT=0
 
-say "daemon RPCs"
 declare -A RPC_PORT=(
     [blc]=8772 [pho]=8984 [bbtc]=8243 [elt]=6852 [lit]=12345 [umo]=19738
 )
+
+# Wait for the entire pool stack to be fully initialized BEFORE running
+# checks, so we don't [FAIL] on transient startup races. Each daemon
+# RPC and each listening port gets up to its own deadline; the verifier
+# itself remains a one-shot pass/fail snapshot of steady state.
+say "waiting for pool stack to be ready (initialization gate)"
+for sym in blc pho bbtc elt lit umo; do
+    port="${RPC_PORT[$sym]}"
+    deadline=$(( $(date +%s) + 180 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        rpc_response=$(curl -fsSL --max-time 20 -u "${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}" \
+            --data '{"jsonrpc":"1.0","id":"verify-wait","method":"getblockcount"}' \
+            -H 'content-type: text/plain' "http://127.0.0.1:${port}/" 2>/dev/null || true)
+        printf '%s' "$rpc_response" | grep -q '"result":[0-9]' && break
+        sleep 5
+    done
+done
+for port in 3334 19335 19334 "${MPOS_HTTP_PORT}"; do
+    deadline=$(( $(date +%s) + 90 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        ss -tln | awk '{print $4}' | grep -qE ":(${port})\$" && break
+        sleep 3
+    done
+done
+
+say "daemon RPCs"
 for sym in blc pho bbtc elt lit umo; do
     port="${RPC_PORT[$sym]}"
     rpc_response=$(curl -fsSL --max-time 20 -u "${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}" \

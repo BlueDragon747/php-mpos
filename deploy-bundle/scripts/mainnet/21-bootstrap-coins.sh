@@ -136,8 +136,13 @@ declare -A BOOTSTRAP_NAME=(
 # next for the same reason. Then the smaller chains.
 DEFAULT_ORDER=(elt umo pho lit bbtc blc)
 
-# Tuning
-DBCACHE_MB="${DBCACHE_MB:-200}"
+# Tuning — dbcache flips between BOOTSTRAP_DBCACHE_MB during fresh-import
+# (large in-memory UTXO buffer = fewer disk flushes during validation,
+# faster catch-up) and STEADY_DBCACHE_MB once the chain is at tip and
+# the daemon is running alongside its 5 peers.
+BOOTSTRAP_DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB:-4000}"
+STEADY_DBCACHE_MB="${STEADY_DBCACHE_MB:-400}"
+DBCACHE_MB="${DBCACHE_MB:-${STEADY_DBCACHE_MB}}"
 MAXMEMPOOL_MB="${MAXMEMPOOL_MB:-50}"
 PEERS_ON_MAXCONN="${PEERS_ON_MAXCONN:-20}"
 BOOTSTRAP_IMPORT_TIMEOUT_S="${BOOTSTRAP_IMPORT_TIMEOUT_S:-21600}" # 6h max per coin
@@ -160,9 +165,21 @@ coin_image() {
 
 # ---- helpers ----------------------------------------------------------------
 ensure_caps() {
+    # Always SET dbcache/maxmempool to the currently-effective values.
+    # Old behaviour was append-if-missing only — now we update existing
+    # lines too, so bootstrap_one can flip dbcache between a boosted
+    # value for fresh-import (4000) and steady-state (400).
     local conf="$1"
-    grep -q "^dbcache=" "$conf"     || echo "dbcache=${DBCACHE_MB}"     >> "$conf"
-    grep -q "^maxmempool=" "$conf"  || echo "maxmempool=${MAXMEMPOOL_MB}" >> "$conf"
+    if grep -q "^dbcache=" "$conf"; then
+        sed -i "s/^dbcache=.*/dbcache=${DBCACHE_MB}/" "$conf"
+    else
+        echo "dbcache=${DBCACHE_MB}" >> "$conf"
+    fi
+    if grep -q "^maxmempool=" "$conf"; then
+        sed -i "s/^maxmempool=.*/maxmempool=${MAXMEMPOOL_MB}/" "$conf"
+    else
+        echo "maxmempool=${MAXMEMPOOL_MB}" >> "$conf"
+    fi
 }
 
 set_peers() {
@@ -182,7 +199,11 @@ set_peers() {
 }
 
 stop_all() {
-    say "stopping all 6 coin containers (graceful: docker stop, then rm)"
+    # One-shot re-run safety sweep at the top of the rotation: clears any
+    # daemon a previous interrupted deploy may have left running. Quiet
+    # by default since the rotation itself only ever runs one coin at a
+    # time — per-coin stops use stop_one with a coin-named message.
+    say "sweeping any leftover daemon containers (re-run safety)"
     for c in blc pho bbtc elt umo lit; do
         docker stop "$c" >/dev/null 2>&1 || true
         docker rm   "$c" >/dev/null 2>&1 || true
@@ -198,6 +219,7 @@ stop_one() {
     # and leave chainstate behind by 100k+ blocks; we observed PHO and
     # BBTC rollback to chainstate flush points months in the past
     # because of this on 2026-04-27.
+    say "stopping ${1} container gracefully"
     docker stop "$1" >/dev/null 2>&1 || true
     docker rm   "$1" >/dev/null 2>&1 || true
 }
@@ -211,8 +233,15 @@ download_bootstrap() {
     local bootstrap_url="${BOOTSTRAP_URL%/}/${bootstrap_name}/bootstrap.dat"
     local expected_size=""
 
+    # --no-check-certificate: bootstrap.blakestream.io can be served
+    # either through Cloudflare (publicly trusted cert) or directly
+    # from the origin (Cloudflare-managed cert whose CN doesn't match
+    # the hostname, so wget rejects it). Bootstrap data is public,
+    # the download is size-verified against Content-Length below, and
+    # every block is consensus-validated by the daemon — so skipping
+    # TLS hostname verification doesn't compromise integrity here.
     expected_size=$(
-        wget --spider --server-response --tries=1 \
+        wget --spider --server-response --tries=1 --no-check-certificate \
             --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
             --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
             "$bootstrap_url" 2>&1 \
@@ -263,7 +292,7 @@ download_bootstrap() {
             fi
         fi
 
-        if wget --continue --tries=1 \
+        if wget --continue --tries=1 --no-check-certificate \
             --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
             --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
             --progress=bar:force \
@@ -445,61 +474,92 @@ bootstrap_one() {
         bootstrap_already_consumed=1
     fi
 
-    # 1. Ensure caps, stop other daemons, download bootstrap, then keep
-    # peering OFF for solo replay.
-    ensure_caps "$conf"
-    stop_all
-    download_bootstrap "$coin" || {
-        warn "  ${coin}: aborting bootstrap rotation; set SKIP_BOOTSTRAP=1 to rely on p2p sync"
-        exit 1
-    }
-
     if [ "$bootstrap_already_consumed" = "1" ]; then
-        ok "  bootstrap.dat was already replayed; skipping solo import"
+        # Resuming an already-bootstrapped chain: no heavy import, use
+        # steady-state dbcache from the start.
+        DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps "$conf"
     else
-        set_peers "$conf" off
+        # Fresh bootstrap import: boost dbcache so the in-memory UTXO
+        # buffer is large, fewer disk flushes during validation.
+        DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB}" ensure_caps "$conf"
+        say "  using dbcache=${BOOTSTRAP_DBCACHE_MB}MB for fresh bootstrap import"
+    fi
+    set_peers "$conf" on
 
-        # 2. Start solo
-        start_one "$coin"
-        say "  started solo with peering OFF; waiting for bootstrap.dat import to finish"
-
-        # 3. Wait for bootstrap.dat import to finish.
-        wait_bootstrap_import_done "$coin" "$datadir"
-        local final_replay
-        final_replay=$(current_height "$datadir")
-        ok "  bootstrap import done at height=${final_replay:-0}"
-
-        stop_one "$coin"
+    start_one "$coin"
+    if [ "$bootstrap_already_consumed" = "1" ]; then
+        say "  started ${coin}; bootstrap.dat already consumed (resuming existing chainstate)"
+    else
+        say "  started ${coin}; daemon auto-imports bootstrap.dat on first launch"
     fi
 
-    # 4. Flip peering ON, restart, catch the chain tip
-    set_peers "$conf" on
-    start_one "$coin"
-    say "  restarted with peering ON; catching up to chain tip"
     wait_at_tip "$coin" "$datadir"
     local final_tip
     final_tip=$(current_height "$datadir")
-    ok "  ${coin} reached height=${final_tip}"
+    ok "  ${coin} reached height=${final_tip:-0}"
 
-    # 5. Give the daemon time to flush the new chainstate to disk
-    # before we stop it. Validation completing (progress=1.0) does NOT
-    # mean chainstate is durably persisted; flush is periodic. Without
-    # this pause, the next-start chainstate may be hours behind the
-    # tip we just achieved, forcing a re-sync from peers.
-    say "  letting ${coin} flush chainstate (60s) before stopping"
-    sleep 60
-
-    # 6. Stop so the next coin gets the full host
-    stop_one "$coin"
-    ok "  ${coin} stopped — moving to next coin"
+    if [ "$bootstrap_already_consumed" = "1" ]; then
+        # Chain was bootstrapped on a prior deploy; the daemon is in
+        # steady state and adds little RAM pressure. Leave it running so
+        # the next coin can start alongside — no flush/stop dance needed.
+        ok "  ${coin} stays running — moving to next coin"
+    else
+        # Fresh bootstrap import: chainstate flush isn't immediate after
+        # reaching tip, and the next coin's import would push RAM/IO on
+        # a 16G host. Stop cleanly so the flush completes before next.
+        say "  letting ${coin} flush chainstate (60s) before stopping"
+        sleep 60
+        stop_one "$coin"
+        # Drop dbcache to steady-state for Phase C / future starts.
+        DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps "$conf"
+        ok "  ${coin} stopped — dbcache dropped to ${STEADY_DBCACHE_MB}MB for steady state"
+    fi
 }
 
 # ---- main -------------------------------------------------------------------
+PREFETCH_ONLY=0
+case "${1:-}" in
+    --prefetch|--download-only) PREFETCH_ONLY=1; shift ;;
+esac
+
 ROTATION=("$@")
 [ ${#ROTATION[@]} -eq 0 ] && ROTATION=("${DEFAULT_ORDER[@]}")
 
-say "bootstrap rotation: ${ROTATION[*]}"
+if [ "$PREFETCH_ONLY" = "1" ]; then
+    say "bootstrap prefetch (Phase A only): ${ROTATION[*]}"
+else
+    say "bootstrap rotation: ${ROTATION[*]}"
+fi
 
+# Phase A: download every coin's bootstrap.dat upfront, one at a time, while
+# no daemons are running. Pre-staging all files into their datadirs lets the
+# per-coin solo daemon import on first launch with no start → stop → restart
+# dance.
+say "downloading all bootstraps before any daemon starts"
+for coin in "${ROTATION[@]}"; do
+    case "$coin" in
+        blc|pho|bbtc|elt|umo|lit) ;;
+        *) warn "unknown coin '$coin' — skip"; continue ;;
+    esac
+    datadir="${COIN_DATADIR[$coin]}"
+    [ -d "$datadir" ] || mkdir -p "$datadir"
+    download_bootstrap "$coin" || {
+        warn "  ${coin}: bootstrap download failed; aborting rotation (set SKIP_BOOTSTRAP=1 to rely on p2p sync)"
+        exit 1
+    }
+done
+
+if [ "$PREFETCH_ONLY" = "1" ]; then
+    ok "prefetch complete — all bootstrap.dat files staged"
+    exit 0
+fi
+
+# Phase B: solo bootstrap + p2p catch-up for each coin in rotation order.
+# Single stop_all here handles re-runs that may have left a daemon running;
+# during the rotation itself only one daemon is up at a time, so
+# bootstrap_one only stops THIS coin between phases.
+say "starting solo bootstrap rotation"
+stop_all
 for coin in "${ROTATION[@]}"; do
     case "$coin" in
         blc|pho|bbtc|elt|umo|lit) bootstrap_one "$coin" ;;
@@ -508,16 +568,19 @@ for coin in "${ROTATION[@]}"; do
 done
 
 if [ "$START_AFTER" = "1" ]; then
-    say "rotation done — bringing all 6 daemons back online (one at a time)"
+    say "rotation done — ensuring all 6 daemons are running"
     for coin in "${DEFAULT_ORDER[@]}"; do
-        say "  starting ${coin}"
-        start_one "$coin"
-        sleep 8
-        # Quick health peek
-        if docker ps --filter name="^${coin}\$" --format '{{.Status}}' | grep -q '^Up'; then
-            ok "  ${coin}: $(docker ps --filter "name=^${coin}\$" --format '{{.Status}}')"
+        if docker ps --format '{{.Names}}' | grep -qx "$coin"; then
+            ok "  ${coin}: already up ($(docker ps --filter "name=^${coin}\$" --format '{{.Status}}'))"
         else
-            warn "  ${coin}: not running — check 'docker logs ${coin}'"
+            say "  starting ${coin}"
+            start_one "$coin"
+            sleep 8
+            if docker ps --filter name="^${coin}\$" --format '{{.Status}}' | grep -q '^Up'; then
+                ok "  ${coin}: $(docker ps --filter "name=^${coin}\$" --format '{{.Status}}')"
+            else
+                warn "  ${coin}: not running — check 'docker logs ${coin}'"
+            fi
         fi
         free -h | awk '/^Mem:/ {printf "    host avail=%s  ", $7} /^Swap:/ {printf "swap used=%s\n", $3}'
     done

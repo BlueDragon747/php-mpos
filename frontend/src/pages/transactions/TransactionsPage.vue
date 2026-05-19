@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick, onBeforeUnmount, onMounted } from 'vue';
 import type { TransactionsInitial } from './types';
 
 const props = defineProps<{
@@ -16,7 +16,12 @@ const filterType = ref(i.filter.type);
 const filterStatus = ref(i.filter.status);
 const filterCoin = ref(i.selectedCoin || '');
 const filterForm = ref<HTMLFormElement | null>(null);
+const coinMenu = ref<HTMLElement | null>(null);
+const coinMenuOpen = ref(false);
 const hasCoinSelector = computed(() => Array.isArray(i.coinOptions) && i.coinOptions.length > 1);
+const selectedCoinLabel = computed(() => {
+  return i.coinOptions.find((coin) => coin.value === filterCoin.value)?.label || i.coinName;
+});
 
 // GET-form submission discards the action URL's query string and
 // rebuilds it from the form's name/value pairs, so the page/action
@@ -36,6 +41,38 @@ const filterAddress = ref(i.filter.address ?? '');
 function submitFilters() {
   filterForm.value?.submit();
 }
+
+function toggleCoinMenu() {
+  coinMenuOpen.value = !coinMenuOpen.value;
+}
+
+function closeCoinMenu() {
+  coinMenuOpen.value = false;
+}
+
+async function selectCoin(value: string) {
+  if (filterCoin.value === value) {
+    closeCoinMenu();
+    return;
+  }
+  filterCoin.value = value;
+  closeCoinMenu();
+  await nextTick();
+  submitFilters();
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  if (!coinMenu.value || coinMenu.value.contains(event.target as Node)) return;
+  closeCoinMenu();
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown);
+});
 
 // Pagination URLs. Legacy controller reads ?start=N from the URL;
 // the filter form preserves filter[type] and filter[status]. Building
@@ -121,21 +158,39 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
     <article v-if="showSummaryCard" class="bsx-card tx-summary-card">
       <header class="tx-summary-head">
         <h3>Transaction Summary</h3>
-        <select
+        <div
           v-if="hasCoinSelector"
-          form="tx-filter-form"
-          name="coin"
-          v-model="filterCoin"
-          class="tx-filter-select tx-filter-coin tx-summary-coin-select"
-          aria-label="Select coin"
-          @change="submitFilters"
+          ref="coinMenu"
+          class="tx-summary-coin-menu"
+          @keydown.escape.prevent="closeCoinMenu"
         >
-          <option
-            v-for="coin in i.coinOptions"
-            :key="coin.value"
-            :value="coin.value"
-          >{{ coin.label }}</option>
-        </select>
+          <button
+            type="button"
+            class="tx-summary-coin-trigger"
+            aria-haspopup="listbox"
+            :aria-expanded="coinMenuOpen ? 'true' : 'false'"
+            @click="toggleCoinMenu"
+          >
+            <span class="tx-summary-coin-trigger-label">{{ selectedCoinLabel }}</span>
+            <span class="tx-summary-coin-caret" aria-hidden="true"></span>
+          </button>
+          <div
+            v-show="coinMenuOpen"
+            class="tx-summary-coin-options"
+            role="listbox"
+            aria-label="Select coin"
+          >
+            <button
+              v-for="coin in i.coinOptions"
+              :key="coin.value"
+              type="button"
+              role="option"
+              :aria-selected="coin.value === filterCoin"
+              :class="['tx-summary-coin-option', { 'is-active': coin.value === filterCoin }]"
+              @click="selectCoin(coin.value)"
+            >{{ coin.label }}</button>
+          </div>
+        </div>
         <span v-else class="tx-summary-coin">{{ i.coinName }}</span>
         <span class="tx-summary-spacer" aria-hidden="true"></span>
       </header>
@@ -177,12 +232,7 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
         >
           <input type="hidden" name="page" :value="formPage">
           <input type="hidden" name="action" :value="formActionName">
-          <input
-            v-if="!hasCoinSelector && filterCoin"
-            type="hidden"
-            name="coin"
-            :value="filterCoin"
-          >
+          <input v-if="filterCoin" type="hidden" name="coin" :value="filterCoin">
           <select name="filter[type]" v-model="filterType" class="tx-filter-select">
             <option
               v-for="(label, key) in i.transactionTypes"
@@ -320,11 +370,15 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
 }
 .bsx-card header.tx-summary-head {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   align-items: center;
 }
-.tx-summary-head h3 { text-align: left; }
+.tx-summary-head h3 {
+  grid-column: 1 / 3;
+  text-align: left;
+}
 .tx-summary-coin {
+  grid-column: 3;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -332,10 +386,94 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   text-align: center;
   white-space: nowrap;
 }
-.tx-summary-spacer {}
-.tx-summary-coin-select {
+.tx-summary-spacer { grid-column: 4 / 7; }
+.tx-summary-coin-menu {
+  grid-column: 3;
   justify-self: center;
-  text-transform: none;
+  position: relative;
+  width: 158px;
+  max-width: 230px;
+}
+.tx-summary-coin-trigger {
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 30px;
+  border: 1px solid rgba(79, 195, 247, 0.65);
+  border-right-color: rgba(229, 115, 115, 0.58);
+  border-radius: 4px;
+  background-color: rgba(79, 195, 247, 0.06);
+  box-shadow: 0 0 0 1px rgba(79, 195, 247, 0.08) inset;
+  color: #f0f0f0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  position: relative;
+}
+.tx-summary-coin-trigger:hover,
+.tx-summary-coin-trigger:focus {
+  border-color: rgba(79, 195, 247, 0.78);
+  border-right-color: rgba(229, 115, 115, 0.70);
+  background-color: rgba(79, 195, 247, 0.10);
+  outline: none;
+}
+.tx-summary-coin-trigger:focus {
+  box-shadow:
+    0 0 0 1px rgba(79, 195, 247, 0.08) inset,
+    0 0 0 2px rgba(79, 195, 247, 0.35);
+}
+.tx-summary-coin-trigger-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+}
+.tx-summary-coin-caret {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid #cdd;
+  border-bottom: 1.5px solid #cdd;
+  transform: translateY(-65%) rotate(45deg);
+}
+.tx-summary-coin-options {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #202529;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 10px 18px rgba(0,0,0,.35);
+  overflow: hidden;
+}
+.tx-summary-coin-option {
+  width: 100%;
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #f0f0f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  text-align: center;
+}
+.tx-summary-coin-option:hover,
+.tx-summary-coin-option:focus {
+  background: #303840;
+  outline: none;
+}
+.tx-summary-coin-option.is-active {
+  background: #2a78d4;
+  color: #fff;
 }
 .tx-summary-empty {
   padding: 12px;
@@ -362,6 +500,9 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   border: 1px solid rgba(255,255,255,.06);
   border-radius: 6px;
   overflow: hidden;
+}
+.tx-summary-card {
+  overflow: visible;
 }
 .bsx-card header {
   background: rgba(255,255,255,.05);
@@ -406,6 +547,14 @@ function summaryAmountClass(type: string): 'credit' | 'debit' {
   background-size: 10px 10px;
   cursor: pointer;
   max-width: 180px;
+}
+.tx-filter-select option {
+  background: #24282c;
+  color: #f0f0f0;
+}
+.tx-filter-select option:checked {
+  background: #303840;
+  color: #ffffff;
 }
 .tx-filter-coin {
   min-width: 150px;

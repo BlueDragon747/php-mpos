@@ -44,8 +44,8 @@ export interface TransactionsInitial {
   summaryDisabled: boolean;
   // Coin symbol of this transactions view (e.g. 'BLC', 'PHO').
   currency: string;
-  // Admin consolidated transaction view: selected coin and switcher
-  // options. User-facing per-coin views leave coinOptions empty.
+  // Consolidated transaction views: selected coin and switcher options.
+  // Legacy per-coin routes leave coinOptions empty.
   selectedCoin: string;
   coinOptions: Array<{ value: string; label: string; currency: string; name: string }>;
   // Full coin name (e.g. 'Blakecoin') from

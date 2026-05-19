@@ -156,6 +156,15 @@ $network_clients = array(
   'mm5'     => isset($bitcoin_mm5) ? $bitcoin_mm5 : null,
 );
 
+$statistics_clients = array(
+  'primary' => isset($statistics)     ? $statistics     : null,
+  'mm'      => isset($statistics_mm)  ? $statistics_mm  : null,
+  'mm1'     => isset($statistics_mm1) ? $statistics_mm1 : null,
+  'mm3'     => isset($statistics_mm3) ? $statistics_mm3 : null,
+  'mm4'     => isset($statistics_mm4) ? $statistics_mm4 : null,
+  'mm5'     => isset($statistics_mm5) ? $statistics_mm5 : null,
+);
+
 function v2_network_info($client) {
   if (!is_object($client) || !method_exists($client, 'can_connect') || $client->can_connect() !== true) {
     return array('difficulty' => 0, 'esttimeperblock' => 0, 'block' => 0);
@@ -165,6 +174,19 @@ function v2_network_info($client) {
   $blk  = method_exists($client, 'getblockcount')      ? (int)$client->getblockcount()        : 0;
   $secs = ($hps > 0 && $diff > 0) ? ($diff * pow(2, 32) / $hps) : 0;
   return array('difficulty' => $diff, 'esttimeperblock' => $secs, 'block' => $blk);
+}
+
+function v2_round_share_progress($statistics_client, $netinfo, $roundshares) {
+  $estimated = 0;
+  if (is_object($statistics_client) && method_exists($statistics_client, 'getEstimatedShares')) {
+    $difficulty = isset($netinfo['difficulty']) ? (float)$netinfo['difficulty'] : 0.0;
+    if ($difficulty > 0) {
+      $estimated = (int)$statistics_client->getEstimatedShares($difficulty);
+    }
+  }
+  $valid = isset($roundshares['valid']) ? (float)$roundshares['valid'] : 0.0;
+  $progress = ($estimated > 0 && $valid > 0) ? round(100 / $estimated * $valid, 2) : 0.0;
+  return array('estimated' => $estimated, 'progress' => $progress);
 }
 
 $stats = array();
@@ -183,6 +205,7 @@ foreach (array('primary','mm','mm1','mm3','mm4','mm5') as $slot) {
   $your_shares = isset($global['userdata'][$us_key]) ? $global['userdata'][$us_key] : array('valid'=>0,'invalid'=>0);
   $estimates   = isset($global['userdata'][$est_key]) ? $global['userdata'][$est_key] : array();
   $netinfo     = v2_network_info($network_clients[$slot]);
+  $round_progress = v2_round_share_progress($statistics_clients[$slot], $netinfo, $roundshares);
 
   $stats[] = array(
     'key'           => $slot,
@@ -192,8 +215,8 @@ foreach (array('primary','mm','mm1','mm3','mm4','mm5') as $slot) {
     'roundshares'   => array(
       'valid'     => isset($roundshares['valid'])     ? (int)$roundshares['valid']   : 0,
       'invalid'   => isset($roundshares['invalid'])   ? (int)$roundshares['invalid'] : 0,
-      'estimated' => isset($roundshares['estimated']) ? (int)$roundshares['estimated'] : 0,
-      'progress'  => isset($roundshares['progress'])  ? (float)$roundshares['progress'] : 0.0,
+      'estimated' => $round_progress['estimated'],
+      'progress'  => $round_progress['progress'],
     ),
     'your_shares'   => array(
       'valid'   => isset($your_shares['valid'])   ? (int)$your_shares['valid']   : 0,

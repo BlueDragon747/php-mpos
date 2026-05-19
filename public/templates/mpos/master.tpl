@@ -58,11 +58,11 @@
 	</aside>
 	<section id="main" class="column">
     {nocache}
-    {if is_array($smarty.session.POPUP|default)}
+    {if is_array($PAGE_POPUPS|default)}
       <div id="bsx-toast-container" aria-live="polite">
-      {section name=popup loop=$smarty.session.POPUP}
-        <div class="bsx-toast bsx-toast-{$smarty.session.POPUP[popup].TYPE|default:'info'}">
-          {$smarty.session.POPUP[popup].CONTENT nofilter}
+      {section name=popup loop=$PAGE_POPUPS}
+        <div class="bsx-toast bsx-toast-{$PAGE_POPUPS[popup].TYPE|default:'info'}">
+          {$PAGE_POPUPS[popup].CONTENT nofilter}
         </div>
       {/section}
       </div>
