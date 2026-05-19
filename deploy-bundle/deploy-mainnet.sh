@@ -628,6 +628,7 @@ echo
 echo "  Web UI:        http://${VPS_IP}:${MPOS_HTTP_PORT}/"
 echo "  Stratum:       stratum+tcp://${VPS_IP}:${MPOS_STRATUM_PORT}"
 echo "  Admin user:    ${MPOS_ADMIN_USER}"
+echo "  Admin pass:    ${MPOS_ADMIN_PASS}"
 echo "  Admin email:   ${MPOS_ADMIN_EMAIL}"
 echo "  Saved env:     /root/.mpos-deploy.env"
 if [ "${LOCAL_DEPLOY}" = "1" ]; then
