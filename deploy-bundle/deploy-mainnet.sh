@@ -48,13 +48,17 @@ ELIOPOOL_TMPROOT=""
 ENVRC=""
 
 cleanup() {
+    # Preserve the script's incoming exit code so set -e failures
+    # aren't masked by the trap. Previously `return 0` always reported
+    # success to the SSH wrapper even when the deploy aborted mid-step.
+    local rc=$?
     if [ -n "${ELIOPOOL_TMPROOT}" ]; then
         rm -rf "${ELIOPOOL_TMPROOT}"
     fi
     if [ -n "${ENVRC}" ]; then
         rm -f "${ENVRC}"
     fi
-    return 0
+    return $rc
 }
 trap cleanup EXIT
 
@@ -520,10 +524,15 @@ if [ "${SKIP_DAEMONS}" != "1" ]; then
                 if [ -f "$PREFETCH_LOG" ]; then
                     cur_lines=$(wc -l < "$PREFETCH_LOG" 2>/dev/null || echo 0)
                     if [ "$cur_lines" -gt "$prev_lines" ]; then
+                        # `|| true` — grep returns 1 when no matches in the
+                        # range (wget chatter only); combined with the
+                        # script's `set -e` + `pipefail`, that would abort
+                        # the whole deploy.
                         sed -n "$((prev_lines+1)),${cur_lines}p" "$PREFETCH_LOG" 2>/dev/null \
                             | sed 's/\x1b\[[0-9;]*m//g' \
                             | grep -E '^(==>|✓|!!)' \
-                            | sed 's/^/   [prefetch] /'
+                            | sed 's/^/   [prefetch] /' \
+                            || true
                         prev_lines=$cur_lines
                     fi
                 fi
