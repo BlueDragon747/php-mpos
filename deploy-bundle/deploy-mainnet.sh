@@ -460,6 +460,26 @@ push_tree() {
     fi
 }
 
+# Per-section timing — every deploy_step + a few inline blocks log
+# their start + end to SECTION_TIMING_LOG so we can render a summary
+# table at the end of the deploy and see where wall time goes.
+SECTION_TIMING_LOG="${SECTION_TIMING_LOG:-/tmp/mpos-section-timings.log}"
+: > "$SECTION_TIMING_LOG"
+DEPLOY_OVERALL_START=$(date +%s)
+
+section_run() {
+    # section_run "<label>" <command...>
+    local label="$1"; shift
+    local start end elapsed
+    start=$(date +%s)
+    say "[timing] starting ${label} at $(date -u +%H:%M:%S)"
+    "$@"
+    end=$(date +%s)
+    elapsed=$((end - start))
+    say "[timing] finished ${label} in $((elapsed/60))m $((elapsed%60))s"
+    printf '%s\t%d\n' "$label" "$elapsed" >> "$SECTION_TIMING_LOG"
+}
+
 # Helper: run a deploy step with the generated env. Any args after the
 # script path are forwarded to the step script verbatim (e.g. --prefetch).
 deploy_step() {
@@ -481,10 +501,18 @@ deploy_step() {
     fi
 }
 
+# Wrap deploy_step so each step lands in the timing log.
+deploy_step_timed() {
+    local script="$1"
+    shift
+    local name; name=$(basename "$script" .sh)
+    section_run "${name}" deploy_step "$script" "$@"
+}
+
 # ---------------------------------------------------------------
 # Step 1: VPS system deps — Docker + LAMP + memcached
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/10-vps-system-deps.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/10-vps-system-deps.sh"
 
 # ---------------------------------------------------------------
 # Step 2: Pull or build daemon images, then start containers
@@ -511,7 +539,7 @@ if [ "${SKIP_DAEMONS}" != "1" ]; then
             ) >"$PREFETCH_LOG" 2>&1 &
             PREFETCH_PID=$!
         fi
-        deploy_step "${SCRIPT_DIR}/scripts/mainnet/19-build-daemon-images.sh"
+        deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/19-build-daemon-images.sh"
         if [ -n "$PREFETCH_PID" ]; then
             say "image build done; bootstrap prefetch still running (pid ${PREFETCH_PID})"
             # Mirror prefetch headline lines and a 30s per-coin size
@@ -560,9 +588,9 @@ if [ "${SKIP_DAEMONS}" != "1" ]; then
     elif [ "${MPOS_PULL_DAEMON_IMAGES}" = "0" ]; then
         say "SKIP_DAEMON_IMAGE_BUILD=1 - using already-loaded daemon images"
     fi
-    deploy_step "${SCRIPT_DIR}/scripts/mainnet/20-deploy-daemons.sh"
+    deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/20-deploy-daemons.sh"
     if [ "${SKIP_BOOTSTRAP}" != "1" ]; then
-        deploy_step "${SCRIPT_DIR}/scripts/mainnet/21-bootstrap-coins.sh"
+        deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/21-bootstrap-coins.sh"
     else
         say "SKIP_BOOTSTRAP=1 - skipping sequential daemon bootstrap"
     fi
@@ -573,7 +601,7 @@ fi
 # ---------------------------------------------------------------
 # Step 3: Wait for every daemon's mainnet RPC to respond
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/30-wait-rpc.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/30-wait-rpc.sh"
 
 # ---------------------------------------------------------------
 # Step 4: Push both MPOS and Eliopool trees BEFORE the pool install
@@ -600,38 +628,57 @@ fi
 
 push_tree "${REPO_ROOT}" "/root/Blakestream-MPOS"
 push_tree "${ELIOPOOL_TREE}" "/root/Blakestream-Eliopool"
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/40-install-pool.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/40-install-pool.sh"
 
 # ---------------------------------------------------------------
 # Step 5: Install MPOS web stack (tree already pushed above).
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/50-install-mpos.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/50-install-mpos.sh"
 
 # ---------------------------------------------------------------
 # Step 6: Stage PHP cron tree for ad-hoc diagnostics only
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/60-install-php-cron.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/60-install-php-cron.sh"
 
 # ---------------------------------------------------------------
 # Step 7: Install cronjobs-py as authoritative scheduler
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/70-install-cronjobs-py.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/70-install-cronjobs-py.sh"
 
 # ---------------------------------------------------------------
 # Step 7.5: Install the SSE dashboard side-car
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/75-install-sse.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/75-install-sse.sh"
 
 # ---------------------------------------------------------------
 # Step 8: Open firewall, install logrotate, install daily backup,
 #          run final verify pass.
 # ---------------------------------------------------------------
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/80-firewall.sh"
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/85-install-logrotate.sh"
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/90-install-backup.sh"
-deploy_step "${SCRIPT_DIR}/scripts/mainnet/99-verify.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/80-firewall.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/85-install-logrotate.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/90-install-backup.sh"
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/99-verify.sh"
 
 VPS_IP=$(host_run 'hostname -I | awk "{print \$1}"')
+
+# Section timing summary table (printed before the deploy-complete banner).
+DEPLOY_OVERALL_END=$(date +%s)
+DEPLOY_OVERALL_ELAPSED=$((DEPLOY_OVERALL_END - DEPLOY_OVERALL_START))
+say "=== section timing summary ==="
+printf '   %-32s %s\n' "section" "elapsed"
+printf '   %-32s %s\n' "--------------------------------" "----------"
+while IFS=$'\t' read -r section_name section_elapsed; do
+    [ -z "${section_name}" ] && continue
+    printf '   %-32s %3dm %02ds\n' \
+        "${section_name}" \
+        $((section_elapsed/60)) $((section_elapsed%60))
+done < "${SECTION_TIMING_LOG}"
+printf '   %-32s %s\n' "--------------------------------" "----------"
+printf '   %-32s %dh %02dm %02ds\n' "TOTAL" \
+    $((DEPLOY_OVERALL_ELAPSED/3600)) \
+    $(((DEPLOY_OVERALL_ELAPSED%3600)/60)) \
+    $((DEPLOY_OVERALL_ELAPSED%60))
+
 say "deploy complete"
 echo
 echo "  Web UI:        http://${VPS_IP}:${MPOS_HTTP_PORT}/"

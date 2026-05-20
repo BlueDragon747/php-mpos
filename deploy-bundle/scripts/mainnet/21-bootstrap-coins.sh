@@ -136,15 +136,40 @@ declare -A BOOTSTRAP_NAME=(
 # next for the same reason. Then the smaller chains.
 DEFAULT_ORDER=(elt umo pho lit bbtc blc)
 
+# Phase B groups — coins inside a group sync concurrently, groups run
+# in series. ELT and UMO are big enough that they get the whole host
+# to themselves; the four smaller chains are paired (BLC+PHO and
+# LIT+BBTC) since two of them comfortably fit in RAM at once with
+# BOOTSTRAP_DBCACHE_MB=4000 each on a 15 GB host.
+DEFAULT_GROUPS=(
+    "elt"
+    "umo"
+    "blc pho"
+    "lit bbtc"
+)
+
+# Phase A download concurrency: how many wget processes run at once.
+# 3 saturates a typical 100Mbit Vultr link without hammering the
+# bootstrap mirror.
+DOWNLOAD_CONCURRENCY="${DOWNLOAD_CONCURRENCY:-3}"
+
 # Tuning — dbcache flips between BOOTSTRAP_DBCACHE_MB during fresh-import
 # (large in-memory UTXO buffer = fewer disk flushes during validation,
 # faster catch-up) and STEADY_DBCACHE_MB once the chain is at tip and
 # the daemon is running alongside its 5 peers.
-BOOTSTRAP_DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB:-4000}"
+# When MPOS_ADAPTIVE_DBCACHE=1 (default), bootstrap dbcache is sized
+# from MemAvailable / SYNC_CONCURRENCY rather than hardcoded. Reserves
+# OS_HEADROOM_MB for OS + docker + nginx + php-fpm + mariadb.
+# Clamped to [MIN, MAX]. Override BOOTSTRAP_DBCACHE_MB to fix it.
+MPOS_ADAPTIVE_DBCACHE="${MPOS_ADAPTIVE_DBCACHE:-1}"
+OS_HEADROOM_MB="${OS_HEADROOM_MB:-2048}"
+BOOTSTRAP_DBCACHE_MIN_MB="${BOOTSTRAP_DBCACHE_MIN_MB:-500}"
+BOOTSTRAP_DBCACHE_MAX_MB="${BOOTSTRAP_DBCACHE_MAX_MB:-8000}"
+BOOTSTRAP_DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB:-}"
 STEADY_DBCACHE_MB="${STEADY_DBCACHE_MB:-400}"
 DBCACHE_MB="${DBCACHE_MB:-${STEADY_DBCACHE_MB}}"
 MAXMEMPOOL_MB="${MAXMEMPOOL_MB:-50}"
-PEERS_ON_MAXCONN="${PEERS_ON_MAXCONN:-20}"
+PEERS_ON_MAXCONN="${PEERS_ON_MAXCONN:-32}"
 BOOTSTRAP_IMPORT_TIMEOUT_S="${BOOTSTRAP_IMPORT_TIMEOUT_S:-21600}" # 6h max per coin
 BOOTSTRAP_IMPORT_SLEEP_S="${BOOTSTRAP_IMPORT_SLEEP_S:-60}"
 BOOTSTRAP_DOWNLOAD_ATTEMPTS="${BOOTSTRAP_DOWNLOAD_ATTEMPTS:-12}"
@@ -157,10 +182,108 @@ START_AFTER="${START_AFTER:-1}"
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
 MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
+DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
+DASHBOARD_SNAPSHOT_INTERVAL_S="${DASHBOARD_SNAPSHOT_INTERVAL_S:-60}"
+
+# tmpfs chainstate (opt-in, EXPERIMENTAL). When MPOS_TMPFS_CHAINSTATE=1
+# the bootstrap rotation mounts a tmpfs over each coin's chainstate
+# directory before starting the daemon. The daemon's UTXO LevelDB ops
+# stay in RAM during the heavy import + catch-up phase. A background
+# checkpoint loop rsyncs the tmpfs to a disk shadow every
+# TMPFS_CHECKPOINT_INTERVAL_S so a crash doesn't undo all progress.
+# On stop the final flush copies tmpfs -> shadow -> real disk path and
+# the tmpfs is unmounted; subsequent (steady-state) starts use plain
+# disk paths.
+MPOS_TMPFS_CHAINSTATE="${MPOS_TMPFS_CHAINSTATE:-0}"
+TMPFS_SHADOW_ROOT="${TMPFS_SHADOW_ROOT:-/var/lib/mpos-tmpfs-shadow}"
+TMPFS_CHECKPOINT_INTERVAL_S="${TMPFS_CHECKPOINT_INTERVAL_S:-300}"
+TMPFS_CHAINSTATE_SIZE_MB="${TMPFS_CHAINSTATE_SIZE_MB:-6000}"
+TMPFS_BLOCKS_INDEX_SIZE_MB="${TMPFS_BLOCKS_INDEX_SIZE_MB:-512}"
+
+# write_status <coin> <STATE> [h] [t] [d]
+# STATE one of: QUEUED, DOWNLOADING, SYNCING, FINISHED, FAILED.
+# Atomic write via mv-from-tmp so the dashboard renderer never reads a
+# partial line.
+write_status() {
+    local coin="$1" state="$2" h="${3:-}" t="${4:-}" d="${5:-}"
+    mkdir -p "$DASHBOARD_STATUS_DIR" 2>/dev/null || true
+    local tmp="${DASHBOARD_STATUS_DIR}/.${coin}.status.tmp"
+    local final="${DASHBOARD_STATUS_DIR}/${coin}.status"
+    printf '%s|%s|%s|%s\n' "$state" "$h" "$t" "$d" > "$tmp" 2>/dev/null \
+        && mv -f "$tmp" "$final" 2>/dev/null || true
+}
 
 coin_image() {
     local coin="$1"
     printf '%s/%s:%s' "$MPOS_DOCKER_HUB" "${COIN_IMAGE_NAME[$coin]}" "$MPOS_IMAGE_TAG"
+}
+
+# ---- tmpfs chainstate helpers (only used when MPOS_TMPFS_CHAINSTATE=1) ----
+#
+# WARNING (Bitcoin Core 0.15.x): LevelDB chainstate is NOT crash-consistent
+# across partial writes on this branch. If the host OOMs or the daemon
+# segfaults mid-import, the tmpfs vanishes and the rsync shadow holds at
+# most the last TMPFS_CHECKPOINT_INTERVAL_S of progress. On restart, the
+# daemon's "load block index" phase will see a chainstate whose tip
+# disagrees with blocks/blk*.dat on disk and force a FULL REINDEX — i.e.
+# partial chainstate is WORSE than no chainstate. Mitigation: keep this
+# feature default-off; only enable on hosts where the rotation can survive
+# a one-off full reindex of a single coin. Bitcoin Core 24.0+ adds proper
+# atomic flush + assumeutxo; revisit this whole feature when we rebase to
+# 25.2.
+tmpfs_setup() {
+    # Mount tmpfs over <datadir>/chainstate + <datadir>/blocks/index
+    # BEFORE the daemon container starts. Docker's bind-mount sees
+    # the tmpfs because mounts inside the bind are transparent when
+    # the bind is set up afterwards (and the daemon's `-v` mount is
+    # done by start_one *after* this returns).
+    [ "$MPOS_TMPFS_CHAINSTATE" = "1" ] || return 0
+    local coin="$1" datadir="${COIN_DATADIR[$coin]}"
+    local cs="${datadir}/chainstate"
+    local idx="${datadir}/blocks/index"
+    local shadow="${TMPFS_SHADOW_ROOT}/${coin}"
+    mkdir -p "$cs" "$idx" "${shadow}/chainstate" "${shadow}/blocks/index"
+    if ! mountpoint -q "$cs"; then
+        say "  [tmpfs] mounting tmpfs (${TMPFS_CHAINSTATE_SIZE_MB}M) -> ${cs}"
+        mount -t tmpfs -o "size=${TMPFS_CHAINSTATE_SIZE_MB}M" tmpfs "$cs"
+    fi
+    if ! mountpoint -q "$idx"; then
+        mount -t tmpfs -o "size=${TMPFS_BLOCKS_INDEX_SIZE_MB}M" tmpfs "$idx"
+    fi
+    # Restore from disk shadow if present (crash recovery)
+    if [ -n "$(ls -A "${shadow}/chainstate" 2>/dev/null)" ]; then
+        say "  [tmpfs] restoring chainstate from shadow"
+        rsync -a "${shadow}/chainstate/" "${cs}/"
+    fi
+    if [ -n "$(ls -A "${shadow}/blocks/index" 2>/dev/null)" ]; then
+        rsync -a "${shadow}/blocks/index/" "${idx}/"
+    fi
+}
+
+tmpfs_checkpoint() {
+    [ "$MPOS_TMPFS_CHAINSTATE" = "1" ] || return 0
+    local coin="$1" datadir="${COIN_DATADIR[$coin]}"
+    local shadow="${TMPFS_SHADOW_ROOT}/${coin}"
+    rsync -a --delete "${datadir}/chainstate/"  "${shadow}/chainstate/"  2>/dev/null || true
+    rsync -a --delete "${datadir}/blocks/index/" "${shadow}/blocks/index/" 2>/dev/null || true
+}
+
+tmpfs_finalize() {
+    # Daemon must already be stopped before this runs. Copies tmpfs ->
+    # shadow -> real disk, then unmounts.
+    [ "$MPOS_TMPFS_CHAINSTATE" = "1" ] || return 0
+    local coin="$1" datadir="${COIN_DATADIR[$coin]}"
+    local cs="${datadir}/chainstate"
+    local idx="${datadir}/blocks/index"
+    local shadow="${TMPFS_SHADOW_ROOT}/${coin}"
+    say "  [tmpfs] final checkpoint + unmount for ${coin}"
+    tmpfs_checkpoint "$coin"
+    if mountpoint -q "$cs";  then umount "$cs";  fi
+    if mountpoint -q "$idx"; then umount "$idx"; fi
+    # Restore shadow contents -> real disk path so the next start uses disk
+    mkdir -p "$cs" "$idx"
+    rsync -a --delete "${shadow}/chainstate/"  "${cs}/"
+    rsync -a --delete "${shadow}/blocks/index/" "${idx}/"
 }
 
 # ---- helpers ----------------------------------------------------------------
@@ -232,6 +355,7 @@ download_bootstrap() {
     local bootstrap_tmp="${bootstrap_file}.tmp"
     local bootstrap_url="${BOOTSTRAP_URL%/}/${bootstrap_name}/bootstrap.dat"
     local expected_size=""
+    write_status "$coin" "DOWNLOADING" "0" "0" "--"
 
     # --no-check-certificate: bootstrap.blakestream.io can be served
     # either through Cloudflare (publicly trusted cert) or directly
@@ -256,6 +380,9 @@ download_bootstrap() {
 
     if [ ! -f "$bootstrap_file" ] && [ -f "${bootstrap_file}.old" ]; then
         ok "  ${coin}: bootstrap.dat already consumed as bootstrap.dat.old ($(du -h "${bootstrap_file}.old" | cut -f1))"
+        local sz_old
+        sz_old=$(stat -c '%s' "${bootstrap_file}.old" 2>/dev/null || echo 0)
+        write_status "$coin" "FINISHED" "$sz_old" "$sz_old" "0"
         return 0
     fi
 
@@ -268,13 +395,20 @@ download_bootstrap() {
                 rm -f "$bootstrap_file"
             else
                 ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
+                write_status "$coin" "FINISHED" "$actual_size" "$expected_size" "0"
                 return 0
             fi
         else
             warn "  ${coin}: could not verify remote bootstrap.dat size; using existing file"
             ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
+            local sz_existing
+            sz_existing=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
+            write_status "$coin" "FINISHED" "$sz_existing" "$sz_existing" "0"
             return 0
         fi
+    fi
+    if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
+        write_status "$coin" "DOWNLOADING" "0" "$expected_size" "--"
     fi
 
     if [ -f "$bootstrap_tmp" ]; then
@@ -311,6 +445,9 @@ download_bootstrap() {
             fi
             mv -f "$bootstrap_tmp" "$bootstrap_file"
             ok "  ${coin}: bootstrap.dat downloaded ($(du -h "$bootstrap_file" | cut -f1))"
+            local sz_final
+            sz_final=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
+            write_status "$coin" "FINISHED" "$sz_final" "$sz_final" "0"
             return 0
         fi
 
@@ -321,6 +458,7 @@ download_bootstrap() {
     done
 
     warn "  ${coin}: bootstrap download failed after ${BOOTSTRAP_DOWNLOAD_ATTEMPTS} attempts"
+    write_status "$coin" "FAILED" "0" "${expected_size:-0}" "0"
     return 1
 }
 
@@ -448,72 +586,124 @@ wait_at_tip() {
         tip="${tip:-0}"
         delta=$((tip - h))
         abs_delta="${delta#-}"
-        printf '   [%s] height=%s  peer_tip=%s  delta=%s\n' \
-            "$(date +%H:%M:%S)" "$h" "$tip" "$delta"
+        printf '   [%s] %-5s height=%-12s peer_tip=%-12s delta=%s\n' \
+            "$(date +%H:%M:%S)" "${coin}:" "$h" "$tip" "$delta"
+        write_status "$coin" "SYNCING" "$h" "$tip" "$delta"
         if [ "$h" -gt 0 ] \
                 && [ "$tip" -gt 0 ] \
                 && [ "$abs_delta" -le "$TIP_CATCH_LAG" ]; then
+            write_status "$coin" "FINISHED" "$h" "$tip" "0"
             return 0
         fi
     done
+    write_status "$coin" "FAILED" "${h:-0}" "${tip:-0}" "${delta:-0}"
     warn "  tip catch-up timed out after ${TIP_CATCH_TIMEOUT_S}s"
     return 1
 }
 
-bootstrap_one() {
-    local coin="$1"
-    local datadir="${COIN_DATADIR[$coin]}"
-    local conf="${datadir}/${COIN_CONF[$coin]}"
-    local bootstrap_file="${datadir}/bootstrap.dat"
-    local bootstrap_already_consumed=0
+bootstrap_group() {
+    # Sync a group of coins concurrently — start all, wait for all to
+    # reach tip, then either stop+flush+drop-dbcache (fresh import) or
+    # leave running (resumed from .old). Single-coin group is the same
+    # path as the historical bootstrap_one, just generalised.
+    local coins=("$@")
+    [ ${#coins[@]} -eq 0 ] && return 0
 
-    [ -f "$conf" ] || { warn "missing $conf — skip"; return; }
+    say "===== group: ${coins[*]} ====="
 
-    say "===== ${coin} (${datadir}) ====="
-    if [ ! -f "$bootstrap_file" ] && [ -f "${bootstrap_file}.old" ]; then
-        bootstrap_already_consumed=1
-    fi
+    local -A CONSUMED
+    local coin datadir conf bootstrap_file
+    for coin in "${coins[@]}"; do
+        datadir="${COIN_DATADIR[$coin]}"
+        conf="${datadir}/${COIN_CONF[$coin]}"
+        bootstrap_file="${datadir}/bootstrap.dat"
+        [ -f "$conf" ] || { warn "missing $conf — skip ${coin}"; continue; }
 
-    if [ "$bootstrap_already_consumed" = "1" ]; then
-        # Resuming an already-bootstrapped chain: no heavy import, use
-        # steady-state dbcache from the start.
-        DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps "$conf"
-    else
-        # Fresh bootstrap import: boost dbcache so the in-memory UTXO
-        # buffer is large, fewer disk flushes during validation.
-        DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB}" ensure_caps "$conf"
-        say "  using dbcache=${BOOTSTRAP_DBCACHE_MB}MB for fresh bootstrap import"
-    fi
-    set_peers "$conf" on
+        CONSUMED[$coin]=0
+        if [ ! -f "$bootstrap_file" ] && [ -f "${bootstrap_file}.old" ]; then
+            CONSUMED[$coin]=1
+        fi
 
-    start_one "$coin"
-    if [ "$bootstrap_already_consumed" = "1" ]; then
-        say "  started ${coin}; bootstrap.dat already consumed (resuming existing chainstate)"
-    else
-        say "  started ${coin}; daemon auto-imports bootstrap.dat on first launch"
-    fi
+        if [ "${CONSUMED[$coin]}" = "1" ]; then
+            DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps "$conf"
+        else
+            DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB}" ensure_caps "$conf"
+            say "  using dbcache=${BOOTSTRAP_DBCACHE_MB}MB for fresh bootstrap import of ${coin}"
+        fi
+        set_peers "$conf" on
+    done
 
-    wait_at_tip "$coin" "$datadir"
-    local final_tip
-    final_tip=$(current_height "$datadir")
-    ok "  ${coin} reached height=${final_tip:-0}"
+    # tmpfs chainstate: opt-in, only meaningful for fresh imports (the
+    # heavy validation phase). Resumed coins use disk-backed chainstate
+    # as usual to avoid unmount/restore overhead.
+    local -A TMPFS_CHECKPOINT_PID=()
+    for coin in "${coins[@]}"; do
+        [ -z "${CONSUMED[$coin]:-}" ] && continue
+        if [ "${CONSUMED[$coin]}" = "0" ] && [ "$MPOS_TMPFS_CHAINSTATE" = "1" ]; then
+            tmpfs_setup "$coin"
+            # Background checkpoint loop for this coin
+            (
+                trap - EXIT
+                set +e
+                while sleep "$TMPFS_CHECKPOINT_INTERVAL_S"; do
+                    tmpfs_checkpoint "$coin"
+                done
+            ) &
+            TMPFS_CHECKPOINT_PID[$coin]=$!
+        fi
+    done
 
-    if [ "$bootstrap_already_consumed" = "1" ]; then
-        # Chain was bootstrapped on a prior deploy; the daemon is in
-        # steady state and adds little RAM pressure. Leave it running so
-        # the next coin can start alongside — no flush/stop dance needed.
-        ok "  ${coin} stays running — moving to next coin"
-    else
-        # Fresh bootstrap import: chainstate flush isn't immediate after
-        # reaching tip, and the next coin's import would push RAM/IO on
-        # a 16G host. Stop cleanly so the flush completes before next.
-        say "  letting ${coin} flush chainstate (60s) before stopping"
+    # Start every coin in the group concurrently.
+    for coin in "${coins[@]}"; do
+        [ -z "${CONSUMED[$coin]:-}" ] && continue
+        start_one "$coin"
+        if [ "${CONSUMED[$coin]}" = "1" ]; then
+            say "  started ${coin}; bootstrap.dat already consumed (resuming existing chainstate)"
+        else
+            say "  started ${coin}; daemon auto-imports bootstrap.dat on first launch"
+        fi
+    done
+
+    # Wait for each coin to reach tip. wait_at_tip blocks; coins ahead
+    # of the current one simply finish earlier.
+    for coin in "${coins[@]}"; do
+        [ -z "${CONSUMED[$coin]:-}" ] && continue
+        datadir="${COIN_DATADIR[$coin]}"
+        wait_at_tip "$coin" "$datadir"
+        local final_tip
+        final_tip=$(current_height "$datadir")
+        ok "  ${coin} reached height=${final_tip:-0}"
+    done
+
+    # Coins on a fresh import need a clean flush+stop. Coins resuming
+    # from .old can stay running for the next group / Phase C.
+    local need_stop=() coin_stop
+    for coin_stop in "${coins[@]}"; do
+        [ "${CONSUMED[$coin_stop]:-1}" = "0" ] && need_stop+=("$coin_stop")
+    done
+    if [ ${#need_stop[@]} -gt 0 ]; then
+        say "  letting ${need_stop[*]} flush chainstate (60s) before stopping"
         sleep 60
-        stop_one "$coin"
-        # Drop dbcache to steady-state for Phase C / future starts.
-        DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps "$conf"
-        ok "  ${coin} stopped — dbcache dropped to ${STEADY_DBCACHE_MB}MB for steady state"
+        for coin_stop in "${need_stop[@]}"; do
+            stop_one "$coin_stop"
+            # If tmpfs chainstate was used for this coin, kill the
+            # checkpoint loop, then move tmpfs contents -> real disk
+            # path and unmount before the dbcache flip / next start.
+            if [ -n "${TMPFS_CHECKPOINT_PID[$coin_stop]:-}" ]; then
+                kill "${TMPFS_CHECKPOINT_PID[$coin_stop]}" 2>/dev/null || true
+                unset 'TMPFS_CHECKPOINT_PID[$coin_stop]'
+                tmpfs_finalize "$coin_stop"
+            fi
+            DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps \
+                "${COIN_DATADIR[$coin_stop]}/${COIN_CONF[$coin_stop]}"
+            ok "  ${coin_stop} stopped — dbcache dropped to ${STEADY_DBCACHE_MB}MB for steady state"
+        done
     fi
+    for coin in "${coins[@]}"; do
+        if [ "${CONSUMED[$coin]:-0}" = "1" ]; then
+            ok "  ${coin} stays running"
+        fi
+    done
 }
 
 # ---- main -------------------------------------------------------------------
@@ -531,40 +721,211 @@ else
     say "bootstrap rotation: ${ROTATION[*]}"
 fi
 
-# Phase A: download every coin's bootstrap.dat upfront, one at a time, while
-# no daemons are running. Pre-staging all files into their datadirs lets the
-# per-coin solo daemon import on first launch with no start → stop → restart
-# dance.
-say "downloading all bootstraps before any daemon starts"
+# Resolve BOOTSTRAP_DBCACHE_MB. If unset and MPOS_ADAPTIVE_DBCACHE=1,
+# size it from MemAvailable / SYNC_CONCURRENCY so smaller hosts shrink
+# the cache automatically and bigger hosts get more.
+SYNC_CONCURRENCY="${SYNC_CONCURRENCY:-2}"
+if [ -z "${BOOTSTRAP_DBCACHE_MB:-}" ]; then
+    if [ "$MPOS_ADAPTIVE_DBCACHE" = "1" ]; then
+        mem_avail_mb=$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
+        per_coin=$(( (mem_avail_mb - OS_HEADROOM_MB) / SYNC_CONCURRENCY ))
+        [ "$per_coin" -lt "$BOOTSTRAP_DBCACHE_MIN_MB" ] && per_coin=$BOOTSTRAP_DBCACHE_MIN_MB
+        [ "$per_coin" -gt "$BOOTSTRAP_DBCACHE_MAX_MB" ] && per_coin=$BOOTSTRAP_DBCACHE_MAX_MB
+        BOOTSTRAP_DBCACHE_MB=$per_coin
+        say "[dbcache] adaptive sizing: MemAvailable=${mem_avail_mb}MB, OS reserve=${OS_HEADROOM_MB}MB, pool=${SYNC_CONCURRENCY}, per-coin bootstrap dbcache=${BOOTSTRAP_DBCACHE_MB}MB (steady=${STEADY_DBCACHE_MB}MB)"
+    else
+        BOOTSTRAP_DBCACHE_MB=4000
+        say "[dbcache] static fallback: bootstrap=${BOOTSTRAP_DBCACHE_MB}MB, steady=${STEADY_DBCACHE_MB}MB"
+    fi
+fi
+
+# Dashboard: seed status files for every coin so the live-view tool
+# can render rows even before Phase A touches them. Then launch a
+# background "compact snapshot" loop that emits a 6-line summary block
+# to the main log every DASHBOARD_SNAPSHOT_INTERVAL_S (default 60s).
+# Operators get the snappy live dashboard via mpos-watch-sync.sh in a
+# second SSH session; this loop keeps the deploy log informative.
+mkdir -p "$DASHBOARD_STATUS_DIR" 2>/dev/null || true
+for c in "${DEFAULT_ORDER[@]}"; do
+    write_status "$c" "QUEUED"
+done
+
+emit_dashboard_snapshot() {
+    local now
+    now=$(date -u +%H:%M:%S)
+    say "[dashboard ${now}] status"
+    for c in elt umo pho lit bbtc blc; do
+        local s state h t d
+        s=$(cat "${DASHBOARD_STATUS_DIR}/${c}.status" 2>/dev/null || echo "QUEUED|||")
+        IFS='|' read -r state h t d <<<"$s"
+        case "$state" in
+            DOWNLOADING)
+                local cur tmp_path
+                tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
+                cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
+                local pct=0
+                [ "${t:-0}" -gt 0 ] && pct=$(( cur * 100 / t ))
+                printf '   %-5s [DL]    %s / %s (%d%%)\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$cur" 2>/dev/null || echo "$cur")" \
+                    "$(numfmt --to=iec --suffix=B "$t"   2>/dev/null || echo "$t")" \
+                    "$pct"
+                ;;
+            SYNCING)
+                printf '   %-5s [SYNC]  h=%-12s tip=%-12s delta=%s\n' "${c}:" "$h" "$t" "$d"
+                ;;
+            FINISHED)
+                printf '   %-5s [DONE]  final=%s\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$h" 2>/dev/null || echo "$h")"
+                ;;
+            FAILED)
+                printf '   %-5s [FAILED]\n' "${c}:"
+                ;;
+            QUEUED|*)
+                printf '   %-5s [QUEUED]\n' "${c}:"
+                ;;
+        esac
+    done
+}
+
+SNAPSHOT_PIDFILE="${DASHBOARD_STATUS_DIR}/snapshot.pid"
+# Reap a stale snapshot loop left behind by an earlier SIGKILL'd run
+# (where EXIT trap couldn't fire). Without this the previous loop keeps
+# writing to a now-orphaned log fd and can re-parent to PID 1.
+if [ -f "$SNAPSHOT_PIDFILE" ]; then
+    stale_pid=$(cat "$SNAPSHOT_PIDFILE" 2>/dev/null || echo "")
+    if [ -n "$stale_pid" ] && kill -0 "$stale_pid" 2>/dev/null; then
+        kill "$stale_pid" 2>/dev/null || true
+    fi
+    rm -f "$SNAPSHOT_PIDFILE"
+fi
+(
+    # Reset parent's traps in the subshell so we don't fire cleanup
+    # twice. The dashboard snapshot loop is best-effort — if it errors
+    # we don't want to abort the deploy.
+    trap - EXIT
+    set +e
+    while true; do
+        sleep "$DASHBOARD_SNAPSHOT_INTERVAL_S"
+        emit_dashboard_snapshot
+    done
+) &
+DASHBOARD_PID=$!
+echo "$DASHBOARD_PID" > "$SNAPSHOT_PIDFILE"
+trap 'kill "$DASHBOARD_PID" 2>/dev/null || true; rm -f "$SNAPSHOT_PIDFILE"' EXIT INT TERM
+
+# Phase A: download every coin's bootstrap.dat upfront in a ROLLING
+# pool of DOWNLOAD_CONCURRENCY (default 3). As one wget finishes the
+# next coin's download starts — never wait for a "batch" to complete.
+# Pre-staging all files into their datadirs lets the per-coin solo
+# daemon import on first launch with no start → stop → restart dance.
+say "downloading all bootstraps before any daemon starts (rolling pool of ${DOWNLOAD_CONCURRENCY})"
+valid_for_download=()
 for coin in "${ROTATION[@]}"; do
     case "$coin" in
-        blc|pho|bbtc|elt|umo|lit) ;;
-        *) warn "unknown coin '$coin' — skip"; continue ;;
+        blc|pho|bbtc|elt|umo|lit)
+            datadir="${COIN_DATADIR[$coin]}"
+            [ -d "$datadir" ] || mkdir -p "$datadir"
+            valid_for_download+=("$coin")
+            ;;
+        *) warn "unknown coin '$coin' — skip" ;;
     esac
-    datadir="${COIN_DATADIR[$coin]}"
-    [ -d "$datadir" ] || mkdir -p "$datadir"
-    download_bootstrap "$coin" || {
-        warn "  ${coin}: bootstrap download failed; aborting rotation (set SKIP_BOOTSTRAP=1 to rely on p2p sync)"
-        exit 1
-    }
 done
+
+DOWNLOAD_FAIL=0
+DL_PIDS=()
+for coin in "${valid_for_download[@]}"; do
+    while [ "${#DL_PIDS[@]}" -ge "$DOWNLOAD_CONCURRENCY" ]; do
+        wait -n 2>/dev/null || DOWNLOAD_FAIL=1
+        survivors=()
+        for p in "${DL_PIDS[@]}"; do
+            kill -0 "$p" 2>/dev/null && survivors+=("$p")
+        done
+        DL_PIDS=("${survivors[@]}")
+    done
+    download_bootstrap "$coin" &
+    DL_PIDS+=($!)
+done
+# Drain remaining
+for p in "${DL_PIDS[@]}"; do
+    wait "$p" || DOWNLOAD_FAIL=1
+done
+if [ "$DOWNLOAD_FAIL" = "1" ]; then
+    warn "  one or more bootstrap downloads failed; aborting rotation (set SKIP_BOOTSTRAP=1 to rely on p2p sync)"
+    exit 1
+fi
 
 if [ "$PREFETCH_ONLY" = "1" ]; then
     ok "prefetch complete — all bootstrap.dat files staged"
     exit 0
 fi
 
-# Phase B: solo bootstrap + p2p catch-up for each coin in rotation order.
-# Single stop_all here handles re-runs that may have left a daemon running;
-# during the rotation itself only one daemon is up at a time, so
-# bootstrap_one only stops THIS coin between phases.
-say "starting solo bootstrap rotation"
+# Phase B: rolling pool of SYNC_CONCURRENCY (default 2) coins. As a
+# coin reaches tip, the next eligible coin starts. ELT and UMO are
+# mutually exclusive — never run concurrently because both peak above
+# 8 GB RSS during their import + catch-up phase, which on a 15 GB host
+# leaves no headroom for the other slot.
+SYNC_CONCURRENCY="${SYNC_CONCURRENCY:-2}"
+say "starting rolling-pool sync (concurrency=${SYNC_CONCURRENCY}, ELT/UMO mutually exclusive)"
 stop_all
-for coin in "${ROTATION[@]}"; do
-    case "$coin" in
-        blc|pho|bbtc|elt|umo|lit) bootstrap_one "$coin" ;;
-        *) warn "unknown coin '$coin' — skip" ;;
-    esac
+
+# Queue order: ELT first (biggest, longest), then UMO, then the four
+# smaller chains. The scheduler skips a queued coin if starting it
+# would violate the ELT/UMO constraint and tries the next one.
+QUEUE=("${ROTATION[@]}")
+declare -A PID_FOR_COIN=()
+POOL_COUNT=0  # tracked separately to dodge bash 5.x set -u quirks on empty associative arrays
+
+coin_in_pool() {
+    [ -n "${PID_FOR_COIN[$1]:-}" ]
+}
+
+while [ ${#QUEUE[@]} -gt 0 ] || [ "$POOL_COUNT" -gt 0 ]; do
+    # Fill pool, respecting ELT/UMO mutex
+    while [ "$POOL_COUNT" -lt "$SYNC_CONCURRENCY" ] && [ ${#QUEUE[@]} -gt 0 ]; do
+        picked_idx=-1
+        for i in "${!QUEUE[@]}"; do
+            c="${QUEUE[$i]}"
+            if [ "$c" = "elt" ] && coin_in_pool umo; then continue; fi
+            if [ "$c" = "umo" ] && coin_in_pool elt; then continue; fi
+            picked_idx=$i
+            break
+        done
+        if [ "$picked_idx" -lt 0 ]; then
+            # Nothing eligible right now (e.g. only UMO left and ELT
+            # is still running). Stop filling; wait for a slot to free.
+            break
+        fi
+        picked="${QUEUE[$picked_idx]}"
+        unset "QUEUE[$picked_idx]"
+        QUEUE=("${QUEUE[@]}")
+        say "[scheduler] launching ${picked} (pool: ${POOL_COUNT}/${SYNC_CONCURRENCY} before launch; remaining queue: ${#QUEUE[@]})"
+        ( bootstrap_group "$picked" ) &
+        PID_FOR_COIN[$picked]=$!
+        POOL_COUNT=$((POOL_COUNT + 1))
+    done
+
+    [ "$POOL_COUNT" -eq 0 ] && break  # queue exhausted
+
+    # Wait for any one running coin to finish; identify which one
+    finished_pid=""
+    wait -n -p finished_pid 2>/dev/null || true
+    if [ -z "${finished_pid:-}" ]; then
+        # Fallback: poll for dead pids
+        for c in "${!PID_FOR_COIN[@]}"; do
+            if ! kill -0 "${PID_FOR_COIN[$c]:-1}" 2>/dev/null; then
+                finished_pid="${PID_FOR_COIN[$c]}"
+                break
+            fi
+        done
+    fi
+    for c in "${!PID_FOR_COIN[@]}"; do
+        if [ "${PID_FOR_COIN[$c]:-}" = "${finished_pid:-}" ]; then
+            unset "PID_FOR_COIN[$c]"
+            POOL_COUNT=$((POOL_COUNT - 1))
+            say "[scheduler] ${c} finished; slot freed"
+            break
+        fi
+    done
 done
 
 if [ "$START_AFTER" = "1" ]; then
