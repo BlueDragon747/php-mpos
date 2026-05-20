@@ -185,6 +185,21 @@ BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
 DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
 DASHBOARD_SNAPSHOT_INTERVAL_S="${DASHBOARD_SNAPSHOT_INTERVAL_S:-60}"
 
+# tmpfs chainstate (opt-in, EXPERIMENTAL). When MPOS_TMPFS_CHAINSTATE=1
+# the bootstrap rotation mounts a tmpfs over each coin's chainstate
+# directory before starting the daemon. The daemon's UTXO LevelDB ops
+# stay in RAM during the heavy import + catch-up phase. A background
+# checkpoint loop rsyncs the tmpfs to a disk shadow every
+# TMPFS_CHECKPOINT_INTERVAL_S so a crash doesn't undo all progress.
+# On stop the final flush copies tmpfs -> shadow -> real disk path and
+# the tmpfs is unmounted; subsequent (steady-state) starts use plain
+# disk paths.
+MPOS_TMPFS_CHAINSTATE="${MPOS_TMPFS_CHAINSTATE:-0}"
+TMPFS_SHADOW_ROOT="${TMPFS_SHADOW_ROOT:-/var/lib/mpos-tmpfs-shadow}"
+TMPFS_CHECKPOINT_INTERVAL_S="${TMPFS_CHECKPOINT_INTERVAL_S:-300}"
+TMPFS_CHAINSTATE_SIZE_MB="${TMPFS_CHAINSTATE_SIZE_MB:-6000}"
+TMPFS_BLOCKS_INDEX_SIZE_MB="${TMPFS_BLOCKS_INDEX_SIZE_MB:-512}"
+
 # write_status <coin> <STATE> [h] [t] [d]
 # STATE one of: QUEUED, DOWNLOADING, SYNCING, FINISHED, FAILED.
 # Atomic write via mv-from-tmp so the dashboard renderer never reads a
@@ -201,6 +216,74 @@ write_status() {
 coin_image() {
     local coin="$1"
     printf '%s/%s:%s' "$MPOS_DOCKER_HUB" "${COIN_IMAGE_NAME[$coin]}" "$MPOS_IMAGE_TAG"
+}
+
+# ---- tmpfs chainstate helpers (only used when MPOS_TMPFS_CHAINSTATE=1) ----
+#
+# WARNING (Bitcoin Core 0.15.x): LevelDB chainstate is NOT crash-consistent
+# across partial writes on this branch. If the host OOMs or the daemon
+# segfaults mid-import, the tmpfs vanishes and the rsync shadow holds at
+# most the last TMPFS_CHECKPOINT_INTERVAL_S of progress. On restart, the
+# daemon's "load block index" phase will see a chainstate whose tip
+# disagrees with blocks/blk*.dat on disk and force a FULL REINDEX — i.e.
+# partial chainstate is WORSE than no chainstate. Mitigation: keep this
+# feature default-off; only enable on hosts where the rotation can survive
+# a one-off full reindex of a single coin. Bitcoin Core 24.0+ adds proper
+# atomic flush + assumeutxo; revisit this whole feature when we rebase to
+# 25.2.
+tmpfs_setup() {
+    # Mount tmpfs over <datadir>/chainstate + <datadir>/blocks/index
+    # BEFORE the daemon container starts. Docker's bind-mount sees
+    # the tmpfs because mounts inside the bind are transparent when
+    # the bind is set up afterwards (and the daemon's `-v` mount is
+    # done by start_one *after* this returns).
+    [ "$MPOS_TMPFS_CHAINSTATE" = "1" ] || return 0
+    local coin="$1" datadir="${COIN_DATADIR[$coin]}"
+    local cs="${datadir}/chainstate"
+    local idx="${datadir}/blocks/index"
+    local shadow="${TMPFS_SHADOW_ROOT}/${coin}"
+    mkdir -p "$cs" "$idx" "${shadow}/chainstate" "${shadow}/blocks/index"
+    if ! mountpoint -q "$cs"; then
+        say "  [tmpfs] mounting tmpfs (${TMPFS_CHAINSTATE_SIZE_MB}M) -> ${cs}"
+        mount -t tmpfs -o "size=${TMPFS_CHAINSTATE_SIZE_MB}M" tmpfs "$cs"
+    fi
+    if ! mountpoint -q "$idx"; then
+        mount -t tmpfs -o "size=${TMPFS_BLOCKS_INDEX_SIZE_MB}M" tmpfs "$idx"
+    fi
+    # Restore from disk shadow if present (crash recovery)
+    if [ -n "$(ls -A "${shadow}/chainstate" 2>/dev/null)" ]; then
+        say "  [tmpfs] restoring chainstate from shadow"
+        rsync -a "${shadow}/chainstate/" "${cs}/"
+    fi
+    if [ -n "$(ls -A "${shadow}/blocks/index" 2>/dev/null)" ]; then
+        rsync -a "${shadow}/blocks/index/" "${idx}/"
+    fi
+}
+
+tmpfs_checkpoint() {
+    [ "$MPOS_TMPFS_CHAINSTATE" = "1" ] || return 0
+    local coin="$1" datadir="${COIN_DATADIR[$coin]}"
+    local shadow="${TMPFS_SHADOW_ROOT}/${coin}"
+    rsync -a --delete "${datadir}/chainstate/"  "${shadow}/chainstate/"  2>/dev/null || true
+    rsync -a --delete "${datadir}/blocks/index/" "${shadow}/blocks/index/" 2>/dev/null || true
+}
+
+tmpfs_finalize() {
+    # Daemon must already be stopped before this runs. Copies tmpfs ->
+    # shadow -> real disk, then unmounts.
+    [ "$MPOS_TMPFS_CHAINSTATE" = "1" ] || return 0
+    local coin="$1" datadir="${COIN_DATADIR[$coin]}"
+    local cs="${datadir}/chainstate"
+    local idx="${datadir}/blocks/index"
+    local shadow="${TMPFS_SHADOW_ROOT}/${coin}"
+    say "  [tmpfs] final checkpoint + unmount for ${coin}"
+    tmpfs_checkpoint "$coin"
+    if mountpoint -q "$cs";  then umount "$cs";  fi
+    if mountpoint -q "$idx"; then umount "$idx"; fi
+    # Restore shadow contents -> real disk path so the next start uses disk
+    mkdir -p "$cs" "$idx"
+    rsync -a --delete "${shadow}/chainstate/"  "${cs}/"
+    rsync -a --delete "${shadow}/blocks/index/" "${idx}/"
 }
 
 # ---- helpers ----------------------------------------------------------------
@@ -550,6 +633,26 @@ bootstrap_group() {
         set_peers "$conf" on
     done
 
+    # tmpfs chainstate: opt-in, only meaningful for fresh imports (the
+    # heavy validation phase). Resumed coins use disk-backed chainstate
+    # as usual to avoid unmount/restore overhead.
+    local -A TMPFS_CHECKPOINT_PID=()
+    for coin in "${coins[@]}"; do
+        [ -z "${CONSUMED[$coin]:-}" ] && continue
+        if [ "${CONSUMED[$coin]}" = "0" ] && [ "$MPOS_TMPFS_CHAINSTATE" = "1" ]; then
+            tmpfs_setup "$coin"
+            # Background checkpoint loop for this coin
+            (
+                trap - EXIT
+                set +e
+                while sleep "$TMPFS_CHECKPOINT_INTERVAL_S"; do
+                    tmpfs_checkpoint "$coin"
+                done
+            ) &
+            TMPFS_CHECKPOINT_PID[$coin]=$!
+        fi
+    done
+
     # Start every coin in the group concurrently.
     for coin in "${coins[@]}"; do
         [ -z "${CONSUMED[$coin]:-}" ] && continue
@@ -583,6 +686,14 @@ bootstrap_group() {
         sleep 60
         for coin_stop in "${need_stop[@]}"; do
             stop_one "$coin_stop"
+            # If tmpfs chainstate was used for this coin, kill the
+            # checkpoint loop, then move tmpfs contents -> real disk
+            # path and unmount before the dbcache flip / next start.
+            if [ -n "${TMPFS_CHECKPOINT_PID[$coin_stop]:-}" ]; then
+                kill "${TMPFS_CHECKPOINT_PID[$coin_stop]}" 2>/dev/null || true
+                unset 'TMPFS_CHECKPOINT_PID[$coin_stop]'
+                tmpfs_finalize "$coin_stop"
+            fi
             DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps \
                 "${COIN_DATADIR[$coin_stop]}/${COIN_CONF[$coin_stop]}"
             ok "  ${coin_stop} stopped — dbcache dropped to ${STEADY_DBCACHE_MB}MB for steady state"
@@ -676,6 +787,17 @@ emit_dashboard_snapshot() {
     done
 }
 
+SNAPSHOT_PIDFILE="${DASHBOARD_STATUS_DIR}/snapshot.pid"
+# Reap a stale snapshot loop left behind by an earlier SIGKILL'd run
+# (where EXIT trap couldn't fire). Without this the previous loop keeps
+# writing to a now-orphaned log fd and can re-parent to PID 1.
+if [ -f "$SNAPSHOT_PIDFILE" ]; then
+    stale_pid=$(cat "$SNAPSHOT_PIDFILE" 2>/dev/null || echo "")
+    if [ -n "$stale_pid" ] && kill -0 "$stale_pid" 2>/dev/null; then
+        kill "$stale_pid" 2>/dev/null || true
+    fi
+    rm -f "$SNAPSHOT_PIDFILE"
+fi
 (
     # Reset parent's traps in the subshell so we don't fire cleanup
     # twice. The dashboard snapshot loop is best-effort — if it errors
@@ -688,7 +810,8 @@ emit_dashboard_snapshot() {
     done
 ) &
 DASHBOARD_PID=$!
-trap 'kill "$DASHBOARD_PID" 2>/dev/null || true' EXIT INT TERM
+echo "$DASHBOARD_PID" > "$SNAPSHOT_PIDFILE"
+trap 'kill "$DASHBOARD_PID" 2>/dev/null || true; rm -f "$SNAPSHOT_PIDFILE"' EXIT INT TERM
 
 # Phase A: download every coin's bootstrap.dat upfront in a ROLLING
 # pool of DOWNLOAD_CONCURRENCY (default 3). As one wget finishes the
