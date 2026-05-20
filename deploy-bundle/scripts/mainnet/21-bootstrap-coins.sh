@@ -157,11 +157,19 @@ DOWNLOAD_CONCURRENCY="${DOWNLOAD_CONCURRENCY:-3}"
 # (large in-memory UTXO buffer = fewer disk flushes during validation,
 # faster catch-up) and STEADY_DBCACHE_MB once the chain is at tip and
 # the daemon is running alongside its 5 peers.
-BOOTSTRAP_DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB:-4000}"
+# When MPOS_ADAPTIVE_DBCACHE=1 (default), bootstrap dbcache is sized
+# from MemAvailable / SYNC_CONCURRENCY rather than hardcoded. Reserves
+# OS_HEADROOM_MB for OS + docker + nginx + php-fpm + mariadb.
+# Clamped to [MIN, MAX]. Override BOOTSTRAP_DBCACHE_MB to fix it.
+MPOS_ADAPTIVE_DBCACHE="${MPOS_ADAPTIVE_DBCACHE:-1}"
+OS_HEADROOM_MB="${OS_HEADROOM_MB:-2048}"
+BOOTSTRAP_DBCACHE_MIN_MB="${BOOTSTRAP_DBCACHE_MIN_MB:-500}"
+BOOTSTRAP_DBCACHE_MAX_MB="${BOOTSTRAP_DBCACHE_MAX_MB:-8000}"
+BOOTSTRAP_DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB:-}"
 STEADY_DBCACHE_MB="${STEADY_DBCACHE_MB:-400}"
 DBCACHE_MB="${DBCACHE_MB:-${STEADY_DBCACHE_MB}}"
 MAXMEMPOOL_MB="${MAXMEMPOOL_MB:-50}"
-PEERS_ON_MAXCONN="${PEERS_ON_MAXCONN:-20}"
+PEERS_ON_MAXCONN="${PEERS_ON_MAXCONN:-32}"
 BOOTSTRAP_IMPORT_TIMEOUT_S="${BOOTSTRAP_IMPORT_TIMEOUT_S:-21600}" # 6h max per coin
 BOOTSTRAP_IMPORT_SLEEP_S="${BOOTSTRAP_IMPORT_SLEEP_S:-60}"
 BOOTSTRAP_DOWNLOAD_ATTEMPTS="${BOOTSTRAP_DOWNLOAD_ATTEMPTS:-12}"
@@ -174,6 +182,21 @@ START_AFTER="${START_AFTER:-1}"
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
 MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
+DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
+DASHBOARD_SNAPSHOT_INTERVAL_S="${DASHBOARD_SNAPSHOT_INTERVAL_S:-60}"
+
+# write_status <coin> <STATE> [h] [t] [d]
+# STATE one of: QUEUED, DOWNLOADING, SYNCING, FINISHED, FAILED.
+# Atomic write via mv-from-tmp so the dashboard renderer never reads a
+# partial line.
+write_status() {
+    local coin="$1" state="$2" h="${3:-}" t="${4:-}" d="${5:-}"
+    mkdir -p "$DASHBOARD_STATUS_DIR" 2>/dev/null || true
+    local tmp="${DASHBOARD_STATUS_DIR}/.${coin}.status.tmp"
+    local final="${DASHBOARD_STATUS_DIR}/${coin}.status"
+    printf '%s|%s|%s|%s\n' "$state" "$h" "$t" "$d" > "$tmp" 2>/dev/null \
+        && mv -f "$tmp" "$final" 2>/dev/null || true
+}
 
 coin_image() {
     local coin="$1"
@@ -249,6 +272,7 @@ download_bootstrap() {
     local bootstrap_tmp="${bootstrap_file}.tmp"
     local bootstrap_url="${BOOTSTRAP_URL%/}/${bootstrap_name}/bootstrap.dat"
     local expected_size=""
+    write_status "$coin" "DOWNLOADING" "0" "0" "--"
 
     # --no-check-certificate: bootstrap.blakestream.io can be served
     # either through Cloudflare (publicly trusted cert) or directly
@@ -273,6 +297,9 @@ download_bootstrap() {
 
     if [ ! -f "$bootstrap_file" ] && [ -f "${bootstrap_file}.old" ]; then
         ok "  ${coin}: bootstrap.dat already consumed as bootstrap.dat.old ($(du -h "${bootstrap_file}.old" | cut -f1))"
+        local sz_old
+        sz_old=$(stat -c '%s' "${bootstrap_file}.old" 2>/dev/null || echo 0)
+        write_status "$coin" "FINISHED" "$sz_old" "$sz_old" "0"
         return 0
     fi
 
@@ -285,13 +312,20 @@ download_bootstrap() {
                 rm -f "$bootstrap_file"
             else
                 ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
+                write_status "$coin" "FINISHED" "$actual_size" "$expected_size" "0"
                 return 0
             fi
         else
             warn "  ${coin}: could not verify remote bootstrap.dat size; using existing file"
             ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
+            local sz_existing
+            sz_existing=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
+            write_status "$coin" "FINISHED" "$sz_existing" "$sz_existing" "0"
             return 0
         fi
+    fi
+    if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
+        write_status "$coin" "DOWNLOADING" "0" "$expected_size" "--"
     fi
 
     if [ -f "$bootstrap_tmp" ]; then
@@ -328,6 +362,9 @@ download_bootstrap() {
             fi
             mv -f "$bootstrap_tmp" "$bootstrap_file"
             ok "  ${coin}: bootstrap.dat downloaded ($(du -h "$bootstrap_file" | cut -f1))"
+            local sz_final
+            sz_final=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
+            write_status "$coin" "FINISHED" "$sz_final" "$sz_final" "0"
             return 0
         fi
 
@@ -338,6 +375,7 @@ download_bootstrap() {
     done
 
     warn "  ${coin}: bootstrap download failed after ${BOOTSTRAP_DOWNLOAD_ATTEMPTS} attempts"
+    write_status "$coin" "FAILED" "0" "${expected_size:-0}" "0"
     return 1
 }
 
@@ -465,14 +503,17 @@ wait_at_tip() {
         tip="${tip:-0}"
         delta=$((tip - h))
         abs_delta="${delta#-}"
-        printf '   [%s] height=%s  peer_tip=%s  delta=%s\n' \
-            "$(date +%H:%M:%S)" "$h" "$tip" "$delta"
+        printf '   [%s] %-5s height=%-12s peer_tip=%-12s delta=%s\n' \
+            "$(date +%H:%M:%S)" "${coin}:" "$h" "$tip" "$delta"
+        write_status "$coin" "SYNCING" "$h" "$tip" "$delta"
         if [ "$h" -gt 0 ] \
                 && [ "$tip" -gt 0 ] \
                 && [ "$abs_delta" -le "$TIP_CATCH_LAG" ]; then
+            write_status "$coin" "FINISHED" "$h" "$tip" "0"
             return 0
         fi
     done
+    write_status "$coin" "FAILED" "${h:-0}" "${tip:-0}" "${delta:-0}"
     warn "  tip catch-up timed out after ${TIP_CATCH_TIMEOUT_S}s"
     return 1
 }
@@ -568,6 +609,86 @@ if [ "$PREFETCH_ONLY" = "1" ]; then
 else
     say "bootstrap rotation: ${ROTATION[*]}"
 fi
+
+# Resolve BOOTSTRAP_DBCACHE_MB. If unset and MPOS_ADAPTIVE_DBCACHE=1,
+# size it from MemAvailable / SYNC_CONCURRENCY so smaller hosts shrink
+# the cache automatically and bigger hosts get more.
+SYNC_CONCURRENCY="${SYNC_CONCURRENCY:-2}"
+if [ -z "${BOOTSTRAP_DBCACHE_MB:-}" ]; then
+    if [ "$MPOS_ADAPTIVE_DBCACHE" = "1" ]; then
+        mem_avail_mb=$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
+        per_coin=$(( (mem_avail_mb - OS_HEADROOM_MB) / SYNC_CONCURRENCY ))
+        [ "$per_coin" -lt "$BOOTSTRAP_DBCACHE_MIN_MB" ] && per_coin=$BOOTSTRAP_DBCACHE_MIN_MB
+        [ "$per_coin" -gt "$BOOTSTRAP_DBCACHE_MAX_MB" ] && per_coin=$BOOTSTRAP_DBCACHE_MAX_MB
+        BOOTSTRAP_DBCACHE_MB=$per_coin
+        say "[dbcache] adaptive sizing: MemAvailable=${mem_avail_mb}MB, OS reserve=${OS_HEADROOM_MB}MB, pool=${SYNC_CONCURRENCY}, per-coin bootstrap dbcache=${BOOTSTRAP_DBCACHE_MB}MB (steady=${STEADY_DBCACHE_MB}MB)"
+    else
+        BOOTSTRAP_DBCACHE_MB=4000
+        say "[dbcache] static fallback: bootstrap=${BOOTSTRAP_DBCACHE_MB}MB, steady=${STEADY_DBCACHE_MB}MB"
+    fi
+fi
+
+# Dashboard: seed status files for every coin so the live-view tool
+# can render rows even before Phase A touches them. Then launch a
+# background "compact snapshot" loop that emits a 6-line summary block
+# to the main log every DASHBOARD_SNAPSHOT_INTERVAL_S (default 60s).
+# Operators get the snappy live dashboard via mpos-watch-sync.sh in a
+# second SSH session; this loop keeps the deploy log informative.
+mkdir -p "$DASHBOARD_STATUS_DIR" 2>/dev/null || true
+for c in "${DEFAULT_ORDER[@]}"; do
+    write_status "$c" "QUEUED"
+done
+
+emit_dashboard_snapshot() {
+    local now
+    now=$(date -u +%H:%M:%S)
+    say "[dashboard ${now}] status"
+    for c in elt umo pho lit bbtc blc; do
+        local s state h t d
+        s=$(cat "${DASHBOARD_STATUS_DIR}/${c}.status" 2>/dev/null || echo "QUEUED|||")
+        IFS='|' read -r state h t d <<<"$s"
+        case "$state" in
+            DOWNLOADING)
+                local cur tmp_path
+                tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
+                cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
+                local pct=0
+                [ "${t:-0}" -gt 0 ] && pct=$(( cur * 100 / t ))
+                printf '   %-5s [DL]    %s / %s (%d%%)\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$cur" 2>/dev/null || echo "$cur")" \
+                    "$(numfmt --to=iec --suffix=B "$t"   2>/dev/null || echo "$t")" \
+                    "$pct"
+                ;;
+            SYNCING)
+                printf '   %-5s [SYNC]  h=%-12s tip=%-12s delta=%s\n' "${c}:" "$h" "$t" "$d"
+                ;;
+            FINISHED)
+                printf '   %-5s [DONE]  final=%s\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$h" 2>/dev/null || echo "$h")"
+                ;;
+            FAILED)
+                printf '   %-5s [FAILED]\n' "${c}:"
+                ;;
+            QUEUED|*)
+                printf '   %-5s [QUEUED]\n' "${c}:"
+                ;;
+        esac
+    done
+}
+
+(
+    # Reset parent's traps in the subshell so we don't fire cleanup
+    # twice. The dashboard snapshot loop is best-effort — if it errors
+    # we don't want to abort the deploy.
+    trap - EXIT
+    set +e
+    while true; do
+        sleep "$DASHBOARD_SNAPSHOT_INTERVAL_S"
+        emit_dashboard_snapshot
+    done
+) &
+DASHBOARD_PID=$!
+trap 'kill "$DASHBOARD_PID" 2>/dev/null || true' EXIT INT TERM
 
 # Phase A: download every coin's bootstrap.dat upfront in a ROLLING
 # pool of DOWNLOAD_CONCURRENCY (default 3). As one wget finishes the

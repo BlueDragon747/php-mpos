@@ -187,10 +187,20 @@ port=${p2p_port}
 listen=0
 server=1
 daemon=0
-txindex=1
+# Pool-tuned config:
+#   txindex=0       — MPOS only uses gettransaction (wallet), not getrawtransaction
+#   prune=10000     — keep ~10 GB of recent blocks; saves ~50 GB/coin of disk
+#                     (admin stats page may error on very old block clicks; pool ops unaffected)
+#   maxorphantx=10  — pool doesn't need to track many orphans
+#   maxreceivebuffer/maxsendbuffer — tighter per-peer buffers, more peers without RAM blow-up
+txindex=0
+prune=10000
 maxconnections=0
 dbcache=400
 maxmempool=50
+maxorphantx=10
+maxreceivebuffer=2500
+maxsendbuffer=500
 ${peers}
 EOF
     if [ "${SKIP_BOOTSTRAP:-0}" = "1" ]; then
