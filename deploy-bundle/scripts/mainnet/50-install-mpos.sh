@@ -32,6 +32,7 @@ fi
 say "applying cronjobs-py wave 1 + wave 5 migrations"
 mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/01-cronjobs-py-wave1.sql" 2>&1 | grep -v "^ERROR 1050\|^ERROR 1061\|already exists" || true
 mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/02-cronjobs-py-wave5.sql" 2>&1 | grep -v "^ERROR 1060\|already exists\|Duplicate column name\|Duplicate key" || true
+mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/03-pplns-shares.sql"
 
 say "seeding required settings rows"
 mariadb "${MPOS_DB_NAME}" <<SQL || true
@@ -112,8 +113,8 @@ ports = {
     "wallet_mm"  : 8984,   # photon
     "wallet_mm1" : 8243,   # blakebitcoin
     "wallet_mm3" : 6852,   # electron
-    "wallet_mm4" : 19738,  # universalmolecule
-    "wallet_mm5" : 12345,  # lithium
+    "wallet_mm4" : 5921,   # universalmolecule
+    "wallet_mm5" : 12000,  # lithium
 }
 user = "${MPOS_NODE_RPC_USER}"
 pw   = "${MPOS_NODE_RPC_PASS}"

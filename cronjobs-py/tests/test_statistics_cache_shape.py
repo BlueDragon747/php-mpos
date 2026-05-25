@@ -9,6 +9,14 @@ from cronjobs_py.jobs.statistics import (
 
 
 class FakeDb:
+    def get_setting_int(self, _key, default=0, floor=None, ceiling=None):
+        value = default
+        if floor is not None:
+            value = max(value, floor)
+        if ceiling is not None:
+            value = min(value, ceiling)
+        return value
+
     def stats_current_hashrate(self, **_kwargs):
         return 123.0
 
@@ -37,6 +45,13 @@ class FakeDb:
             "avgsharediff": 8.0,
         }]
 
+    def stats_per_worker_mining(self, **_kwargs):
+        return [{
+            "worker": "miner.worker",
+            "hashrate": 456.0,
+            "last_share_age_sec": 0,
+        }]
+
     def stats_top_contributors(self, **_kwargs):
         return [{
             "account": "miner",
@@ -58,6 +73,12 @@ class FakeCache:
         self.static[key] = (value, expire)
         return True
 
+    def get_static(self, key):
+        value = self.static.get(key)
+        if isinstance(value, tuple):
+            return value[0]
+        return value
+
     def set_round(self, key, value, *, round_id=0, flag=0, expire=None):
         self.round[(key, round_id, flag)] = (value, expire)
         return True
@@ -73,7 +94,7 @@ def test_statistics_job_writes_php_cache_keys_and_shapes():
 
     Statistics().run(ctx)
 
-    assert cache.static["getCurrentHashrate"] == (123.0, None)
+    assert cache.static["getCurrentHashrate"] == (456.0, None)
 
     shares, shares_expire = cache.round[(STATISTICS_ALL_USER_SHARES, 7, 0)]
     assert shares_expire is None

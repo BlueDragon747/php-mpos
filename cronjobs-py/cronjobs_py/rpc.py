@@ -254,27 +254,24 @@ class RpcClient:
             ) from exc
 
         try:
-            resp.raise_for_status()
-        except requests.HTTPError as exc:
-            # 5xx after submission is also indeterminate — some bitcoind
-            # forks return 500 from the wallet thread after the tx hits
-            # the mempool. Don't retry; reconcile.
-            if 500 <= resp.status_code < 600:
-                raise Indeterminate(
-                    f"{self.endpoint.display}: {method} returned HTTP "
-                    f"{resp.status_code} — outcome unknown, do not retry"
-                ) from exc
-            # 4xx (auth, malformed body) means the daemon never accepted
-            # the request; safe to surface as Fatal so the operator can
-            # fix the cause.
-            raise Fatal(
-                f"{self.endpoint.display}: {method} returned HTTP "
-                f"{resp.status_code}: {resp.text[:200]}"
-            ) from exc
-
-        try:
             body = resp.json()
         except ValueError as exc:
+            try:
+                resp.raise_for_status()
+            except requests.HTTPError as http_exc:
+                # 5xx after submission is indeterminate only when the
+                # daemon did not return a JSON-RPC error object. Bitcoin
+                # Core uses HTTP 500 for clean wallet rejections too, so
+                # JSON errors are handled below as Fatal.
+                if 500 <= resp.status_code < 600:
+                    raise Indeterminate(
+                        f"{self.endpoint.display}: {method} returned HTTP "
+                        f"{resp.status_code} — outcome unknown, do not retry"
+                    ) from http_exc
+                raise Fatal(
+                    f"{self.endpoint.display}: {method} returned HTTP "
+                    f"{resp.status_code}: {resp.text[:200]}"
+                ) from http_exc
             # Non-JSON 200 is a real oddity. Treat as indeterminate to
             # be safe — wallet may still have applied state.
             raise Indeterminate(
@@ -286,11 +283,25 @@ class RpcClient:
         if err:
             # The daemon answered with an error code. The request was
             # rejected before broadcast (auth, insufficient funds,
-            # invalid address). This is a clean failure — Fatal so the
+            # fee estimation, invalid address). Bitcoin Core commonly
+            # returns these JSON-RPC errors with HTTP 500, but the JSON
+            # error object is still a clean daemon answer — Fatal so the
             # caller can mark the outbox row abandoned.
             raise Fatal(
                 f"{self.endpoint.display}: {method} returned error {err}"
             )
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError as exc:
+            if 500 <= resp.status_code < 600:
+                raise Indeterminate(
+                    f"{self.endpoint.display}: {method} returned HTTP "
+                    f"{resp.status_code} — outcome unknown, do not retry"
+                ) from exc
+            raise Fatal(
+                f"{self.endpoint.display}: {method} returned HTTP "
+                f"{resp.status_code}: {resp.text[:200]}"
+            ) from exc
         return body
 
     # ---- ergonomic shortcuts mirroring BitcoinClient ----
@@ -317,7 +328,8 @@ class RpcClient:
         return self.call("getbalance")
 
     def sendtoaddress(self, address: str, amount: float,
-                      comment: str = "", comment_to: str = "") -> str:
+                      comment: str = "", comment_to: str = "",
+                      subtract_fee_from_amount: bool = False) -> str:
         """Wallet send. ALWAYS routed through the non-idempotent path.
 
         bitcoind's `sendtoaddress` signature is:
@@ -328,6 +340,13 @@ class RpcClient:
         `wallet_comment` from a `transactions_outbox` row.
         """
         params: list[Any] = [address, amount]
-        if comment or comment_to:
-            params.extend([comment, comment_to])
+        if comment or comment_to or subtract_fee_from_amount:
+            params.extend([comment, comment_to, subtract_fee_from_amount])
         return self.call_nonidempotent("sendtoaddress", *params)
+
+    def walletcreatefundedpsbt(self, address: str, amount: float) -> dict:
+        outputs = [{address: f"{amount:.8f}"}]
+        options = {"subtractFeeFromOutputs": [0]}
+        return self.call(
+            "walletcreatefundedpsbt", [], outputs, 0, options, True,
+        )

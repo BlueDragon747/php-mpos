@@ -226,7 +226,7 @@ class FindBlock:
         # PHP `Share::getRoundShares` returns the diff-weighted total
         # so the value displayed on the block page (and consumed by
         # pplns_payout's blockavg target compute) reflects difficulty.
-        difficulty_const = int(cfg.raw.get("difficulty", 32))
+        difficulty_const = int(cfg.raw.get("difficulty", 21))
         round_shares = int(round(db.get_round_shares_diff(
             prev_share_id, current_share_id,
             difficulty_const=difficulty_const,

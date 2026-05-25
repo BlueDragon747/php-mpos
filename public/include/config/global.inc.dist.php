@@ -78,7 +78,7 @@ $config['wallet_mm1']['username'] = 'blakebitcoin';
 $config['wallet_mm1']['password'] = 'x';
 
 $config['wallet_mm2']['type'] = 'http';
-$config['wallet_mm2']['host'] = 'localhost:12000';  // reserved legacy aux slot
+$config['wallet_mm2']['host'] = 'localhost:0';      // reserved legacy aux slot; inactive in 25.2
 $config['wallet_mm2']['username'] = 'unused1';
 $config['wallet_mm2']['password'] = 'x';
 
@@ -93,7 +93,7 @@ $config['wallet_mm4']['username'] = 'umo';
 $config['wallet_mm4']['password'] = 'x';
 
 $config['wallet_mm5']['type'] = 'http';
-$config['wallet_mm5']['host'] = 'localhost:12345';  // Lithium mainnet RPC
+$config['wallet_mm5']['host'] = 'localhost:12000';  // Lithium mainnet RPC
 $config['wallet_mm5']['username'] = 'lithium';
 $config['wallet_mm5']['password'] = 'x';
 
@@ -424,6 +424,9 @@ $config['network_confirmations_mm3'] = 460;
 $config['network_confirmations_mm4'] = 120;
 $config['network_confirmations_mm5'] = 120;
 $config['network_confirmations_mm6'] = 120;
+// Payout txids spend mature wallet outputs. Reconcile broadcast payouts after
+// normal transaction finality instead of waiting for coinbase maturity.
+$config['reconcile_min_confirmations'] = 6;
 /**
  * PPS
  *  Pay Per Share configuration details

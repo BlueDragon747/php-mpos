@@ -4,7 +4,7 @@ Covers QC C-1 (the double-spend hazard on `sendtoaddress` retry).
 We simulate three RPC outcomes against a stubbed RpcClient:
 
   1. Clean broadcast → outbox row goes pending → broadcast,
-     Debit_AP + (optional) TXFee inserted, slot poison stays clear.
+     net Debit_AP + wallet-calculated TXFee inserted, slot poison stays clear.
   2. `Indeterminate` (timeout / connection error after submission) →
      outbox row stays pending → indeterminate, NO Debit_AP written,
      slot poison flag set, subsequent payouts ticks refuse to send.
@@ -17,12 +17,15 @@ manual reconciliation, NO automatic action moves coins.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 
 from cronjobs_py.db import Db
 from cronjobs_py.errors import Indeterminate, Fatal
 from cronjobs_py.scheduler import JobContext
 from cronjobs_py.jobs.payouts import Payouts
+from cronjobs_py.jobs.reconcile_payouts import ReconcilePayouts
 from tests.conftest import insert_account, insert_block
 
 
@@ -32,16 +35,21 @@ class _StubRpc:
     value for sendtoaddress) or an Exception instance to raise."""
 
     def __init__(self, *, balance: float = 100.0, sendtoaddress=None,
-                 validateaddress=None):
+                 validateaddress=None, fee: float = 0.001):
         self.balance = balance
         self._sendtoaddress = sendtoaddress
         self._validateaddress = validateaddress
+        self.fee = fee
         self.calls: list[tuple] = []
 
     def call(self, method: str, *params):
         self.calls.append((method, params))
         if method == "getbalance":
             return self.balance
+        if method == "walletcreatefundedpsbt":
+            return {"fee": self.fee, "changepos": 0, "psbt": "stub"}
+        if method == "gettransaction":
+            return {"fee": -self.fee, "confirmations": 0}
         raise NotImplementedError(method)
 
     def call_nonidempotent(self, method: str, *params):
@@ -52,11 +60,16 @@ class _StubRpc:
             return self._sendtoaddress
         raise NotImplementedError(method)
 
-    def sendtoaddress(self, address, amount, comment="", comment_to=""):
+    def sendtoaddress(self, address, amount, comment="", comment_to="",
+                      subtract_fee_from_amount=False):
         params = [address, amount]
-        if comment or comment_to:
-            params.extend([comment, comment_to])
+        if comment or comment_to or subtract_fee_from_amount:
+            params.extend([comment, comment_to, subtract_fee_from_amount])
         return self.call_nonidempotent("sendtoaddress", *params)
+
+    def walletcreatefundedpsbt(self, address, amount):
+        self.calls.append(("walletcreatefundedpsbt", (address, amount)))
+        return {"fee": self.fee, "changepos": 0, "psbt": "stub"}
 
     def validateaddress(self, address):
         self.calls.append(("validateaddress", (address,)))
@@ -65,6 +78,71 @@ class _StubRpc:
         if self._validateaddress is not None:
             return self._validateaddress
         return {"isvalid": True}
+
+
+class _QuoteFailureRpc(_StubRpc):
+    def __init__(self, *, fail_addresses: set[str]):
+        super().__init__()
+        self.fail_addresses = fail_addresses
+
+    def walletcreatefundedpsbt(self, address, amount):
+        self.calls.append(("walletcreatefundedpsbt", (address, amount)))
+        if address in self.fail_addresses:
+            raise Fatal("simulated quote failure")
+        return {"fee": self.fee, "changepos": 0, "psbt": "stub"}
+
+
+class _QuoteOnlyCtx:
+    def __init__(self, rpc):
+        self._rpc = rpc
+
+    def rpc(self, slot):
+        return self._rpc
+
+
+class _ReconcileRpc:
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def call(self, method, txid):
+        self.calls.append((method, txid))
+        if txid == "bad_tx":
+            raise Fatal("simulated gettransaction failure")
+        return {"confirmations": 6}
+
+
+class _ReconcileDb:
+    def __init__(self):
+        self.reconciled: list[tuple[int, str, str]] = []
+
+    def list_outbox_broadcast(self, slot):
+        return [
+            {"id": 1, "slot": slot, "txid": "bad_tx"},
+            {"id": 2, "slot": slot, "txid": "good_tx"},
+        ]
+
+    @contextmanager
+    def transaction(self):
+        yield object()
+
+    def reconcile_outbox_in_tx(self, *, cur, outbox_id, slot, txid):
+        self.reconciled.append((outbox_id, slot, txid))
+        return 2
+
+
+class _ReconcileSettings:
+    shadow_mode = False
+    raw = {"reconcile_min_confirmations": 6, "confirmations": 100}
+
+
+class _ReconcileCtx:
+    def __init__(self, rpc, db):
+        self.settings = _ReconcileSettings()
+        self._rpc = rpc
+        self.db = db
+
+    def rpc(self, slot):
+        return self._rpc
 
 
 def _ctx(fresh_db, rpc, raw=None):
@@ -101,6 +179,51 @@ def _seed_payable_account(db: Db, *, balance: float = 1.0) -> None:
     )
 
 
+def test_fee_quote_failure_skips_only_bad_row() -> None:
+    """One bad wallet fee quote should not abort the whole slot batch."""
+    rpc = _QuoteFailureRpc(fail_addresses={"bad_addr"})
+    ctx = _QuoteOnlyCtx(rpc)
+    rows = [
+        {
+            "account_id": 10,
+            "username": "bad",
+            "payout_address": "bad_addr",
+            "amount": 1.0,
+        },
+        {
+            "account_id": 11,
+            "username": "good",
+            "payout_address": "good_addr",
+            "amount": 2.0,
+        },
+    ]
+
+    quoted = Payouts(slot="")._with_fee_quotes(
+        ctx, rows, slot_label="parent", queue_name="auto",
+        amount_key="amount",
+    )
+
+    assert len(quoted) == 1
+    assert quoted[0]["account_id"] == 11
+    assert quoted[0]["_fee_quote"] == 0.001
+    assert quoted[0]["_send_amount_quote"] == 1.999
+
+
+def test_reconcile_gettransaction_failure_skips_only_bad_row() -> None:
+    """One missing/pruned wallet tx should not block other reconciles."""
+    rpc = _ReconcileRpc()
+    db = _ReconcileDb()
+    ctx = _ReconcileCtx(rpc, db)
+
+    ReconcilePayouts(slot="mm5").run(ctx)
+
+    assert rpc.calls == [
+        ("gettransaction", "bad_tx"),
+        ("gettransaction", "good_tx"),
+    ]
+    assert db.reconciled == [(2, "mm5", "good_tx")]
+
+
 @pytest.mark.needs_mariadb
 def test_clean_broadcast_writes_debit_and_txfee(fresh_db: Db) -> None:
     """Successful sendtoaddress → Debit_AP + TXFee + outbox=broadcast,
@@ -112,13 +235,14 @@ def test_clean_broadcast_writes_debit_and_txfee(fresh_db: Db) -> None:
 
     Payouts(slot="").run(ctx)
 
-    # One outbox row, status=broadcast, txid set.
-    rows = db.fetchall("SELECT status, txid FROM transactions_outbox")
+    # One outbox row, status=broadcast, txid set, net amount recorded.
+    rows = db.fetchall("SELECT status, txid, amount FROM transactions_outbox")
     assert len(rows) == 1
     assert rows[0]["status"] == "broadcast"
     assert rows[0]["txid"] == "real_txid_abc"
+    assert abs(float(rows[0]["amount"]) - 0.999) < 1e-9
 
-    # One Debit_AP for full balance + one TXFee.
+    # One Debit_AP for net recipient amount + one wallet-calculated TXFee.
     debit = db.fetchall(
         "SELECT amount, txid FROM transactions WHERE type='Debit_AP'"
     )
@@ -126,7 +250,7 @@ def test_clean_broadcast_writes_debit_and_txfee(fresh_db: Db) -> None:
         "SELECT amount, txid FROM transactions WHERE type='TXFee'"
     )
     assert len(debit) == 1
-    assert abs(float(debit[0]["amount"]) - 1.0) < 1e-9
+    assert abs(float(debit[0]["amount"]) - 0.999) < 1e-9
     assert debit[0]["txid"] == "real_txid_abc"
     assert len(txfee) == 1
     assert abs(float(txfee[0]["amount"]) - 0.001) < 1e-9
@@ -202,6 +326,44 @@ def test_daemon_reject_marks_abandoned_no_balance_change(fresh_db: Db) -> None:
     assert rows[0]["status"] == "abandoned"
 
     # No Debit, no TXFee. User's confirmed balance should still be 1.0.
+    bal = db.compute_balance(10, min_confirmations=100)
+    assert abs(bal["confirmed"] - 1.0) < 1e-9, bal
+
+
+@pytest.mark.needs_mariadb
+def test_manual_daemon_reject_closes_manual_queue(fresh_db: Db) -> None:
+    """A failed manual cash-out must not leave the account stuck behind
+    a permanent "Manual - Pending payout" label."""
+    db = fresh_db
+    _seed_payable_account(db, balance=1.0)
+    db.execute(
+        "INSERT INTO payouts (account_id, time, completed) "
+        "VALUES (10, NOW(), 0)"
+    )
+    rpc = _StubRpc(
+        balance=10.0,
+        sendtoaddress=Fatal("fee estimation failed"),
+    )
+    ctx = _ctx(
+        db, rpc,
+        raw={"confirmations": 100, "txfee_auto": 0.001, "txfee_manual": 0.001},
+    )
+
+    with pytest.raises(Fatal):
+        Payouts(slot="").run(ctx)
+
+    rows = db.fetchall("SELECT status FROM transactions_outbox")
+    assert len(rows) == 1
+    assert rows[0]["status"] == "abandoned"
+
+    payout_rows = db.fetchall("SELECT completed FROM payouts")
+    assert len(payout_rows) == 1
+    assert int(payout_rows[0]["completed"]) == 1
+
+    debit = db.fetchall(
+        "SELECT * FROM transactions WHERE type IN ('Debit_MP','TXFee')"
+    )
+    assert len(debit) == 0
     bal = db.compute_balance(10, min_confirmations=100)
     assert abs(bal["confirmed"] - 1.0) < 1e-9, bal
 

@@ -12,7 +12,7 @@
 
 import type { CoinStats } from '../api/types';
 
-defineProps<{
+const props = defineProps<{
   stats: CoinStats;
 }>();
 
@@ -44,6 +44,17 @@ function secondsToWords(s: number): string {
   const h = Math.round((s % 86400) / 3600);
   return h > 0 ? `${d}d ${h}h` : `${d}d`;
 }
+
+function handleCoinIconError(event: Event): void {
+  const img = event.target as HTMLImageElement | null;
+  if (!img) return;
+  if (props.stats.icon_fallback_url && img.dataset.fallbackApplied !== '1') {
+    img.dataset.fallbackApplied = '1';
+    img.src = props.stats.icon_fallback_url;
+    return;
+  }
+  img.style.display = 'none';
+}
 </script>
 
 <template>
@@ -56,7 +67,7 @@ function secondsToWords(s: number): string {
         :alt="stats.currency"
         class="stats-coin-icon"
         loading="lazy"
-        @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+        @error="handleCoinIconError"
       />
     </header>
     <div class="content">

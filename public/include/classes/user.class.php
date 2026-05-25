@@ -584,6 +584,17 @@ class User extends Base {
     $_ap_range_msg = function($coin, $min, $max) {
       return "Auto-payout threshold for $coin must be between $min and $max, or 0 to disable.";
     };
+    $_ap_required_msg = function($coin, $min, $max) {
+      return "Auto-payout threshold for $coin is required when a payout address is set. Use a value between $min and $max.";
+    };
+    $_ap_address_requires_threshold = function($coin, $address, $threshold, $min, $max) use ($_ap_required_msg) {
+      if (trim((string)$address) === '') return true;
+      if (!is_numeric($threshold) || (float)$threshold <= 0) {
+        $this->setErrorMessage($_ap_required_msg($coin, $min, $max));
+        return false;
+      }
+      return true;
+    };
     if (!is_numeric($threshold)) {
       $this->setErrorMessage('Auto-payout threshold must be a number.');
       return false;
@@ -630,6 +641,42 @@ class User extends Base {
         $this->config['ap_threshold_mm5']['max']));
       return false;
     }
+    if (!$_ap_address_requires_threshold(
+      isset($this->config['currency']) ? $this->config['currency'] : 'BLC',
+      $address,
+      $threshold,
+      $this->config['ap_threshold']['min'],
+      $this->config['ap_threshold']['max'])) return false;
+    if (!$_ap_address_requires_threshold(
+      isset($this->config['currency_mm']) ? $this->config['currency_mm'] : 'PHO',
+      $address_mm,
+      $threshold_mm,
+      $this->config['ap_threshold_mm']['min'],
+      $this->config['ap_threshold_mm']['max'])) return false;
+    if (!$_ap_address_requires_threshold(
+      isset($this->config['currency_mm1']) ? $this->config['currency_mm1'] : 'BBTC',
+      $address_mm1,
+      $threshold_mm1,
+      $this->config['ap_threshold_mm1']['min'],
+      $this->config['ap_threshold_mm1']['max'])) return false;
+    if (!$_ap_address_requires_threshold(
+      isset($this->config['currency_mm3']) ? $this->config['currency_mm3'] : 'ELT',
+      $address_mm3,
+      $threshold_mm3,
+      $this->config['ap_threshold_mm3']['min'],
+      $this->config['ap_threshold_mm3']['max'])) return false;
+    if (!$_ap_address_requires_threshold(
+      isset($this->config['currency_mm4']) ? $this->config['currency_mm4'] : 'UMO',
+      $address_mm4,
+      $threshold_mm4,
+      $this->config['ap_threshold_mm4']['min'],
+      $this->config['ap_threshold_mm4']['max'])) return false;
+    if (!$_ap_address_requires_threshold(
+      isset($this->config['currency_mm5']) ? $this->config['currency_mm5'] : 'LIT',
+      $address_mm5,
+      $threshold_mm5,
+      $this->config['ap_threshold_mm5']['min'],
+      $this->config['ap_threshold_mm5']['max'])) return false;
     if (!is_numeric($donate)) {
       $this->setErrorMessage('Donation must be a number.');
       return false;
@@ -834,10 +881,12 @@ class User extends Base {
         $params = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $params["path"], $params["domain"], $params["secure"], $params["httponly"]);
     }
-    // Destroy the session.
-    session_destroy();
-    // Enforce generation of a new Session ID and delete the old
-    session_regenerate_id(true);
+    // Destroy the session if this request actually owns one. API and
+    // redirect-only paths can call logout without starting PHP's session
+    // engine, and PHP 8 warns if we regenerate a non-active session.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+      session_destroy();
+    }
     
     // Enforce a page reload and point towards login with referrer included, if supplied
     $port = ($_SERVER["SERVER_PORT"] == "80" || $_SERVER["SERVER_PORT"] == "443") ? "" : (":".$_SERVER["SERVER_PORT"]);

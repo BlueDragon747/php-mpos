@@ -878,6 +878,24 @@
   .stats-blocks-v2 [data-tooltip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
   .stats-blocks-v2 [data-tooltip]:hover::before,
   .stats-blocks-v2 [data-tooltip]:focus-visible::before { opacity: 1; transform: translateX(-50%) rotate(45deg) translateY(0); }
+
+  /* First-column chain pills sit close to the card's left overflow boundary. */
+  .stats-blocks-v2 .blocks-details-card tbody td:first-child [data-tooltip]::after {
+    left: 0;
+    transform: translateY(-2px);
+  }
+  .stats-blocks-v2 .blocks-details-card tbody td:first-child [data-tooltip]::before {
+    left: 12px;
+    transform: rotate(45deg) translateY(-2px);
+  }
+  .stats-blocks-v2 .blocks-details-card tbody td:first-child [data-tooltip]:hover::after,
+  .stats-blocks-v2 .blocks-details-card tbody td:first-child [data-tooltip]:focus-visible::after {
+    transform: translateY(0);
+  }
+  .stats-blocks-v2 .blocks-details-card tbody td:first-child [data-tooltip]:hover::before,
+  .stats-blocks-v2 .blocks-details-card tbody td:first-child [data-tooltip]:focus-visible::before {
+    transform: rotate(45deg) translateY(0);
+  }
   [data-theme="light"] .stats-blocks-v2 [data-tooltip]::after,
   [data-theme="light"] .stats-blocks-v2 [data-tooltip]::before {
     background: #ffffff;

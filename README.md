@@ -1,14 +1,17 @@
-Description 
+Description
 ===========
 
-MPOS is a web based Mining Portal for various crypto currencies. It was created by [TheSerapher](https://github.com/TheSerapher) and has hence grown quite large. Recently it was migrated into a Github Organization to make development easier. It's a community driven open source project: If you wish to participate contact the team on IRC: https://webchat.freenode.net/?channels=#mpos-dev
+MPOS is a web-based mining portal for cryptocurrency pools. It was created by
+[TheSerapher](https://github.com/TheSerapher) and later adapted for the Blake
+merge-mine pools by BlueDragon747.
 
+This branch is the Blakestream 25.2-GO deploy lane. It keeps the legacy
+PHP/Smarty MPOS application, adds Vue/Vite dashboard pieces, uses
+`cronjobs-py` as the authoritative scheduler, and integrates with the Go
+Eloipool 25.2 stratum stack.
 
-**NOTE**: This project is still under development and commits are happening on a daily basis.
-I do not recommend using this for a live setup as of yet. Wait for the later Release Candidate
-if you wish to run your pool with it. Testing pools are much appreciated though!
-
-**NOTE**: This is a merge mine branch for the Blake merge mine pools by BlueDragon747
+**NOTE**: This is a merge-mine branch for the Blakecoin-family Blakestream
+pool: BLC parent chain plus PHO, BBTC, ELT, UMO, and LIT aux chains.
 
 Donations
 =========
@@ -33,42 +36,53 @@ You can find a list of active pools [here](https://github.com/TheSerapher/php-mp
 Requirements
 ============
 
-This setup has been tested on Ubuntu 12.04, It should also work on any related distribution 
-(Ubuntu 13.04, CentOS, RHEL, Debian).
+The 25.2-GO deploy path is tested on Ubuntu 24.04 x86_64. Ubuntu 22.04 may
+work, but Ubuntu 24.04 is the target for the current daemon builds and deploy
+bundle.
 
 Be aware that `MPOS` is **only** for pooled mining. Solo mining is not
 supported because MPOS accounting depends on submitted pool shares; solo miners
 create blocks directly and do not create the share records MPOS needs for reward
 tracking.
 
-* 64 bit system
- * Otherwise some coins will display wrong network hashrates
-* Apache2
- * libapache2-mod-php5
-* PHP 5.4+
- * php5-json
- * php5-mysqlnd
- * php5-memcached
- * php5-curl
-* MySQL Server
- * mysql-server
-* memcached
-* eloipool_Blakecoin
-* Blakecoind
-* + Aux coins
+Server requirements:
+
+* 64-bit Ubuntu 24.04 VPS with systemd.
+* Root access, or a sudo user that can run the deploy bundle with `sudo -E`.
+* Outbound HTTPS and git access for package installs, Docker image pulls,
+  bootstrap downloads, and optional source builds.
+* Docker Engine for the six 25.2 wallet daemon containers.
+* Nginx, PHP-FPM, MariaDB, memcached, Python 3 venv tooling, Bun, and Go.
+  The mainnet deploy installs these on the pool server.
+* Enough disk for chain data, Docker images, MPOS, logs, and backups. Source
+  builds need about 15 GB extra under `/root/blakestream-daemon-builds`.
+
+Pool software and branch requirements:
+
+* MPOS: `BlueDragon747/php-mpos`, branch `25.2-GO`.
+* Eloipool: `BlueDragon747/eloipool_Blakecoin`, branch `25.2-GO`.
+* Wallet daemon source builds use these branches until live cutover:
+  `BlueDragon747/Blakecoin` `0.25.2`,
+  `BlueDragon747/photon` `0.25.2`,
+  `BlakeBitcoin/BlakeBitcoin` `0.25.2`,
+  `BlueDragon747/Electron-ELT` `0.25.2`,
+  `BlueDragon747/universalmol` `0.25.2`, and
+  `BlueDragon747/lithium` `0.25.2`.
+* After live cutover, switch the Eloipool and wallet source defaults to
+  `master` once those repositories carry the 25.2 updates on `master`.
 
 Features
 ========
 
-The following feature have been implemented so far:
+The following features have been implemented so far:
 
 * Fully re-written GUI with [Smarty][2] templates
  * Full file based template support
  * **NEW** SQL based templates
 * Mobile WebUI
-* Scrypt, SHA256, VARDIFF Support
+* Blake-256 8-round, AuxPoW merge mining, and VARDIFF support
 * Reward Systems
- * Propotional, PPS and PPLNS
+ * Proportional, PPS and PPLNS
 * New Theme
  * Live Dashboard
  * AJAX Support
@@ -82,6 +96,7 @@ The following feature have been implemented so far:
 * Block statistics
 * Pool donations, fees and block bonuses
 * Manual and auto payout
+ * Wallet-estimated network fees for 25.2 payout broadcasts
 * Transaction list
 * Admin Panel
  * Cron Monitoring Overview
@@ -101,9 +116,9 @@ The following feature have been implemented so far:
  * Manual Payout
 * User-to-user Invitation System
 * Support for various coins via config
- * All scrypt coins
- * All sha256d coins
  * All Blake-256 coins *8 round variant
+* Blakestream 25.2 service monitoring and Go Eloipool share-log import into
+  MPOS accounting tables
 
 Installation
 ============
@@ -112,7 +127,7 @@ For the Blakestream mainnet deployment path, clone this repo on the pool
 server and run the automated deploy bundle locally:
 
 ```bash
-git clone https://github.com/BlueDragon747/php-mpos.git php-mpos
+git clone -b 25.2-GO https://github.com/BlueDragon747/php-mpos.git php-mpos
 
 cd php-mpos
 export MPOS_DOMAIN=pool.example.com
@@ -135,7 +150,7 @@ bash deploy-bundle/deploy-mainnet.sh root@your-vps
 ```
 
 The deploy runs the six coin daemons from Docker images. By default it
-pulls `sidgrip/<coin>:latest` from Docker Hub. To build daemon images on
+pulls `sidgrip/<coin>:25.2` from Docker Hub. To build daemon images on
 the pool server instead, disable daemon image pulls:
 
 ```bash
@@ -147,8 +162,10 @@ That source-build path clones:
 `BlueDragon747/Blakecoin`, `BlueDragon747/photon`,
 `BlakeBitcoin/BlakeBitcoin`, `BlueDragon747/Electron-ELT`,
 `BlueDragon747/universalmol`, and `BlueDragon747/lithium` from their
-`master` branches, builds daemon binaries in Docker, then tags local
-runtime images as `local/<coin>:15.21-local`.
+`0.25.2` branches by default, builds daemon binaries in Docker, then tags
+local runtime images as `local/<coin>:25.2-local`.
+Those source-build branch pins should switch to `master` after live
+cutover once master carries the 25.2 wallet updates.
 
 Source builds require Docker and enough disk for six source trees and build
 outputs; plan for about 15 GB free under `/root/blakestream-daemon-builds`.
@@ -158,7 +175,7 @@ image names and disable pulls:
 
 ```bash
 export MPOS_DOCKER_HUB=local
-export MPOS_IMAGE_TAG=15.21-test
+export MPOS_IMAGE_TAG=25.2-test
 export MPOS_PULL_DAEMON_IMAGES=0
 export SKIP_DAEMON_IMAGE_BUILD=1
 sudo -E bash deploy-bundle/deploy-mainnet.sh
@@ -170,18 +187,21 @@ sudo -E bash deploy-bundle/deploy-mainnet.sh
 Bootstrap options:
 
 ```bash
-# Default: download bootstrap.dat files from https://bootstrap.blakestream.io
+# Default: discover the fastest 25.2 mirror from mirrors.json, download
+# each current *.dat.xz plus its .sha256 sidecar, verify, then decompress
+# to bootstrap.dat before starting each daemon.
 # If you are already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 sudo -E bash deploy-bundle/deploy-mainnet.sh
 
-# Use a local or private bootstrap mirror. The mirror must expose:
-#   /Blakecoin/bootstrap.dat
-#   /Photon/bootstrap.dat
-#   /BlakeBitcoin/bootstrap.dat
-#   /Electron/bootstrap.dat
-#   /UniversalMolecule/bootstrap.dat
-#   /Lithium/bootstrap.dat
+# Pin a specific public mirror instead of auto-picking from the registry.
+export BOOTSTRAP_MIRROR_HOST=bootstrap-uk.blakestream.io
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+
+# Use a local or private 25.2 bootstrap mirror. The mirror must expose:
+#   /25.2/<coin>-bootstrap-<height>.dat.xz
+#   /25.2/<coin>-bootstrap-<height>.dat.xz.sha256
 export BOOTSTRAP_URL=http://127.0.0.1:8080
+export BOOTSTRAP_MIRROR_DISCOVERY=0
 sudo -E bash deploy-bundle/deploy-mainnet.sh
 
 # Use pre-seeded bootstrap.dat files already placed in the daemon datadirs:
@@ -199,8 +219,10 @@ sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 
 Eliopool is cloned automatically from
-`https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `master`
+`https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `25.2-GO`
 unless you set `ELIOPOOL_TREE` to a local checkout.
+Switch the Eloipool branch default to `master` after live cutover once
+master carries the Go Eloipool updates.
 
 See [deploy-bundle/README.md](deploy-bundle/README.md) for deploy details.
 
@@ -224,7 +246,7 @@ keep your installation updated. You decide which new feature you'd like to integ
 Other customizations are also possible but will require merging changes together. Usually users would not need to change the backend code unless they wish to work
 on non-existing features in `MPOS`. For the vast majority, adjusting themes should be enough to highlight your pool from others.
 
-In all that, I humbly ask to keep the `MPOS` author reference and Github URL intact.
+In all that, I humbly ask to keep the `MPOS` author reference and GitHub URL intact.
 
 Related Software
 ================
@@ -243,17 +265,19 @@ You can contribute to this project in different ways:
 
 * Report outstanding issues and bugs by creating an [Issue][1]
 * Suggest feature enhancements also via [Issues][1]
-* Fork the project, create a branch and file a pull request to improve the code itself
+* Create pull requests against `BlueDragon747/php-mpos` branch `25.2-GO` for
+  Blakestream 25.2 pool work.
 
 Contact
 =======
 
-You can find the team on Freenode.net, #MPOS.
+Historical upstream MPOS discussion used Freenode `#MPOS`. Blakestream 25.2
+work should be tracked through the active GitHub repository and branch above.
 
 Team Members
 ============
 
-Author and Github Owner: [TheSerapher](https://github.com/TheSerapher) aka Sebastian Grewe
+Author and GitHub Owner: [TheSerapher](https://github.com/TheSerapher) aka Sebastian Grewe
 
 Developers:
 
@@ -286,5 +310,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-  [1]: https://github.com/TheSerapher/php-mpos/issues "Issue"
+  [1]: https://github.com/BlueDragon747/php-mpos/issues "Issue"
   [2]: http://www.smarty.net/docs/en/ "Smarty"

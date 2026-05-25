@@ -15,6 +15,8 @@
 # --- cronjobs-py + sse + nginx (info-level, daily) ----------------------
 /var/log/blakestream-mpos/cronjobs.stdout
 /var/log/blakestream-mpos/cronjobs.stderr
+/var/log/blakestream-mpos/sharelog-importer.stdout
+/var/log/blakestream-mpos/sharelog-importer.stderr
 /var/log/blakestream-mpos/sse.stdout
 /var/log/blakestream-mpos/sse.stderr
 /var/log/blakestream-mpos/nginx-access.log

@@ -1,9 +1,10 @@
-"""Bridge to MPOS's `global.inc.php` `$config` array.
+"""Bridge to MPOS's PHP `$config` array.
 
 Rather than maintain two configs, we shell out to `php -r` and dump the
 existing `$config` as JSON. The Python side gets a typed view of the same
-values the PHP cronjobs / web UI use. The path to the PHP config is the
-only thing we ask the operator to set.
+values the PHP cronjobs / web UI use. MPOS loads `global.inc.dist.php`
+first, then lets `global.inc.php` override private deploy values; cronjobs-py
+must do the same or PPLNS silently falls back to hard-coded defaults.
 """
 
 from __future__ import annotations
@@ -77,20 +78,33 @@ class Settings:
 def _php_dump_config(config_path: Path) -> dict[str, Any]:
     """Run `php -r` to evaluate the MPOS config and emit it as JSON.
 
-    We require the file directly (not `shared.inc.php`) because the latter
-    pulls in DB and class wiring that needs a running MariaDB.
+    We require config files directly (not `shared.inc.php`) because the
+    latter pulls in DB and class wiring that needs a running MariaDB.
+    Match `public/include/bootstrap.php`: load `global.inc.dist.php` from
+    the same directory first when present, then load the operator override.
     """
     if not config_path.exists():
         raise FileNotFoundError(config_path)
     if "'" in str(config_path):
         raise ValueError(f"single-quoted path not supported: {config_path}")
+    dist_path = config_path.with_name("global.inc.dist.php")
+    require_dist = (
+        dist_path.exists()
+        and dist_path.resolve() != config_path.resolve()
+    )
+    if require_dist and "'" in str(dist_path):
+        raise ValueError(f"single-quoted path not supported: {dist_path}")
+    requires = ""
+    if require_dist:
+        requires += f"require_once '{dist_path}'; "
+    requires += f"require_once '{config_path}'; "
     # `require_once` needs a PHP string literal, not a shell-quoted path.
     # MPOS config files open with `cfip()` web-access guards; stub it so
     # the require succeeds in CLI context.
     snippet = (
         "function cfip() { return true; } "
         "$config = []; "
-        f"require_once '{config_path}'; "
+        f"{requires}"
         "echo json_encode($config, JSON_UNESCAPED_SLASHES);"
     )
     out = subprocess.run(
@@ -107,11 +121,13 @@ def _coin_from_slot(slot: str, raw: dict[str, Any]) -> CoinConfig | None:
     w = raw.get(key)
     if not isinstance(w, dict) or not w.get("host"):
         return None
+    host = str(w["host"]).strip().rstrip("/")
+    url = host if host.startswith(("http://", "https://")) else f"http://{host}"
     payout_key = "payout_system" if slot == "" else f"payout_system_{slot}"
     return CoinConfig(
         slot=slot,
         endpoint=Endpoint(
-            url=f"http://{w['host']}/",
+            url=url,
             user=w.get("username", ""),
             password=w.get("password", ""),
             label=key,

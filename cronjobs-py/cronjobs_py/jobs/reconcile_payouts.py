@@ -47,7 +47,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..errors import Skip
 from ..logger import get
 from ..scheduler import JobContext
 
@@ -114,12 +113,15 @@ class ReconcilePayouts:
             try:
                 info = rpc.call("gettransaction", txid)
             except Exception as exc:
-                # Don't poison the slot — the daemon may just be down
-                # or restarting. Skip this tick and try again later.
-                raise Skip(
-                    f"gettransaction({txid}) failed for outbox "
-                    f"{outbox_id}: {exc}"
+                # Don't poison the slot or block unrelated rows: the
+                # daemon may just be missing one wallet transaction or
+                # restarting. Leave this row broadcast and retry next tick.
+                log.warning(
+                    "[%s/%s] gettransaction(%s) failed for outbox %d; "
+                    "will retry next tick: %s",
+                    self.name, slot_label, txid, outbox_id, exc,
                 )
+                continue
 
             confs = int(info.get("confirmations", 0)) if isinstance(info, dict) else 0
 

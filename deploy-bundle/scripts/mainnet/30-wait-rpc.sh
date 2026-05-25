@@ -11,8 +11,8 @@ declare -A RPC_PORT=(
     [pho]=8984
     [bbtc]=8243
     [elt]=6852
-    [lit]=12345
-    [umo]=19738
+    [lit]=12000
+    [umo]=5921
 )
 
 PER_COIN_DEADLINE=900  # 15 min

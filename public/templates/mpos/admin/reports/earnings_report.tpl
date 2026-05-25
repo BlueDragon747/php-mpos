@@ -53,7 +53,7 @@
         <td align="right">{$REPORTDATA[txs].shares|default:"0"}</td>
         <td align="right">{$REPORTDATA[txs]['user'].valid|number_format|default:"0"}</td>
         <td align="right">{$REPORTDATA[txs]['user'].invalid|number_format|default:"0"}</td>
-      	<td align="right">{if $REPORTDATA[txs]['user'].invalid > 0 && $REPORTDATA[txs]['user'].valid > 0}{($REPORTDATA[txs]['user'].invalid / $REPORTDATA[txs]['user'].valid * 100)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
+       <td align="right">{if $REPORTDATA[txs]['user'].invalid > 0 && $REPORTDATA[txs]['user'].valid > 0}{($REPORTDATA[txs]['user'].invalid / $REPORTDATA[txs]['user'].valid * 100)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
         <td align="right">{if $REPORTDATA[txs]['user'].valid > 0 && $REPORTDATA[txs].shares > 0}{(( 100 / $REPORTDATA[txs].shares) * $REPORTDATA[txs]['user'].valid)|number_format:"2"}{else}0.00{/if}</td>
         {if $GLOBAL.config.payout_system == 'pplns'}
         <td align="right">{$REPORTDATA[txs].pplns_shares|number_format|default:"0"}</td>
@@ -74,13 +74,13 @@
       <td align="right">{$totalvalid|number_format}</td>
       <td align="right">{$totalinvalid|number_format}</td>
       <td align="right">{if $totalinvalid > 0 && $totalvalid > 0 }{($totalinvalid / $totalvalid * 100)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
-      	<td align="right">{if $usertotalshares > 0 && $totalvalid > 0}{(( 100 / $usertotalshares) * $totalvalid)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
+       <td align="right">{if $usertotalshares > 0 && $totalvalid > 0}{(( 100 / $usertotalshares) * $totalvalid)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
       {if $GLOBAL.config.payout_system == 'pplns'}
       <td align="right">{$pplnsshares|number_format}</td>
       <td align="right">{$pplnsvalid|number_format}</td>
       <td align="right">{$pplnsinvalid|number_format}</td>
       <td align="right">{if $pplnsinvalid > 0 && $pplnsvalid > 0 }{($pplnsinvalid / $pplnsvalid * 100)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
-      	<td align="right">{if $userpplnsshares > 0 && $pplnsvalid > 0}{(( 100 / $userpplnsshares) * $pplnsvalid)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
+       <td align="right">{if $userpplnsshares > 0 && $pplnsvalid > 0}{(( 100 / $userpplnsshares) * $pplnsvalid)|number_format:"2"|default:"0"}{else}0.00{/if}</td>
         <td align="right">{if $totalvalid > 0 && $pplnsvalid > 0 && $usertotalshares > 0 && $userpplnsshares > 0}{math assign="percentage2" equation=(100 / ((( 100 / $usertotalshares) * $totalvalid) / (( 100 / $userpplnsshares) * $pplnsvalid)))}{else if $pplnsvalid == 0}{assign var=percentage2 value=0}{else}{assign var=percentage2 value=100}{/if}
           <font color="{if ($percentage2 >= 100)}green{else}red{/if}">{$percentage2|number_format:"2"|default:"0"}</font></b></td>
         {/if}

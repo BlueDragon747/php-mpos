@@ -108,7 +108,7 @@ if (isset($_SESSION['last_ip_pop']) && is_array($_SESSION['last_ip_pop']) && cou
   if (@$_SESSION['AUTHENTICATED'] && $data[0] !== $_SERVER['REMOTE_ADDR']) {
     $ip = filter_var($data[0], FILTER_VALIDATE_IP);
     $time = date("l, F jS \a\\t g:i a", $data[1]);
-    $closelink = "<a href='index.php?page=dashboard&clp=1' style='float:right;padding-right:14px;'>Close</a>";
+    $closelink = "<a href='index.php?page=dashboard&clp=1' style='display:inline-block;margin-left:8px;'>Close</a>";
     $_SESSION['POPUP'][] = array('CONTENT' => "You last logged in from <b>$ip</b> on $time $closelink", 'TYPE' => 'warning');
   }
   // Show-once: drop the session var so subsequent page loads don't
@@ -179,6 +179,19 @@ $bsxTiming['controller_end'] = microtime(true);
 define('PAGE', $page);
 define('ACTION', $action);
 
+$bsxPagePopups = array();
+$bsxSessionUserData = array();
+$bsxAuthenticated = false;
+$bsxSessionClosedBeforeRender = false;
+if ($page != 'api' && session_id()) {
+  $bsxPagePopups = isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : array();
+  $bsxSessionUserData = isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array();
+  $bsxAuthenticated = !empty($_SESSION['AUTHENTICATED']);
+  unset($_SESSION['POPUP']);
+  session_write_close();
+  $bsxSessionClosedBeforeRender = true;
+}
+
 // For our content inclusion
 $smarty->assign("PAGE", $page);
 $smarty->assign("ACTION", $action);
@@ -233,12 +246,21 @@ $smarty->assign('REQUEST_TIMINGS', $bsxTimingMs);
 $smarty->assign('DebuggerInfo', $debug->getDebugInfo());
 $smarty->assign('RUNTIME', (microtime(true) - $dStartTime) * 1000);
 
-if ($page != 'api' && session_id()) {
-  $smarty->assign('PAGE_POPUPS', isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : array());
-  $smarty->assign('USERDATA', isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array());
-  $smarty->assign('AUTHENTICATED', !empty($_SESSION['AUTHENTICATED']));
-  unset($_SESSION['POPUP']);
-  session_write_close();
+if ($page != 'api') {
+  if (isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP'])) {
+    $bsxPagePopups = array_merge($bsxPagePopups, $_SESSION['POPUP']);
+    unset($_SESSION['POPUP']);
+  }
+  if (!$bsxSessionClosedBeforeRender && session_id()) {
+    $bsxPagePopups = isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : $bsxPagePopups;
+    $bsxSessionUserData = isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array();
+    $bsxAuthenticated = !empty($_SESSION['AUTHENTICATED']);
+    unset($_SESSION['POPUP']);
+    session_write_close();
+  }
+  $smarty->assign('PAGE_POPUPS', $bsxPagePopups);
+  $smarty->assign('USERDATA', $bsxSessionUserData);
+  $smarty->assign('AUTHENTICATED', $bsxAuthenticated);
 }
 
 // Display our page

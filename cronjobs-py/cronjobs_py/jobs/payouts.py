@@ -125,12 +125,6 @@ class Payouts:
                 f"matched to wallet_comment, then re-run."
             )
 
-        # Wave 2: per-payout daemon transaction fee. Subtracted from
-        # the user's balance and recorded as a TXFee transaction row,
-        # mirroring PHP `Transaction::createPayoutDebitRecord`.
-        txfee_auto = float(cfg.raw.get("txfee_auto", 0.0))
-        txfee_manual = float(cfg.raw.get("txfee_manual", txfee_auto))
-
         # Coinbase-maturity threshold: payouts only count credits from
         # blocks that have at least this many confirmations. Defaults to
         # MPOS's `config.confirmations` (100 in the live config) — the
@@ -145,9 +139,10 @@ class Payouts:
         manual_queue = db.get_manual_payout_queue(
             self.slot,
             min_confirmations=min_confs,
-            txfee_manual=txfee_manual,
+            txfee_manual=0.0,
         )
-        # Auto-payout queue, gated by both ap_threshold and txfee_auto.
+        # Auto-payout queue. The network fee is wallet-calculated per
+        # candidate below, so the legacy fixed txfee_auto gate is disabled.
         auto_disabled = (
             db.get_setting("disable_auto_payouts") or "0"
         ) == "1"
@@ -159,7 +154,7 @@ class Payouts:
         else:
             auto_candidates = db.get_accounts_above_threshold(
                 self.slot, min_confirmations=min_confs,
-                txfee_auto=txfee_auto,
+                txfee_auto=0.0,
             )
 
         if not manual_queue and not auto_candidates:
@@ -179,25 +174,38 @@ class Payouts:
                       self.name, slot_label)
             return
 
+        manual_queue = self._with_fee_quotes(
+            ctx, manual_queue, slot_label=slot_label,
+            queue_name="manual", amount_key="amount",
+        )
+        auto_candidates = self._with_fee_quotes(
+            ctx, auto_candidates, slot_label=slot_label,
+            queue_name="auto", amount_key="balance",
+        )
+
+        if not manual_queue and not auto_candidates:
+            log.debug("[%s/%s] no payout candidates after fee quotes",
+                      self.name, slot_label)
+            return
+
         try:
             wallet_balance = float(rpc.call("getbalance"))
         except Exception as exc:
             raise Skip(f"getbalance failed: {exc}")
 
-        # Estimate total spend including each per-payout txfee, so we
-        # don't try to send N user payouts when the wallet would run out
-        # of balance halfway through.
+        # With subtractfeefromamount=true, each wallet transaction spends
+        # the user's gross balance: recipient amount + network fee == gross.
         total_manual = sum(float(p["amount"]) for p in manual_queue)
         total_auto = sum(float(c["balance"]) for c in auto_candidates)
-        total_txfees = (
-            txfee_manual * len(manual_queue) + txfee_auto * len(auto_candidates)
-        )
-        total = total_manual + total_auto + total_txfees
+        total = total_manual + total_auto
         log.info(
             "[%s/%s] manual_queue=%d (%.8f), auto_candidates=%d (%.8f), "
-            "txfees=%.8f, total=%.8f, wallet=%.8f",
+            "estimated_fees=%.8f, total=%.8f, wallet=%.8f",
             self.name, slot_label, len(manual_queue), total_manual,
-            len(auto_candidates), total_auto, total_txfees, total,
+            len(auto_candidates), total_auto,
+            sum(float(p.get("_fee_quote", 0.0)) for p in manual_queue)
+            + sum(float(c.get("_fee_quote", 0.0)) for c in auto_candidates),
+            total,
             wallet_balance,
         )
         if total > wallet_balance:
@@ -219,7 +227,8 @@ class Payouts:
             self._pay_one(
                 ctx, account_id=account_id, username=username,
                 address=address, amount=amount, slot_label=slot_label,
-                kind="Debit_MP", txfee=txfee_manual,
+                kind="Debit_MP",
+                estimated_txfee=float(p.get("_fee_quote", 0.0)),
                 manual_payout_id=payout_id,
             )
             paid_account_ids.add(account_id)
@@ -247,7 +256,8 @@ class Payouts:
             self._pay_one(
                 ctx, account_id=account_id, username=username,
                 address=address, amount=amount, slot_label=slot_label,
-                kind="Debit_AP", txfee=txfee_auto,
+                kind="Debit_AP",
+                estimated_txfee=float(c.get("_fee_quote", 0.0)),
                 manual_payout_id=None,
             )
 
@@ -290,31 +300,81 @@ class Payouts:
             valid.append(row)
         return valid
 
+    def _with_fee_quotes(self, ctx: JobContext, rows: list[dict],
+                         *, slot_label: str, queue_name: str,
+                         amount_key: str) -> list[dict]:
+        """Attach wallet-calculated fee quotes to payout rows.
+
+        Quotes use walletcreatefundedpsbt with subtractFeeFromOutputs so the
+        estimate matches the final policy: the network fee comes out of the
+        amount being paid to the user, not from a fixed MPOS config value.
+        """
+        if not rows:
+            return []
+        rpc = ctx.rpc(self.slot)
+        quoted: list[dict] = []
+        for row in rows:
+            address = str(row.get("payout_address") or "")
+            username = str(row.get("username") or "")
+            account_id = row.get("account_id", row.get("id", "?"))
+            amount = round(float(row.get(amount_key) or 0.0), 8)
+            if amount <= 0:
+                continue
+            try:
+                quote = rpc.walletcreatefundedpsbt(address, amount)
+            except Exception as exc:
+                log.warning(
+                    "[%s/%s] skipping %s payout for %s (account %s): "
+                    "wallet fee quote failed: %s",
+                    self.name, slot_label, queue_name, username,
+                    account_id, exc,
+                )
+                continue
+
+            fee = round(float(quote.get("fee", 0.0)), 8) if isinstance(quote, dict) else 0.0
+            send_amount = round(amount - fee, 8)
+            if fee < 0 or send_amount <= 0:
+                log.warning(
+                    "[%s/%s] skipping %s payout for %s (account %s): "
+                    "quoted fee %.8f consumes amount %.8f",
+                    self.name, slot_label, queue_name, username,
+                    account_id, fee, amount,
+                )
+                continue
+            enriched = dict(row)
+            enriched["_fee_quote"] = fee
+            enriched["_send_amount_quote"] = send_amount
+            quoted.append(enriched)
+        return quoted
+
     def _pay_one(self, ctx: JobContext, *, account_id: int,
                  username: str, address: str, amount: float,
                  slot_label: str, kind: str = "Debit_AP",
-                 txfee: float = 0.0,
+                 estimated_txfee: float = 0.0,
                  manual_payout_id: int | None = None) -> None:
         """Pay one user. The flow is:
 
           1. Reserve outbox row (status=pending) with a fresh
              wallet_comment idempotency anchor.
           2. Call sendtoaddress through call_nonidempotent — no retries
-             on timeout. Send `amount - txfee` on chain so the user's
-             credit pays for the daemon's tx fee, mirroring PHP's
-             createPayoutDebitRecord.
+             on timeout. Send the gross user balance with
+             subtractfeefromamount=true so the wallet calculates the real
+             network fee and deducts it from the recipient amount.
           3. On success: in one transaction, mark outbox=broadcast,
-             insert Debit_AP/Debit_MP for `amount`, insert TXFee for
-             `txfee`, mark older transactions archived (so the next
-             cycle doesn't re-net the same Credit/Fee rows), and (for
-             manual payouts) mark `payouts.completed = 1`.
+             insert Debit_AP/Debit_MP for the net recipient amount,
+             insert TXFee for the wallet-reported fee, mark older
+             transactions archived (so the next cycle doesn't re-net the
+             same Credit/Fee rows), and (for manual payouts) mark
+             `payouts.completed = 1`.
           4. On Indeterminate: mark outbox=indeterminate, raise Fatal.
-          5. On Fatal from daemon: mark outbox=abandoned, raise Fatal
-             so the operator sees the slot poison flag and investigates.
+          5. On Fatal from daemon: mark outbox=abandoned, close the
+             manual queue row if this was a manual payout, then raise
+             Fatal so the operator sees the slot poison flag and
+             investigates.
 
-        `kind` is "Debit_AP" for auto, "Debit_MP" for manual. `txfee`
-        is the daemon transaction fee that gets recorded as a TXFee row
-        and subtracted from the on-chain send amount. `manual_payout_id`
+        `kind` is "Debit_AP" for auto, "Debit_MP" for manual.
+        `estimated_txfee` is used only for the short pending-outbox
+        window before the wallet returns the actual fee. `manual_payout_id`
         is the row id from the `payouts` table for manual payouts —
         we mark it `completed = 1` once the on-chain send + balance
         bookkeeping commit. None for auto.
@@ -322,14 +382,11 @@ class Payouts:
         rpc = ctx.rpc(self.slot)
         db = ctx.db
 
-        # The on-chain send amount is the user's net balance MINUS the
-        # daemon transaction fee. The user's balance entries (Debit +
-        # TXFee) sum to the original `amount`. PHP-parity.
-        send_amount = round(amount - txfee, 8)
-        if send_amount <= 0:
+        estimated_send_amount = round(amount - estimated_txfee, 8)
+        if estimated_send_amount <= 0:
             log.warning(
-                "[%s/%s] %s: amount %.8f <= txfee %.8f; skipping",
-                self.name, slot_label, username, amount, txfee,
+                "[%s/%s] %s: amount %.8f <= quoted fee %.8f; skipping",
+                self.name, slot_label, username, amount, estimated_txfee,
             )
             return
 
@@ -342,7 +399,7 @@ class Payouts:
             slot=self.slot,
             account_id=account_id,
             coin_address=address,
-            amount=send_amount,
+            amount=estimated_send_amount,
             wallet_comment=placeholder,
         )
         wallet_comment = _make_wallet_comment(
@@ -355,34 +412,80 @@ class Payouts:
         )
 
         log.info(
-            "[%s/%s] sending %.8f (gross %.8f − txfee %.8f) to %s (%s) "
-            "kind=%s outbox=%d comment=%s",
-            self.name, slot_label, send_amount, amount, txfee,
-            username, address, kind, outbox_id, wallet_comment,
+            "[%s/%s] sending gross %.8f to %s (%s), fee deducted by wallet "
+            "(estimated %.8f) kind=%s outbox=%d comment=%s",
+            self.name, slot_label, amount,
+            username, address, estimated_txfee,
+            kind, outbox_id, wallet_comment,
         )
 
         # Step 2. Issue the wallet send. NO retries.
         try:
-            txid = rpc.sendtoaddress(address, send_amount, comment=wallet_comment)
+            txid = rpc.sendtoaddress(
+                address, amount, comment=wallet_comment,
+                subtract_fee_from_amount=True,
+            )
         except Indeterminate as exc:
             db.mark_outbox_indeterminate(outbox_id, str(exc))
             raise Fatal(
-                f"E0090: outbox {outbox_id} ({username}, {send_amount:.8f}) "
+                f"E0090: outbox {outbox_id} ({username}, {estimated_send_amount:.8f}) "
                 f"is in indeterminate state — wallet may have broadcast. "
                 f"Reconcile via listtransactions matching wallet_comment "
                 f"{wallet_comment} before clearing the slot poison flag."
             )
         except Exception as exc:
-            db.mark_outbox_abandoned(outbox_id, str(exc))
+            with db.transaction() as cur:
+                cur.execute(
+                    "UPDATE transactions_outbox "
+                    "SET status = 'abandoned', rpc_error = %s "
+                    "WHERE id = %s AND status = 'pending'",
+                    (str(exc), outbox_id),
+                )
+                if manual_payout_id is not None:
+                    db.mark_manual_payout_complete(
+                        self.slot, manual_payout_id, cur=cur,
+                    )
             raise Fatal(
                 f"E0091: sendtoaddress for {username} (account {account_id}) "
                 f"was rejected by the daemon: {exc}. "
-                f"Outbox {outbox_id} marked abandoned; user balance unchanged."
+                f"Outbox {outbox_id} marked abandoned; "
+                f"user balance unchanged."
             )
+
+        txfee = round(float(estimated_txfee), 8)
+        try:
+            tx_info = rpc.call("gettransaction", txid)
+            if isinstance(tx_info, dict) and "fee" in tx_info:
+                txfee = round(abs(float(tx_info.get("fee", 0.0))), 8)
+        except Exception as exc:
+            log.warning(
+                "[%s/%s] txid=%s broadcast but gettransaction failed; "
+                "using fee quote %.8f for DB accounting: %s",
+                self.name, slot_label, txid, estimated_txfee, exc,
+            )
+        send_amount = round(amount - txfee, 8)
+        if send_amount <= 0:
+            db.mark_outbox_indeterminate(
+                outbox_id,
+                f"txid {txid} broadcast but wallet fee {txfee:.8f} "
+                f"consumed gross amount {amount:.8f}",
+            )
+            raise Fatal(
+                f"E0093: txid {txid} broadcast but wallet fee {txfee:.8f} "
+                f"consumed gross amount {amount:.8f}; outbox {outbox_id} "
+                f"requires operator review."
+            )
+
+        log.info(
+            "[%s/%s] txid=%s sent %.8f (gross %.8f − wallet fee %.8f) "
+            "to %s (%s) kind=%s outbox=%d",
+            self.name, slot_label, txid, send_amount, amount, txfee,
+            username, address, kind, outbox_id,
+        )
 
         # Step 3. Broadcast confirmed. One transaction wraps:
         #   outbox → broadcast
-        #   insert Debit row for `amount`
+        #   insert Debit row for `send_amount`
         #   insert TXFee row for `txfee` (if any)
         #   archive older transactions (so the next cycle reads a
         #   fresh balance from this user — credits already paid out
@@ -392,14 +495,15 @@ class Payouts:
             with db.transaction() as cur:
                 cur.execute(
                     "UPDATE transactions_outbox "
-                    "SET status = 'broadcast', txid = %s, rpc_error = NULL "
+                    "SET status = 'broadcast', txid = %s, amount = %s, "
+                    "rpc_error = NULL "
                     "WHERE id = %s",
-                    (txid, outbox_id),
+                    (txid, send_amount, outbox_id),
                 )
                 debit_id = db.add_transaction_in_tx(
                     cur=cur,
                     account_id=account_id,
-                    amount=amount,
+                    amount=send_amount,
                     kind=kind,
                     block_id=None,
                     coin_address=address,

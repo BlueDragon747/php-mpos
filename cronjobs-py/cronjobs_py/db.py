@@ -1000,9 +1000,9 @@ class Db:
         """kH/s over the last `interval` seconds across `shares` + `shares_archive`.
 
         Mirrors `Statistics::getCurrentHashrate` in MPOS PHP. The
-        `target_bits` value comes from MPOS config (`config.target_bits`,
-        usually 32 for SHA-256-style chains, see global.inc.dist.php).
-        `difficulty_const` is `config.difficulty` (32 by default).
+        `target_bits` value comes from MPOS config (`config.target_bits`).
+        `difficulty_const` is `config.difficulty`; BlakeStream 15.21/25.2
+        uses 21 for the `diff_32` setting in global.inc.dist.php.
         """
         # The SQL is identical to PHP's: sum(diff or POW(2, diff_const-16))
         # times POW(2, target_bits) divided by interval, divided by 1000

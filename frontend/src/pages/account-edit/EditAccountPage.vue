@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import type { EditAccountInitial, PopupMessage } from './types';
+import type { CoinSlotState, EditAccountInitial, PopupMessage } from './types';
 
 // Re-implementation of legacy templates/mpos/account/edit/default.tpl as a
 // Vue 3 + TS component. The submit path is unchanged — every form posts
@@ -65,6 +65,17 @@ const ADDR_TYPE_TOOLTIP: Record<AddrKind, string> = {
   '':     '',
 };
 
+function handleCoinIconError(event: Event, fallbackUrl: string): void {
+  const img = event.target as HTMLImageElement | null;
+  if (!img) return;
+  if (fallbackUrl && img.dataset.fallbackApplied !== '1') {
+    img.dataset.fallbackApplied = '1';
+    img.src = fallbackUrl;
+    return;
+  }
+  img.style.display = 'none';
+}
+
 // Form models. We seed from initial state but let the user edit freely.
 const form = ref({
   email: i.email,
@@ -99,6 +110,17 @@ function numEqual(a: unknown, b: unknown): boolean {
   if (Number.isNaN(na) && Number.isNaN(nb)) return true;
   return na === nb;
 }
+function coinHasAddress(coin: CoinSlotState): boolean {
+  return String(form.value.coinAddress[coin.key] || '').trim() !== '';
+}
+function thresholdInputMin(coin: CoinSlotState): number {
+  const value = Number(form.value.coinThreshold[coin.key]);
+  // A threshold of 0 only disables auto payout while this coin has no
+  // payout address. Once an address exists, this same coin must carry
+  // a real threshold; other coin cards remain independent.
+  if (coinHasAddress(coin)) return coin.thresholdMin;
+  return Number.isFinite(value) && value !== 0 ? coin.thresholdMin : 0;
+}
 const accountDirty = computed(() => {
   const f = form.value;
   if (f.email !== initialAccount.email) return true;
@@ -123,6 +145,15 @@ type PendingPayout = {
   kind: 'manual' | 'auto' | null;
 };
 
+type CashOutQuote = {
+  coin: string;
+  currency: string;
+  address: string;
+  amount: string;
+  fee: string;
+  sendAmount: string;
+};
+
 function pendingLabel(kind: 'manual' | 'auto' | null | undefined): string {
   if (kind === 'auto')   return 'Auto - Pending payout';
   if (kind === 'manual') return 'Manual - Pending payout';
@@ -139,7 +170,7 @@ const pendingPayout = ref<Record<string, PendingPayout>>(
   Object.fromEntries(i.coins.map(c => [c.key, { ...c.pendingPayout }])) as Record<string, PendingPayout>
 );
 
-type BodyView = 'fields' | 'msg' | 'details';
+type BodyView = 'fields' | 'msg' | 'details' | 'quote';
 const bodyView = ref<Record<string, BodyView>>(
   Object.fromEntries(i.coins.map(c => [c.key, 'fields' as BodyView])) as Record<string, BodyView>
 );
@@ -180,39 +211,75 @@ onMounted(() => {
   }
 });
 
+const cashOutQuote = ref<CashOutQuote | null>(null);
+const cashOutQuoteForm = ref<HTMLFormElement | null>(null);
+const cashOutQuoteAction = ref('');
+const cashOutQuoteBusy = ref<string | null>(null);
+const cashOutSendBusy = ref(false);
+
+function quoteForCoin(coinKey: string): CashOutQuote | null {
+  return cashOutQuote.value?.coin === coinKey ? cashOutQuote.value : null;
+}
+
+function cashOutAjaxUrl(): string {
+  return i.formAction + (i.formAction.includes('?') ? '&' : '?') + '_ajax=1';
+}
+
+function quoteAction(action: string): string {
+  return action.replace(/^cashOut/, 'quoteCashOut');
+}
+
+function handleCashOutPopups(data: { popups?: PopupMessage[] }, coinKey: string): boolean {
+  let success = false;
+  if (Array.isArray(data.popups)) {
+    for (const p of data.popups) {
+      popups.value.push(p);
+      if (p.coin) {
+        if (p.type === 'success') {
+          success = true;
+          pendingPayout.value = {
+            ...pendingPayout.value,
+            [p.coin]: {
+              active: true,
+              requestedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              txid: null,
+              amount: null,
+              kind: 'manual',
+            },
+          };
+        }
+        setBodyView(p.coin, 'msg');
+        scheduleAutoDismiss(p.coin, p.type);
+      }
+    }
+  }
+  if (!success && (!data.popups || data.popups.length === 0)) {
+    setBodyView(coinKey, 'fields');
+  }
+  return success;
+}
+
 async function submitCashOut(coinKey: string, ev: Event) {
   ev.preventDefault();
-  const form = ev.target as HTMLFormElement;
-  const fd = new FormData(form);
-  const url = i.formAction + (i.formAction.includes('?') ? '&' : '?') + '_ajax=1';
+  const formEl = ev.target as HTMLFormElement;
+  const fd = new FormData(formEl);
+  const action = String(fd.get('do') || '');
+  fd.set('do', quoteAction(action));
   if (dismissedCoinPopups.value.has(coinKey)) {
     const next = new Set(dismissedCoinPopups.value);
     next.delete(coinKey);
     dismissedCoinPopups.value = next;
   }
-  setBodyView(coinKey, 'msg');
+  cashOutQuoteBusy.value = coinKey;
   try {
-    const res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
-    const data = await res.json() as { popups?: PopupMessage[] };
-    if (Array.isArray(data.popups)) {
-      for (const p of data.popups) {
-        popups.value.push(p);
-        if (p.coin) {
-          if (p.type === 'success') {
-            pendingPayout.value = {
-              ...pendingPayout.value,
-              [p.coin]: {
-                active: true,
-                requestedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                txid: null,
-                amount: null,
-                kind: 'manual',
-              },
-            };
-          }
-          scheduleAutoDismiss(p.coin, p.type);
-        }
-      }
+    const res = await fetch(cashOutAjaxUrl(), { method: 'POST', body: fd, credentials: 'same-origin' });
+    const data = await res.json() as { popups?: PopupMessage[]; quote?: CashOutQuote };
+    handleCashOutPopups(data, coinKey);
+    if (data.quote) {
+      cashOutQuote.value = data.quote;
+      cashOutQuoteForm.value = formEl;
+      cashOutQuoteAction.value = action;
+      setBodyView(coinKey, 'quote');
     }
   } catch (err) {
     popups.value.push({
@@ -220,10 +287,53 @@ async function submitCashOut(coinKey: string, ev: Event) {
       type: 'errormsg',
       coin: coinKey,
     });
+    setBodyView(coinKey, 'msg');
     scheduleAutoDismiss(coinKey, 'errormsg');
+  } finally {
+    cashOutQuoteBusy.value = null;
   }
-  form.reset();
-  form.querySelector<HTMLInputElement>('input[name="authPin"]')?.focus();
+}
+
+function cancelCashOutQuote() {
+  const coinKey = cashOutQuote.value?.coin || '';
+  cashOutQuote.value = null;
+  cashOutQuoteAction.value = '';
+  const formEl = cashOutQuoteForm.value;
+  cashOutQuoteForm.value = null;
+  if (coinKey) setBodyView(coinKey, 'fields');
+  if (coinKey) formEl?.querySelector<HTMLInputElement>('input[name="authPin"]')?.focus();
+}
+
+async function sendQuotedCashOut() {
+  const quote = cashOutQuote.value;
+  const formEl = cashOutQuoteForm.value;
+  if (!quote || !formEl || !cashOutQuoteAction.value) return;
+
+  const fd = new FormData(formEl);
+  fd.set('do', cashOutQuoteAction.value);
+  cashOutSendBusy.value = true;
+  try {
+    const res = await fetch(cashOutAjaxUrl(), { method: 'POST', body: fd, credentials: 'same-origin' });
+    const data = await res.json() as { popups?: PopupMessage[] };
+    const success = handleCashOutPopups(data, quote.coin);
+    if (success) {
+      cashOutQuote.value = null;
+      cashOutQuoteAction.value = '';
+      cashOutQuoteForm.value = null;
+      formEl.reset();
+      form.value.cashOutPin[quote.coin] = '';
+    }
+  } catch (err) {
+    popups.value.push({
+      content: 'Cash out request failed; please retry.',
+      type: 'errormsg',
+      coin: quote.coin,
+    });
+    setBodyView(quote.coin, 'msg');
+    scheduleAutoDismiss(quote.coin, 'errormsg');
+  } finally {
+    cashOutSendBusy.value = false;
+  }
 }
 
 const topPopups = computed(() => popups.value.filter(p => !p.coin));
@@ -624,8 +734,7 @@ async function copyApiKey() {
     <section class="bsx-section">
       <header class="bsx-section-head"><h2>Payout Settings</h2></header>
       <p v-if="!i.manualPayoutsDisabled" class="bsx-section-note">
-        Manual payout fee: <strong>{{ i.txFeeManual }}</strong> per request.
-        Confirmed balance must exceed the fee.
+        Manual payout network fees are estimated by the wallet before sending.
       </p>
       <!-- 2-up so each card is wide enough for a full bech32 address
            (~43 chars) without truncating the input value. -->
@@ -649,7 +758,7 @@ async function copyApiKey() {
                 :alt="coin.coinName"
                 class="coin-header-icon"
                 loading="lazy"
-                @error="(e) => ((e.target as HTMLImageElement).style.display = 'none')"
+                @error="(e) => handleCoinIconError(e, coin.iconFallbackUrl)"
               />
               <span :class="['coin-header-name', `coin-name-${coin.currency.toLowerCase()}`]">{{ coin.coinName }}</span>
             </h3>
@@ -703,10 +812,13 @@ async function copyApiKey() {
                   type="submit"
                   class="bsx-btn bsx-btn-primary bsx-btn-small"
                   :disabled="withdrawLocked
-                             || coin.confirmedBalance <= i.txFeeManual
+                             || coin.confirmedBalance <= 0
+                             || cashOutQuoteBusy === coin.key
+                             || quoteForCoin(coin.key) !== null
+                             || cashOutSendBusy
                              || !pinReady(coin.key)"
                 >
-                  Cash Out
+                  {{ cashOutQuoteBusy === coin.key ? 'Estimating' : 'Cash Out' }}
                 </button>
               </form>
             </div>
@@ -762,13 +874,14 @@ async function copyApiKey() {
                     type="number"
                     :name="coin.thresholdField"
                     v-model="form.coinThreshold[coin.key]"
-                    :min="coin.thresholdMin"
+                    :min="thresholdInputMin(coin)"
                     :max="coin.thresholdMax"
+                    :required="coinHasAddress(coin)"
                     step="0.00000001"
                     :disabled="detailsLocked"
                   >
                   <small class="kv-hint">
-                    {{ coin.thresholdMin }}–{{ coin.thresholdMax }} {{ coin.currency }}, or 0 to disable.
+                    {{ coin.thresholdMin }}–{{ coin.thresholdMax }} {{ coin.currency }}<template v-if="coinHasAddress(coin)"> required with address.</template><template v-else>, or 0 to disable.</template>
                   </small>
                 </div>
               </div>
@@ -810,6 +923,37 @@ async function copyApiKey() {
                 :role="cashOutPopupForCoin(coin.key)!.type === 'errormsg' ? 'alert' : 'status'"
               >
                 <p class="cashout-msg-text" v-text="cashOutPopupForCoin(coin.key)!.content"></p>
+              </div>
+              <!-- Wallet fee quote. Replaces the field body without
+                   changing card height; Send performs the actual queue. -->
+              <div
+                v-else-if="bodyView[coin.key] === 'quote' && quoteForCoin(coin.key)"
+                :key="`quote-${coin.key}`"
+                class="cashout-quote-block cashout-overlay"
+                role="status"
+              >
+                <dl class="cashout-quote-lines">
+                  <div>
+                    <dt>Balance</dt>
+                    <dd>{{ quoteForCoin(coin.key)!.amount }}</dd>
+                  </div>
+                  <div>
+                    <dt>Network fee</dt>
+                    <dd>{{ quoteForCoin(coin.key)!.fee }}</dd>
+                  </div>
+                  <div>
+                    <dt>Sent amount</dt>
+                    <dd>{{ quoteForCoin(coin.key)!.sendAmount }}</dd>
+                  </div>
+                </dl>
+                <div class="cashout-quote-actions">
+                  <button type="button" class="bsx-btn bsx-btn-primary bsx-btn-small cashout-send-btn" :disabled="cashOutSendBusy" @click="sendQuotedCashOut">
+                    {{ cashOutSendBusy ? 'Sending' : 'Send' }}
+                  </button>
+                  <button type="button" class="bsx-btn bsx-btn-ghost bsx-btn-small cashout-cancel-btn" :disabled="cashOutSendBusy" @click="cancelCashOutQuote">
+                    Cancel
+                  </button>
+                </div>
               </div>
             </Transition>
           </div>
@@ -1445,6 +1589,73 @@ async function copyApiKey() {
 }
 .cashout-details-block .cashout-detail-line:first-of-type { margin-top: 0; }
 
+.cashout-quote-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+.cashout-quote-lines {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  justify-self: center;
+  min-width: 0;
+}
+.cashout-quote-lines div {
+  display: grid;
+  grid-template-columns: 92px max-content;
+  align-items: baseline;
+  gap: 8px;
+  justify-content: start;
+  min-width: 0;
+}
+.cashout-quote-lines dt {
+  color: #99a;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: left;
+}
+.cashout-quote-lines dd {
+  margin: 0;
+  color: #e0f0fa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cashout-quote-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.cashout-quote-actions .bsx-btn {
+  width: 74px;
+  justify-content: center;
+}
+.cashout-quote-actions .cashout-send-btn {
+  color: #b5e7a0;
+  border-color: rgba(181, 231, 160, 0.45);
+  background: rgba(181, 231, 160, 0.10);
+}
+.cashout-quote-actions .cashout-send-btn:hover:not([disabled]) {
+  border-color: rgba(181, 231, 160, 0.70);
+  background: rgba(181, 231, 160, 0.18);
+}
+.cashout-quote-actions .cashout-cancel-btn {
+  color: #e57373;
+  border-color: rgba(229, 115, 115, 0.45);
+  background: rgba(229, 115, 115, 0.08);
+}
+.cashout-quote-actions .cashout-cancel-btn:hover:not([disabled]) {
+  border-color: rgba(229, 115, 115, 0.70);
+  background: rgba(229, 115, 115, 0.16);
+}
+
 .cashout-pending-label {
   appearance: none;
   background: rgba(79, 195, 247, 0.10);
@@ -1472,4 +1683,5 @@ async function copyApiKey() {
 }
 .bsx-flip-enter-from { opacity: 0; transform: rotateX(90deg); }
 .bsx-flip-leave-to   { opacity: 0; transform: rotateX(-90deg); }
+
 </style>

@@ -1,5 +1,5 @@
  <article class="module width_quarter">
-   <header><h3>{$GLOBAL.config.currency_mm4} {$GLOBAL.config.payout_system_mm4|capitalize} Stats</h3>{if $COIN_ICON_MM4|default:""}<img src="{$COIN_ICON_MM4|escape}" alt="{$GLOBAL.config.currency_mm4|escape}" width="24" height="24" style="float:right;margin:7px 8px 0 0;object-fit:contain;opacity:0.95;border-radius:4px;" loading="lazy" onerror="this.style.display='none'">{/if}</header>
+   <header><h3>{$GLOBAL.config.currency_mm4} {$GLOBAL.config.payout_system_mm4|capitalize} Stats</h3>{if $COIN_ICON_MM4|default:""}<img src="{$COIN_ICON_MM4|escape}" data-fallback="{$COIN_ICON_MM4_FALLBACK|default:""|escape}" alt="{$GLOBAL.config.currency_mm4|escape}" width="24" height="24" style="float:right;margin:7px 8px 0 0;object-fit:contain;opacity:0.95;border-radius:4px;" loading="lazy" onerror="if (this.dataset.fallback && this.dataset.fallbackApplied !== '1') { this.dataset.fallbackApplied = '1'; this.src = this.dataset.fallback; } else { this.style.display='none'; }">{/if}</header>
    <div class="module_content">
      <table width="100%">
        <tbody>
@@ -16,4 +16,3 @@
       </table>
     </div>
  </article>
-

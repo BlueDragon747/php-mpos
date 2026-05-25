@@ -118,9 +118,9 @@ class jsonRPCClient {
     curl_setopt($ch, CURLOPT_USERPWD, $url['user'] . ":" . $url['pass']);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $request);
-    // Set aggressive timeouts to prevent hanging
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 1); // 1 second connection timeout
-    curl_setopt($ch, CURLOPT_TIMEOUT, 2); // 2 second total timeout
+    // Local 25.2 daemons can take a few seconds while handling aux block load.
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
     curl_setopt($ch, CURLOPT_NOSIGNAL, 1); // Prevent issues with signals
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); // Don't follow redirects
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification for speed

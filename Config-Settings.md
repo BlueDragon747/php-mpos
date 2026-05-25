@@ -28,12 +28,12 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `MPOS_PULL_DAEMON_IMAGES` | `1` | `1` = pull `sidgrip/<coin>:latest` from Docker Hub. `0` = clone each coin source repo and build daemon binaries locally; outputs `local/<coin>:15.21-local`. |
+| `MPOS_PULL_DAEMON_IMAGES` | `1` | `1` = pull `sidgrip/<coin>:25.2` from Docker Hub. `0` = clone each coin source repo and build daemon binaries locally; outputs `local/<coin>:25.2-local`. |
 | `MPOS_DOCKER_HUB` | `sidgrip` (pull) / `local` (build) | Docker Hub org/user for daemon images. Override when running already-loaded custom images. |
-| `MPOS_IMAGE_TAG` | `latest` (pull) / `15.21-local` (build) | Tag for all daemon images. |
+| `MPOS_IMAGE_TAG` | `25.2` (pull) / `25.2-local` (build) | Tag for all daemon images. |
 | `SKIP_DAEMON_IMAGE_BUILD` | `0` | With `MPOS_PULL_DAEMON_IMAGES=0`, set `1` to skip source builds (expects images already tagged as `${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG}`). |
 | `MPOS_FORCE_REBUILD` | `0` | With `MPOS_PULL_DAEMON_IMAGES=0`, set `1` to rebuild even when image is already cached. |
-| `MPOS_DAEMON_SOURCE_REF` | `master` | Branch/tag used for source builds across all six coin repos. |
+| `MPOS_DAEMON_SOURCE_REF` | `0.25.2` | Branch/tag used for source builds across all six coin repos. Change to `master` after live cutover once master carries the 25.2 wallet updates. |
 | `MPOS_DAEMON_BUILD_ROOT` | `/root/blakestream-daemon-builds` | Working dir for cloned coin source trees (~15 GB total). |
 | `MPOS_DAEMON_BUILD_JOBS` | `nproc - 1` | Parallel build jobs per coin. |
 | `MPOS_DAEMON_BUILD_DOCKER_MODE` | `pull` | `pull` uses the pre-built native-base build image; `build` builds it locally. Slower but reproducible. |
@@ -41,6 +41,8 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 **Source repos cloned when building:**
 `BlueDragon747/Blakecoin`, `BlueDragon747/photon`, `BlakeBitcoin/BlakeBitcoin`,
 `BlueDragon747/Electron-ELT`, `BlueDragon747/universalmol`, `BlueDragon747/lithium`.
+These are pinned to `0.25.2` for pre-live 25.2 wallet builds; switch the
+source ref to `master` after live cutover.
 
 ---
 
@@ -91,7 +93,7 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 | Variable | Default | Notes |
 |---|---|---|
 | `ELIOPOOL_REPO_URL` | `https://github.com/BlueDragon747/eloipool_Blakecoin.git` | git URL the deploy clones from when `ELIOPOOL_TREE` is unset. |
-| `ELIOPOOL_BRANCH` | `master` | branch to clone. |
+| `ELIOPOOL_BRANCH` | `25.2-GO` | branch to clone. Change to `master` after live cutover once master carries the Go Eloipool updates. |
 | `ELIOPOOL_TREE` | (unset) | If set, points at a local checkout; the deploy rsyncs from there instead of cloning. |
 
 ---
@@ -100,7 +102,10 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `BOOTSTRAP_URL` | `https://bootstrap.blakestream.io` | Base URL with per-coin subdirectories (`<URL>/<Coin>/bootstrap.dat`). |
+| `BOOTSTRAP_URL` | `https://bootstrap.blakestream.io` | Base URL for the 25.2 bootstrap mirror registry and index. The deploy uses `<URL>/25.2/` unless `BOOTSTRAP_URL` already ends in `/25.2`. |
+| `BOOTSTRAP_SERIES` | `25.2` | Bootstrap series path used for `.dat.xz` files, sidecars, and `mirrors.json`. |
+| `BOOTSTRAP_MIRROR_DISCOVERY` | `1` | `1` queries `mirrors.json`, probes every listed mirror, and downloads from the fastest least-loaded mirror. |
+| `BOOTSTRAP_MIRROR_HOST` | (unset) | Optional fixed mirror hostname override, for example `bootstrap-uk.blakestream.io`. |
 | `SKIP_BOOTSTRAP` | `0` | `1` skips the sequential bootstrap.dat rotation entirely and syncs via peers. Much slower for first deploys. |
 | `BOOTSTRAP_IMPORT_TIMEOUT_S` | `21600` (6h) | Max time waiting for a daemon's bootstrap.dat import to finish. |
 | `BOOTSTRAP_IMPORT_SLEEP_S` | `60` | Poll interval while waiting for import. |
@@ -205,10 +210,11 @@ export MPOS_FORCE_REBUILD=1
 sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 
-### Use your own bootstrap.dat mirror
+### Use your own 25.2 bootstrap mirror
 
 ```bash
-export BOOTSTRAP_URL=http://192.0.2.10:8080   # /<Coin>/bootstrap.dat
+export BOOTSTRAP_URL=http://192.0.2.10:8080   # /25.2/*.dat.xz + .sha256
+export BOOTSTRAP_MIRROR_DISCOVERY=0
 sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 

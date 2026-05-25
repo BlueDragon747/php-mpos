@@ -70,6 +70,29 @@
     {/nocache}
     <script>
       (function () {
+        var pendingSidebarNavTimer = null;
+        document.addEventListener('click', function (event) {
+          var link = event.target && event.target.closest ? event.target.closest('#sidebar a') : null;
+          var url;
+          if (!link || event.defaultPrevented || event.button !== 0) return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          if (link.target && link.target !== '_self') return;
+          if (link.hasAttribute('download')) return;
+          var href = link.getAttribute('href') || '';
+          if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+          try {
+            url = new URL(link.href, window.location.href);
+          } catch (err) {
+            return;
+          }
+          if (url.origin !== window.location.origin) return;
+          event.preventDefault();
+          if (pendingSidebarNavTimer) clearTimeout(pendingSidebarNavTimer);
+          pendingSidebarNavTimer = setTimeout(function () {
+            window.location.assign(url.href);
+          }, 120);
+        }, true);
+
         function ensureContainer() {
           var c = document.getElementById('bsx-toast-container');
           if (!c) {

@@ -70,6 +70,14 @@ KNOWN_VERSIONBIT_NAMES = {
     2: 'taproot',
 }
 
+# Future BIP9 deployments the pool must fail-closed on while they are in a
+# signalling state. The daemon owns block-version construction; the pool only
+# verifies the version returned by createauxblock/getauxblock.
+REQUIRED_AUX_BIP9_SIGNALS = {
+    'taproot': 2,
+}
+REQUIRED_AUX_BIP9_STATES = {'started', 'locked_in'}
+
 def get_chain_name(chain_idx):
     """Get display name for chain index"""
     return CHAIN_NAMES.get(chain_idx, 'MM%d' % chain_idx)
@@ -201,7 +209,7 @@ class Proxy(object):
         self._http = None
         self._last_used = 0
         self._consecutive_failures = 0
-        self._breaker_opened_at = 0
+        self._breaker_opened_at = 0  # epoch when breaker tripped open
         self._total_requests = 0
     
     def _connect(self):
@@ -691,6 +699,100 @@ class Listener(Server):
     def _count_healthy_chains(self):
         """Count number of healthy chains"""
         return len(self._get_healthy_chains())
+
+    @staticmethod
+    def _aux_template_version(aux_block):
+        """Return (version_int, version_hex) from an aux template response."""
+        if not isinstance(aux_block, dict):
+            return None, None
+
+        version_int = None
+        version_hex = aux_block.get('versionHex')
+
+        if aux_block.get('version') is not None:
+            try:
+                version_int = int(aux_block['version'])
+            except (TypeError, ValueError):
+                version_int = None
+
+        if version_int is None and version_hex is not None:
+            try:
+                version_int = int(str(version_hex), 16)
+            except (TypeError, ValueError):
+                version_int = None
+
+        if version_hex is None and version_int is not None:
+            version_hex = "%08x" % (version_int & 0xffffffff)
+        elif version_hex is not None:
+            version_hex = str(version_hex)
+
+        return version_int, version_hex
+
+    @staticmethod
+    def _deployment_template_state(deployment):
+        """Return the BIP9 state that applies to the next template."""
+        if not isinstance(deployment, dict):
+            return None
+        bip9 = deployment.get('bip9')
+        if not isinstance(bip9, dict):
+            return None
+        # getdeploymentinfo reports both current block status and the next
+        # template status. ComputeBlockVersion uses the next-template state.
+        state = bip9.get('status_next') or bip9.get('status')
+        if state is None:
+            return None
+        return str(state).lower()
+
+    @classmethod
+    def _required_bip9_signal_failures(cls, aux_block, deployments):
+        """List required versionbit failures for this aux template."""
+        if not isinstance(deployments, dict):
+            deployments = {}
+
+        version_int, version_hex = cls._aux_template_version(aux_block)
+        failures = []
+        for name, bit in REQUIRED_AUX_BIP9_SIGNALS.items():
+            state = cls._deployment_template_state(deployments.get(name))
+            if state not in REQUIRED_AUX_BIP9_STATES:
+                continue
+            if version_int is None:
+                failures.append("%s is %s but aux template has no version/versionHex" % (name, state))
+                continue
+            if not (version_int & (1 << bit)):
+                failures.append("%s is %s but aux template version %s does not signal bit %d" % (
+                    name,
+                    state,
+                    version_hex or str(version_int),
+                    bit,
+                ))
+        return failures
+
+    @defer.inlineCallbacks
+    def _fetch_aux_deployments(self, chain):
+        """Fetch deployment status from the aux daemon.
+
+        BlakeStream 25.2 daemons expose this through getdeploymentinfo.
+        The getblockchaininfo fallback is kept for compatible descendants
+        that expose a softforks object there.
+        """
+        try:
+            info = yield self.auxs[chain].rpc_getdeploymentinfo()
+            if isinstance(info, dict) and isinstance(info.get('deployments'), dict):
+                defer.returnValue(info['deployments'])
+        except Error as e:
+            if getattr(e, '_code', None) != -32601:
+                raise
+
+        info = yield self.auxs[chain].rpc_getblockchaininfo()
+        if isinstance(info, dict):
+            if isinstance(info.get('softforks'), dict):
+                defer.returnValue(info['softforks'])
+            if isinstance(info.get('bip9_softforks'), dict):
+                converted = {}
+                for name, bip9 in info['bip9_softforks'].items():
+                    converted[name] = {'type': 'bip9', 'bip9': bip9}
+                defer.returnValue(converted)
+        defer.returnValue({})
     
     def merkle_branch(self, chain_index, merkle_tree):
         """Calculate merkle branch for a chain"""
@@ -775,13 +877,24 @@ class Listener(Server):
         for chain in range(len(self.auxs)):
             try:
                 payout_address = payout_addresses[chain]
-                if payout_address is not None:
-                    logger.debug("%s: requesting createauxblock for payout address %s", get_chain_name(chain), payout_address)
-                    aux_block = yield self.auxs[chain].rpc_createauxblock(payout_address)
-                else:
-                    aux_block = yield self.auxs[chain].rpc_getauxblock()
+                if payout_address is None:
+                    logger.error(
+                        "%s: no --aux-payout-address configured; skipping aux template fetch (configure -a/--aux-payout-address for this chain)",
+                        get_chain_name(chain),
+                    )
+                    self._mark_chain_unhealthy(chain)
+                    continue
+                logger.debug("%s: requesting createauxblock for payout address %s", get_chain_name(chain), payout_address)
+                aux_block = yield self.auxs[chain].rpc_createauxblock(payout_address)
                 if not aux_block or 'hash' not in aux_block:
                     logger.warning("%s: Invalid aux_block response", get_chain_name(chain))
+                    self._mark_chain_unhealthy(chain)
+                    continue
+                deployments = yield self._fetch_aux_deployments(chain)
+                signal_failures = self._required_bip9_signal_failures(aux_block, deployments)
+                if signal_failures:
+                    logger.error("%s: refusing aux template with bad future-BIP signalling: %s",
+                                 get_chain_name(chain), '; '.join(signal_failures))
                     self._mark_chain_unhealthy(chain)
                     continue
                 aux_block_hash = aux_block['hash']

@@ -585,6 +585,29 @@
   .stats-pool-v2 [data-tooltip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
   .stats-pool-v2 [data-tooltip]:hover::before,
   .stats-pool-v2 [data-tooltip]:focus-visible::before { opacity: 1; transform: translateX(-50%) rotate(45deg) translateY(0); }
+
+  /* First-column block links sit close to the left edge of a scrolling table.
+     Left-anchor their tooltip so it opens into the row instead of being clipped
+     by the table/card overflow boundary. */
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip] {
+    display: inline-block;
+  }
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip]::after {
+    left: 0;
+    transform: translateY(2px);
+  }
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip]::before {
+    left: 12px;
+    transform: rotate(45deg) translateY(2px);
+  }
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip]:hover::after,
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip]:focus-visible::after {
+    transform: translateY(0);
+  }
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip]:hover::before,
+  .stats-pool-v2 .pool-blocks-card .td-rank [data-tooltip]:focus-visible::before {
+    transform: rotate(45deg) translateY(0);
+  }
   [data-theme="light"] .stats-pool-v2 [data-tooltip]::after,
   [data-theme="light"] .stats-pool-v2 [data-tooltip]::before {
     background: #ffffff;

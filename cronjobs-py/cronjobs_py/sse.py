@@ -235,7 +235,7 @@ class _Poller(_StoppableThread):
         if self.settings is None:
             return
         target_bits = int(self.settings.raw.get("target_bits", 32))
-        difficulty_const = int(self.settings.raw.get("difficulty", 32))
+        difficulty_const = int(self.settings.raw.get("difficulty", 21))
         try:
             pool_kHs = float(db.stats_current_hashrate(
                 target_bits=target_bits,
