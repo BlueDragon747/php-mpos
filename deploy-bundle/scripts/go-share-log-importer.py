@@ -128,6 +128,7 @@ def refresh_workers(conn: pymysql.Connection) -> set[str]:
     with conn.cursor() as cur:
         cur.execute("SELECT username FROM pool_worker")
         workers = {str(row[0]) for row in cur.fetchall() if row and row[0]}
+    conn.commit()
     logging.info("loaded %d MPOS worker name(s)", len(workers))
     return workers
 
