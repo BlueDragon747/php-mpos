@@ -10,7 +10,8 @@
 #   - rendered MPOS `global.inc.php`
 #   - rendered systemd unit files for the stack
 #
-# Excludes the per-coin daemon datadirs (`/var/lib/blakestream-mpos`)
+# Excludes the per-coin daemon datadirs (`/var/lib/blakestream-mpos`,
+# `/var/lib/blakestream-25.2`, or Docker volumes)
 # because they're large, easy to re-sync from any peer, and not part
 # of pool state. If you also want them, snapshot them separately or
 # use the daemon's own `backupwallet` RPC.
@@ -152,11 +153,10 @@ cp "${MPOS_INSTALL_ROOT}/eloipool/config.py" "${WORK}/eloipool-config.py" 2>/dev
 cp "${MPOS_WEB_ROOT}/include/config/global.inc.php" \
     "${WORK}/global.inc.php" 2>/dev/null || true
 
-# Per-coin wallet backup via daemon RPC (Docker-aware).
-# `backupwallet <path>` writes a copy of wallet.dat to the given path
-# inside the daemon's filesystem. We then `docker cp` it back to the
-# host. This is the supported path for live-running daemons; a raw
-# wallet.dat copy off disk could catch a half-flushed file.
+# Per-coin wallet backup via daemon RPC. Support both deployment shapes:
+# local host daemons under /opt/blakestream-25.2 and Docker containers
+# named by ticker. A raw wallet.dat copy can catch a half-flushed file;
+# `backupwallet` asks the daemon to create a consistent backup.
 echo "==> backing up wallets (RPC backupwallet)"
 mkdir -p "${WORK}/wallets"
 WALLETS=()
@@ -177,27 +177,126 @@ declare -A DAEMON_DATADIR=(
     [umo]=/root/.universalmolecule
     [lit]=/root/.lithium
 )
+declare -A LOCAL_CONF=(
+    [blc]=/etc/blakestream-25.2/blakecoin.conf
+    [pho]=/etc/blakestream-25.2/photon.conf
+    [bbtc]=/etc/blakestream-25.2/blakebitcoin.conf
+    [elt]=/etc/blakestream-25.2/electron.conf
+    [umo]=/etc/blakestream-25.2/universalmolecule.conf
+    [lit]=/etc/blakestream-25.2/lithium.conf
+)
+declare -A LOCAL_DATADIR=(
+    [blc]=/var/lib/blakestream-25.2/blakecoin
+    [pho]=/var/lib/blakestream-25.2/photon
+    [bbtc]=/var/lib/blakestream-25.2/blakebitcoin
+    [elt]=/var/lib/blakestream-25.2/electron
+    [umo]=/var/lib/blakestream-25.2/universalmolecule
+    [lit]=/var/lib/blakestream-25.2/lithium
+)
+
+wallet_safe_name() {
+    local name="${1:-default}"
+    if [ -z "$name" ] || [ "$name" = "__default__" ]; then
+        name="default"
+    fi
+    printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_'
+}
+
+wallet_label() {
+    local wallet="${1:-default}"
+    if [ -z "$wallet" ] || [ "$wallet" = "__default__" ]; then
+        printf 'default'
+    else
+        printf '%s' "$wallet"
+    fi
+}
+
+list_local_wallets() {
+    local cli="$1" conf="$2" datadir="$3" wallets
+    wallets=$("$cli" -conf="$conf" -datadir="$datadir" listwallets 2>/dev/null \
+        | sed -n 's/^[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p' \
+        || true)
+    if [ -z "$wallets" ]; then
+        printf '%s\n' "__default__"
+    else
+        printf '%s\n' "$wallets"
+    fi
+}
+
+backup_local_wallets() {
+    local sym="$1" cli="$2" conf="$3" datadir="$4"
+    local wallet safe label tmp out ok failures total
+    local -a cmd
+    ok=0
+    failures=0
+    total=0
+    while IFS= read -r wallet; do
+        [ -n "$wallet" ] || wallet="__default__"
+        safe="$(wallet_safe_name "$wallet")"
+        label="$(wallet_label "$wallet")"
+        tmp="${datadir}/${sym}-wallet-${STAMP}-${safe}.dat"
+        out="${WORK}/wallets/${sym}-${safe}.dat"
+        total=$((total + 1))
+        cmd=("$cli" -conf="$conf" -datadir="$datadir")
+        if [ "$wallet" != "__default__" ]; then
+            cmd+=("-rpcwallet=$wallet")
+        fi
+        cmd+=(backupwallet "$tmp")
+        if "${cmd[@]}" >/dev/null 2>&1 && cp "$tmp" "$out" 2>/dev/null; then
+            rm -f "$tmp" 2>/dev/null || true
+            echo "    [$sym] local wallet ${label} backed up ($(du -h "$out" | cut -f1))"
+            WALLETS+=("${sym}/${label}")
+            ok=$((ok + 1))
+        else
+            rm -f "$tmp" 2>/dev/null || true
+            echo "    [$sym] WARN: local wallet ${label} backup failed"
+            failures=$((failures + 1))
+        fi
+    done < <(list_local_wallets "$cli" "$conf" "$datadir")
+
+    [ "$total" -gt 0 ] && [ "$ok" -gt 0 ] && [ "$failures" -eq 0 ]
+}
+
+backup_docker_wallet() {
+    local sym="$1" cli="$2" container="$3" inner_path="$4"
+    if ! command -v docker >/dev/null 2>&1 \
+        || ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
+        return 1
+    fi
+    if docker exec "$container" "$cli" backupwallet "$inner_path" >/dev/null 2>&1; then
+        if docker cp "${container}:${inner_path}" "${WORK}/wallets/${sym}.dat" 2>/dev/null; then
+            echo "    [$sym] Docker wallet backed up ($(du -h "${WORK}/wallets/${sym}.dat" | cut -f1))"
+            WALLETS+=("${sym}/default")
+            docker exec "$container" rm -f "$inner_path" 2>/dev/null || true
+            return 0
+        fi
+        echo "    [$sym] WARN: Docker backupwallet succeeded but docker cp failed"
+        return 1
+    fi
+    echo "    [$sym] WARN: Docker wallet RPC backup failed"
+    return 1
+}
+
+mkdir -p "${WORK}/daemon-configs"
 for sym in blc pho bbtc elt umo lit; do
     container="$sym"
     cli="${DAEMON_BIN[$sym]}"
-    if ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
-        echo "    [$sym] container not running, skipping"
-        WALLET_FAILURES=$((WALLET_FAILURES + 1))
-        continue
-    fi
-    # Backup inside the container, then copy out.
-    inner_path="${DAEMON_DATADIR[$sym]}/${sym}-wallet-${STAMP}.dat"
-    if docker exec "$container" "$cli" backupwallet "$inner_path" >/dev/null 2>&1; then
-        if docker cp "${container}:${inner_path}" "${WORK}/wallets/${sym}.dat" 2>/dev/null; then
-            echo "    [$sym] wallet.dat backed up ($(du -h "${WORK}/wallets/${sym}.dat" | cut -f1))"
-            WALLETS+=("$sym")
-            docker exec "$container" rm -f "$inner_path" 2>/dev/null || true
-        else
-            echo "    [$sym] WARN: backupwallet succeeded but docker cp failed"
-            WALLET_FAILURES=$((WALLET_FAILURES + 1))
+    local_cli="${MPOS_DAEMON_BIN_DIR:-/opt/blakestream-25.2/bin}/${cli}"
+    local_conf="${LOCAL_CONF[$sym]}"
+    local_datadir="${LOCAL_DATADIR[$sym]}"
+    if [ -x "$local_cli" ] && [ -r "$local_conf" ] && [ -d "$local_datadir" ]; then
+        cp -p "$local_conf" "${WORK}/daemon-configs/${sym}.conf" 2>/dev/null || true
+        if backup_local_wallets "$sym" "$local_cli" "$local_conf" "$local_datadir"; then
+            continue
         fi
+        echo "    [$sym] local backup failed; trying Docker fallback"
+    fi
+
+    inner_path="${DAEMON_DATADIR[$sym]}/${sym}-wallet-${STAMP}.dat"
+    if backup_docker_wallet "$sym" "$cli" "$container" "$inner_path"; then
+        continue
     else
-        echo "    [$sym] WARN: backupwallet RPC failed (daemon may be syncing)"
+        echo "    [$sym] WARN: no working local or Docker wallet backup path"
         WALLET_FAILURES=$((WALLET_FAILURES + 1))
     fi
 done
@@ -205,6 +304,7 @@ done
 echo "==> capturing systemd units"
 mkdir -p "${WORK}/systemd"
 cp /etc/systemd/system/blakestream-mpos-*.service "${WORK}/systemd/" 2>/dev/null || true
+cp /etc/systemd/system/blakestream-mpos-*.timer "${WORK}/systemd/" 2>/dev/null || true
 
 echo "==> recent log tails"
 mkdir -p "${WORK}/logs"

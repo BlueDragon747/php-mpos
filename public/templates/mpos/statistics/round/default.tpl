@@ -31,11 +31,9 @@
       </form>
       <div class="round-pager">
         <a class="bsx-btn bsx-btn-small"
-           href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$ROUND_COIN|default:''|escape}&height={$BLOCKDETAILS.height}&prev=1"
-           data-tooltip="Older block">‹ Older</a>
+           href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$ROUND_COIN|default:''|escape}&height={$BLOCKDETAILS.height}&prev=1">‹ Older</a>
         <a class="bsx-btn bsx-btn-small"
-           href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$ROUND_COIN|default:''|escape}&height={$BLOCKDETAILS.height}&next=1"
-           data-tooltip="Newer block">Newer ›</a>
+           href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$ROUND_COIN|default:''|escape}&height={$BLOCKDETAILS.height}&next=1">Newer ›</a>
       </div>
     </header>
     <div class="bsx-card-body">

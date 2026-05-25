@@ -147,9 +147,9 @@ $aSettings['blockchain'][] = array(
 $aSettings['blockchain'][] = array(
   'display' => 'Transactionexplorer URL', 'type' => 'text',
   'size' => 50,
-  'default' => 'http://explorer.litecoin.net/tx/',
+  'default' => 'https://explorer.blakestream.io/{coin}?tx=',
   'name' => 'website_transactionexplorer_url', 'value' => $setting->getValue('website_transactionexplorer_url'),
-  'tooltip' => 'URL to the transactionexplorer website for your blockchain. Will append the transactionid to the URL. Leave empty to disabled this.'
+  'tooltip' => 'URL to the transactionexplorer website for your blockchain. Use {coin} for ticker and {txid} for transaction id, or leave {txid} out to append the transaction id.'
 );
 $aSettings['blockchain'][] = array(
   'display' => 'Disable Chaininfo', 'type' => 'select',

@@ -50,7 +50,7 @@ Tunable via env vars:
                        branch \$ELIOPOOL_BRANCH if unset)
   ELIOPOOL_REPO_URL    git URL to clone Eliopool from when ELIOPOOL_TREE is unset
                        (default: https://github.com/BlueDragon747/eloipool_Blakecoin.git)
-  ELIOPOOL_BRANCH      branch to clone (default: master)
+  ELIOPOOL_BRANCH      branch to clone (default: 25.2-GO)
   MPOS_DB_NAME         default: mpos
   MPOS_DB_USER         default: mpos
   MPOS_DB_PASS         default: random 32 hex
@@ -85,9 +85,10 @@ fi
 
 # Defaults exported to sub-scripts
 # Eliopool: prefer a caller-supplied local checkout; otherwise auto-clone
-# the published repo into a temp dir and clean it up on exit.
+# the published repo into a temp dir and clean it up on exit. Pre-live uses
+# 25.2-GO; switch ELIOPOOL_BRANCH to master after live cutover.
 ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
-ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-master}"
+ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
 ELIOPOOL_TMPROOT=""
 if [ -z "${ELIOPOOL_TREE:-}" ]; then
     ELIOPOOL_TMPROOT="$(mktemp -d)"

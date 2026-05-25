@@ -100,7 +100,7 @@ class Statistics:
 
         # MPOS config knobs that go into the hashrate math.
         target_bits = int(cfg.raw.get("target_bits", 32))
-        difficulty_const = int(cfg.raw.get("difficulty", 32))
+        difficulty_const = int(cfg.raw.get("difficulty", 21))
         # Sampling window for each raw hashrate read.
         interval = db.get_setting_int(
             "hashrate_window_seconds", default=900, floor=60

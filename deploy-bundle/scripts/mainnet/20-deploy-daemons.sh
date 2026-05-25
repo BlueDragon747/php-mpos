@@ -9,9 +9,9 @@
 #   4. Hand off to step 21 — which downloads all bootstraps one at a time,
 #      then starts each daemon one at a time for solo import + p2p catch-up.
 #
-# Containers are NOT started here. Pre-staging bootstrap.dat before the
-# daemon's first start lets the daemon auto-import on first launch and
-# avoids the start → stop → solo-restart dance.
+# Containers are NOT started here. Step 21 stages bootstrap.dat and starts
+# each 25.2 daemon with -loadblock=<datadir>/bootstrap.dat for explicit import,
+# avoiding the start → stop → solo-restart dance.
 #
 # SKIP_BOOTSTRAP=1 path: step 21 is skipped by deploy-mainnet.sh, so this
 # script starts all six daemons here in steady state with peering ON.
@@ -21,7 +21,7 @@ say()  { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;31m!! %s\033[0m\n' "$*" >&2; }
 
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
+MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
 MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
 MPOS_EXPLORER_API_BASE="${MPOS_EXPLORER_API_BASE:-https://explorer.blakestream.io/api}"
 MPOS_DAEMON_STOP_TIMEOUT_S="${MPOS_DAEMON_STOP_TIMEOUT_S:-900}"
@@ -73,8 +73,8 @@ declare -A RPC_PORT=(
     [pho]="8984"
     [bbtc]="8243"
     [elt]="6852"
-    [lit]="12345"
-    [umo]="19738"
+    [lit]="12000"
+    [umo]="5921"
 )
 declare -A P2P_PORT=(
     [blc]="8773"
@@ -198,6 +198,7 @@ prune=10000
 maxconnections=0
 dbcache=400
 maxmempool=50
+fallbackfee=0.0001
 maxorphantx=10
 maxreceivebuffer=2500
 maxsendbuffer=500

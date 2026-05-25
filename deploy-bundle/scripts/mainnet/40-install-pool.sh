@@ -23,8 +23,11 @@ fi
 POOL_ROOT="${INSTALL_ROOT}/eloipool"
 VENV="${INSTALL_ROOT}/venv"
 LOG_POOL="${LOG_ROOT}/pool"
-mkdir -p "$LOG_POOL" "${INSTALL_ROOT}/bin"
+CONFIG_DIR="${INSTALL_ROOT}/config"
+mkdir -p "$LOG_POOL" "${INSTALL_ROOT}/bin" "$CONFIG_DIR"
 chown -R blakestream-mpos:blakestream-mpos "$LOG_POOL"
+chown root:blakestream-mpos "$CONFIG_DIR"
+chmod 750 "$CONFIG_DIR"
 
 say "syncing eloipool tree → ${POOL_ROOT}"
 mkdir -p "$POOL_ROOT"
@@ -55,25 +58,87 @@ say "preparing python venv"
 "${VENV}/bin/pip" install -q \
     cymysql PyMySQL base58 twisted setproctitle pyasynchat pyasyncore
 
+if [ -n "${MMP_GO_PREBUILT_BIN:-}" ]; then
+    say "installing prebuilt Go merged-mine-proxy from ${MMP_GO_PREBUILT_BIN}"
+    install -m 755 "${MMP_GO_PREBUILT_BIN}" "${INSTALL_ROOT}/bin/merged-mine-proxy-go"
+else
+    say "building Go merged-mine-proxy"
+    if ! command -v go >/dev/null 2>&1; then
+        if [ "${ALLOW_TARGET_GO_BUILD:-1}" != "1" ]; then
+            echo "go toolchain is required unless MMP_GO_PREBUILT_BIN is set" >&2
+            exit 1
+        fi
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y golang-go >/dev/null
+        else
+            echo "go toolchain is required to build merged-mine-proxy-go" >&2
+            exit 1
+        fi
+    fi
+    (cd "${POOL_ROOT}/merged-mine-proxy-go" && go test ./... && CGO_ENABLED=0 go build -trimpath -o "${INSTALL_ROOT}/bin/merged-mine-proxy-go" ./cmd/merged-mine-proxy)
+fi
+chmod 755 "${INSTALL_ROOT}/bin/merged-mine-proxy-go"
+
+MMP_READY_CHECK="${INSTALL_ROOT}/bin/check-mmp-ready.py"
+cat > "$MMP_READY_CHECK" <<'PY'
+#!/usr/bin/env python3
+import json
+import sys
+import time
+import urllib.request
+
+port = sys.argv[1]
+expected = int(sys.argv[2])
+payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "getaux", "params": []}).encode()
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/",
+    data=payload,
+    headers={"Content-Type": "application/json"},
+)
+last = "no response"
+for _ in range(120):
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            body = json.loads(resp.read())
+        result = body.get("result") if isinstance(body, dict) else None
+        if isinstance(result, dict):
+            ready = int(result.get("ready_count") or 0)
+            total = int(result.get("total_chains") or 0)
+            if ready == total == expected:
+                print(f"proxy aux templates: {ready}/{total} ready")
+                sys.exit(0)
+            waiting = result.get("waiting_chains") or []
+            names = [str(row.get("chain") or row.get("alias") or "?") for row in waiting]
+            last = f"{ready}/{total} ready"
+            if names:
+                last += "; waiting on " + ", ".join(names)
+    except Exception as exc:
+        last = str(exc)
+    time.sleep(1)
+print(f"ERROR: merged-mining proxy not fully ready: {last}", file=sys.stderr)
+sys.exit(1)
+PY
+chmod 755 "$MMP_READY_CHECK"
+
 # Pool tracker = mainnet blc1... bech32 from blakecoind.
 declare -A RPC_PORT=(
     [blc]=8772
     [pho]=8984
     [bbtc]=8243
     [elt]=6852
-    [lit]=12345
-    [umo]=19738
+    [lit]=12000
+    [umo]=5921
 )
 
-# Helper: ask a daemon for a fresh address. Tries bech32 first; on
-# any error (e.g. Blakecoin 0.15.21 mainnet hasn't activated SegWit
-# yet → -4 "Segregated witness not enabled on network") falls back
-# to the daemon's default address type.
+# Helper: ask a daemon for a fresh address. Tries the requested address type
+# first; on any error falls back to the daemon's default address type.
 get_address() {
     local port="$1" label="$2" rpc_user="$3" rpc_pass="$4"
+    local address_type="${5:-bech32}"
     local resp addr
     resp=$(curl -sS --max-time 5 -u "${rpc_user}:${rpc_pass}" \
-        --data "{\"jsonrpc\":\"1.0\",\"id\":\"deploy\",\"method\":\"getnewaddress\",\"params\":[\"${label}\",\"bech32\"]}" \
+        --data "{\"jsonrpc\":\"1.0\",\"id\":\"deploy\",\"method\":\"getnewaddress\",\"params\":[\"${label}\",\"${address_type}\"]}" \
         -H 'content-type: text/plain' \
         "http://127.0.0.1:${port}/" 2>/dev/null || true)
     addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
@@ -102,9 +167,9 @@ say "tracker = ${MPOS_TRACKER_ADDR}"
 declare -A AUX_RPC_PORT=(
     [bbtc]=8243
     [elt]=6852
-    [lit]=12345
+    [lit]=12000
     [pho]=8984
-    [umo]=19738
+    [umo]=5921
 )
 declare -A AUX_ADDR
 for sym in bbtc elt lit pho umo; do
@@ -113,9 +178,15 @@ for sym in bbtc elt lit pho umo; do
         AUX_ADDR[$sym]="${!var}"
         continue
     fi
-    say "asking ${sym} daemon for an aux payout address"
+    address_type="bech32"
+    if [ "$sym" = "bbtc" ]; then
+        address_type="legacy"
+        say "asking ${sym} daemon for a legacy aux payout address"
+    else
+        say "asking ${sym} daemon for an aux payout address"
+    fi
     AUX_ADDR[$sym]=$(get_address "${AUX_RPC_PORT[$sym]}" "pool-aux" \
-        "${MPOS_NODE_RPC_USER}" "${MPOS_NODE_RPC_PASS}")
+        "${MPOS_NODE_RPC_USER}" "${MPOS_NODE_RPC_PASS}" "${address_type}")
     [ -n "${AUX_ADDR[$sym]}" ] || { echo "failed to obtain ${sym} aux address" >&2; exit 1; }
 done
 
@@ -163,6 +234,46 @@ LIST="${INSTALL_ROOT}/.aux-list"
     done
 } > "$LIST"
 
+MMP_CONFIG="${CONFIG_DIR}/merged-mine-proxy.json"
+say "writing merged-mine-proxy config"
+MMP_SECRET="$MMP_SECRET" \
+MPOS_NODE_RPC_USER="$MPOS_NODE_RPC_USER" \
+MPOS_NODE_RPC_PASS="$MPOS_NODE_RPC_PASS" \
+LOG_POOL="$LOG_POOL" \
+python3 - "$LIST" "$MMP_CONFIG" <<'PY'
+import json
+import os
+import sys
+from urllib.parse import quote
+
+aux_urls = []
+payouts = []
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    for line in f:
+        sym, addr, port = line.strip().split("|")
+        aux_urls.append("http://%s:%s@127.0.0.1:%s/" % (
+            quote(os.environ["MPOS_NODE_RPC_USER"], safe=""),
+            quote(os.environ["MPOS_NODE_RPC_PASS"], safe=""),
+            port,
+        ))
+        payouts.append(addr)
+
+cfg = {
+    "worker_port": 19335,
+    "parent_urls": ["http://auxpow:%s@127.0.0.1:19334/" % quote(os.environ["MMP_SECRET"], safe="")],
+    "aux_urls": aux_urls,
+    "aux_payout_addresses": payouts,
+    "merkle_size": 16,
+    "rewrite_target": 32,
+    "log_file": os.path.join(os.environ["LOG_POOL"], "mmp.log"),
+}
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, sort_keys=True)
+    f.write("\n")
+PY
+chown root:blakestream-mpos "$MMP_CONFIG"
+chmod 640 "$MMP_CONFIG"
+
 chown -R blakestream-mpos:blakestream-mpos "$POOL_ROOT" "$VENV" "${INSTALL_ROOT}/bin"
 
 say "writing systemd units"
@@ -197,12 +308,6 @@ LimitNOFILE=8192
 WantedBy=multi-user.target
 EOF
 
-MMP_ARGS="-w 19335 -s 16 -r -l ${LOG_POOL}/mmp.log"
-MMP_ARGS="${MMP_ARGS} -p http://auxpow:${MMP_SECRET}@127.0.0.1:19334/"
-while IFS='|' read -r sym addr port; do
-    MMP_ARGS="${MMP_ARGS} -x http://${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}@127.0.0.1:${port}/ -a ${addr}"
-done < "$LIST"
-
 cat > /etc/systemd/system/blakestream-mpos-mergeminer.service <<EOF
 [Unit]
 Description=Blakestream-MPOS merged-mine-proxy (5 aux chains)
@@ -214,11 +319,22 @@ Type=simple
 User=blakestream-mpos
 Group=blakestream-mpos
 WorkingDirectory=${POOL_ROOT}
-ExecStart=${VENV}/bin/python -u ${POOL_ROOT}/merged-mine-proxy.py3 ${MMP_ARGS}
+ExecStartPre=/bin/sh -c 'for i in \$(seq 1 60); do timeout 2 bash -c ":</dev/tcp/127.0.0.1/19334" 2>/dev/null && exit 0; sleep 1; done; echo "pool JSON-RPC did not become ready" >&2; exit 1'
+ExecStart=${INSTALL_ROOT}/bin/merged-mine-proxy-go --config ${MMP_CONFIG}
+ExecStartPost=${MMP_READY_CHECK} 19335 5
 StandardOutput=append:${LOG_POOL}/mergeminer.stdout
 StandardError=append:${LOG_POOL}/mergeminer.stderr
 Restart=always
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=${LOG_POOL}
 
 [Install]
 WantedBy=multi-user.target

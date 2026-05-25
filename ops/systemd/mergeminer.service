@@ -1,5 +1,5 @@
 # /etc/systemd/system/mergeminer.service
-# Runs merged-mine-proxy.py3 against the parent + aux chain RPCs.
+# Runs merged-mine-proxy-go against the parent + aux chain RPCs.
 # sudo systemctl daemon-reload && sudo systemctl enable --now mergeminer
 
 [Unit]
@@ -11,16 +11,13 @@ PartOf=eloipool.service
 Type=simple
 User=eloipool
 Group=eloipool
-# Drop the arguments from a single EnvironmentFile so you can rotate RPC
-# creds without editing the unit. See ops/systemd/mergeminer.env.example.
+# Keep RPC credentials in the JSON config, not in process arguments. See
+# ops/systemd/mergeminer.env.example.
+Environment=MMP_WORKER_PORT=9992
 EnvironmentFile=/etc/mpos/mergeminer.env
-ExecStart=/bin/sh -c '/home/eloipool/eloipool-venv/bin/python3 \
-    /home/eloipool/eloipool-auxpow/merged-mine-proxy.py3 \
-    -w ${MMP_WORKER_PORT:-9992} \
-    -s ${MMP_MERKLE_SIZE:-16} \
-    -p "${MMP_PARENT_URL}" \
-    -l /var/log/blakecoin-pool/mmproxy.log \
-    ${MMP_AUX_ARGS}'
+ExecStartPre=/usr/bin/test -s ${MMP_CONFIG}
+ExecStart=/home/eloipool/eloipool-auxpow/bin/merged-mine-proxy-go --config ${MMP_CONFIG}
+ExecStartPost=/home/eloipool/eloipool-auxpow/bin/check-mmp-ready.py ${MMP_WORKER_PORT} 5
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:/var/log/blakecoin-pool/mmproxy.out
@@ -30,6 +27,10 @@ ProtectHome=read-only
 PrivateTmp=true
 NoNewPrivileges=true
 ReadWritePaths=/var/log/blakecoin-pool
+PrivateDevices=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

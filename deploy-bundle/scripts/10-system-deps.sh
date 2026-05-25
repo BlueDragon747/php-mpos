@@ -34,7 +34,7 @@ PKGS=(
     mariadb-server mariadb-client
     memcached
     python3 python3-venv python3-pip
-    rsync xxd curl jq
+    rsync xz-utils xxd curl jq
     docker.io
     sudo
 )

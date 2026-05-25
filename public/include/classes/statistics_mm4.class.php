@@ -85,7 +85,7 @@ class Statistics_mm4 extends Base {
         IFNULL(SUM(IF(confirmations > -1 AND FROM_UNIXTIME(time) >= DATE_SUB(now(), INTERVAL 29030400 SECOND), amount, 0)), 0) AS 12MonthAmount
       FROM " . $this->block->getTableName());
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
-    	return $this->memcache->setCache(get_class($this) . __FUNCTION__, $result->fetch_assoc());
+     return $this->memcache->setCache(get_class($this) . __FUNCTION__, $result->fetch_assoc());
     return $this->sqlError();
   }
 
@@ -188,7 +188,7 @@ class Statistics_mm4 extends Base {
     if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
-      	worker_name AS finder,
+       worker_name AS finder,
         COUNT(id) AS solvedblocks, 
         SUM(amount) AS generatedcoins
       FROM " . $this->block->getTableName() . "
@@ -306,7 +306,7 @@ class Statistics_mm4 extends Base {
       SELECT
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS valid,
         ROUND(IFNULL(SUM(IF(our_result='N', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS invalid
-      FROM " . $this->share->getTableName() . "
+      FROM shares
       WHERE UNIX_TIMESTAMP(time) > IFNULL((SELECT MAX(time) FROM " . $this->block->getTableName() . "), 0)");
     if ( $this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result() )
       return $this->memcache->setCache(STATISTICS_ROUND_SHARES, $result->fetch_assoc());
@@ -333,7 +333,7 @@ class Statistics_mm4 extends Base {
         u.donate_percent AS donate_percent,
         u.is_anonymous AS is_anonymous,
         u.username AS username
-      FROM " . $this->share->getTableName() . " AS s,
+      FROM shares AS s,
            " . $this->user->getTableName() . " AS u
       WHERE u.username = SUBSTRING_INDEX( s.username, '.', 1 )
         AND UNIX_TIMESTAMP(s.time) > IFNULL(
@@ -355,7 +355,7 @@ class Statistics_mm4 extends Base {
           $data['data'][$row['id']]['is_anonymous'] = $row['is_anonymous'];
         }
       }
-      $data['share_id'] = $this->share->getMaxShareId();
+      $data['share_id'] = $this->getCanonicalShareMaxId();
       return $this->memcache->setCache(STATISTICS_ALL_USER_SHARES, $data);
     }
     return $this->sqlError();
@@ -381,7 +381,7 @@ class Statistics_mm4 extends Base {
       SELECT
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS valid,
         ROUND(IFNULL(SUM(IF(our_result='N', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS invalid
-      FROM " . $this->share->getTableName() . "
+      FROM shares
       WHERE username LIKE ?
         AND UNIX_TIMESTAMP(time) >IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b),0)");  
     $username = $username . ".%";   
@@ -552,7 +552,7 @@ class Statistics_mm4 extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
         ROUND(IFNULL(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS total
-      FROM " . $this->share->getTableName() . "
+      FROM shares
       WHERE username LIKE ?
       AND id > ?
       AND our_result = 'Y'");
@@ -786,7 +786,7 @@ class Statistics_mm4 extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
         id,
-      	IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
+       IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
         HOUR(s.time) AS hour
       FROM " . $this->share->getTableName() . " AS s
       WHERE time <= FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(NOW())/(60*60))*(60*60))
@@ -1060,7 +1060,7 @@ $statistics_mm4->setMysql($mysqli);
 $statistics_mm4->setShare($share_mm4);
 $statistics_mm4->setUser($user);
 $statistics_mm4->setBlock($block_mm4);
-$statistics_mm4->setMemcache($memcache);
+$statistics_mm4->setMemcache($memcache_mm4);
 $statistics_mm4->setConfig($config);
 $statistics_mm4->setBitcoin($bitcoin_mm4);
 $statistics_mm4->setErrorCodes($aErrorCodes);

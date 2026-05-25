@@ -122,13 +122,13 @@ declare -A COIN_IMAGE_NAME=(
     [umo]="universalmolecule"
     [lit]="lithium"
 )
-declare -A BOOTSTRAP_NAME=(
-    [blc]="Blakecoin"
-    [pho]="Photon"
-    [bbtc]="BlakeBitcoin"
-    [elt]="Electron"
-    [umo]="UniversalMolecule"
-    [lit]="Lithium"
+declare -A BOOTSTRAP_PREFIX=(
+    [blc]="blakecoin"
+    [pho]="photon"
+    [bbtc]="blakebitcoin"
+    [elt]="electron"
+    [umo]="universalmolecule"
+    [lit]="lithium"
 )
 
 # Default rotation order: ELT first because it's the largest chain
@@ -176,12 +176,16 @@ BOOTSTRAP_DOWNLOAD_ATTEMPTS="${BOOTSTRAP_DOWNLOAD_ATTEMPTS:-12}"
 BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S="${BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S:-60}"
 BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S="${BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S:-30}"
 BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S="${BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S:-90}"
+BOOTSTRAP_SERIES="${BOOTSTRAP_SERIES:-25.2}"
+BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
+BOOTSTRAP_CANONICAL_HOST="${BOOTSTRAP_CANONICAL_HOST:-bootstrap.blakestream.io}"
+BOOTSTRAP_MIRROR_DISCOVERY="${BOOTSTRAP_MIRROR_DISCOVERY:-1}"
+BOOTSTRAP_MIRROR_HOST="${BOOTSTRAP_MIRROR_HOST:-}"
 TIP_CATCH_TIMEOUT_S="${TIP_CATCH_TIMEOUT_S:-7200}"  # 2h max waiting for tip catch-up
 TIP_CATCH_LAG="${TIP_CATCH_LAG:-5}"
 START_AFTER="${START_AFTER:-1}"
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
-BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
+MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
 DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
 DASHBOARD_SNAPSHOT_INTERVAL_S="${DASHBOARD_SNAPSHOT_INTERVAL_S:-60}"
 
@@ -347,36 +351,259 @@ stop_one() {
     docker rm   "$1" >/dev/null 2>&1 || true
 }
 
+mark_bootstrap_consumed() {
+    local coin="$1"
+    local bootstrap_file="${COIN_DATADIR[$coin]}/bootstrap.dat"
+    if [ -f "$bootstrap_file" ]; then
+        mv -f "$bootstrap_file" "${bootstrap_file}.old"
+        ok "  ${coin}: bootstrap.dat moved to bootstrap.dat.old after -loadblock import"
+    fi
+}
+
+bootstrap_base_for_host() {
+    printf 'https://%s/%s' "$1" "$BOOTSTRAP_SERIES"
+}
+
+bootstrap_base_from_url() {
+    local url="${1%/}"
+    case "$url" in
+        */"$BOOTSTRAP_SERIES") printf '%s' "$url" ;;
+        *) printf '%s/%s' "$url" "$BOOTSTRAP_SERIES" ;;
+    esac
+}
+
+pick_25_2_mirror() {
+    local fallback="$BOOTSTRAP_CANONICAL_HOST"
+    local registry_url
+    registry_url="$(bootstrap_base_for_host "$fallback")/mirrors.json"
+
+    if [ -n "$BOOTSTRAP_MIRROR_HOST" ]; then
+        echo "$BOOTSTRAP_MIRROR_HOST"
+        return 0
+    fi
+    if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+        echo "$fallback"
+        return 0
+    fi
+
+    local registry
+    registry=$(curl -fsS --max-time 3 "$registry_url" 2>/dev/null) || {
+        echo "$fallback"
+        return 0
+    }
+
+    local load_penalty probe_timeout_ms probe_timeout_s
+    load_penalty=$(printf '%s' "$registry" | jq -r '.load_penalty_ms // 800' 2>/dev/null) || {
+        echo "$fallback"
+        return 0
+    }
+    probe_timeout_ms=$(printf '%s' "$registry" | jq -r '.probe_timeout_ms // 1500' 2>/dev/null || echo 1500)
+    [[ "$load_penalty" =~ ^[0-9]+$ ]] || load_penalty=800
+    [[ "$probe_timeout_ms" =~ ^[0-9]+$ ]] || probe_timeout_ms=1500
+    probe_timeout_s=$(awk -v ms="$probe_timeout_ms" 'BEGIN { printf "%.3f", ms / 1000 }')
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local hosts=()
+    mapfile -t hosts < <(printf '%s' "$registry" | jq -r '.mirrors[].host' 2>/dev/null || true)
+    if [ "${#hosts[@]}" -eq 0 ]; then
+        rm -rf "$tmpdir"
+        echo "$fallback"
+        return 0
+    fi
+
+    local pids=() host
+    for host in "${hosts[@]}"; do
+        [[ "$host" =~ ^[A-Za-z0-9.-]+$ ]] || continue
+        (
+            set +e
+            start=$(date +%s%3N)
+            probe=$(curl -fsS --max-time "$probe_timeout_s" "https://${host}/probe.json" 2>/dev/null) || exit 0
+            end=$(date +%s%3N)
+            rtt=$((end - start))
+            active=$(printf '%s' "$probe" | jq -r '.active // 0' 2>/dev/null) || exit 0
+            limit=$(printf '%s' "$probe" | jq -r '.limit // 20' 2>/dev/null) || exit 0
+            [[ "$active" =~ ^[0-9]+$ ]] || active=0
+            [[ "$limit" =~ ^[0-9]+$ ]] || limit=20
+            [ "$limit" -gt 0 ] || limit=20
+            sat_pct=$((active * 100 / limit))
+            score=$((rtt + sat_pct * load_penalty / 100))
+            safe_host=${host//[^A-Za-z0-9._-]/_}
+            printf '%s\t%s\t%s\t%s\t%s\n' "$score" "$host" "$rtt" "$active" "$limit" > "${tmpdir}/${safe_host}.score"
+        ) &
+        pids+=($!)
+    done
+    local pid
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+
+    local best
+    best=$(cat "${tmpdir}"/*.score 2>/dev/null | sort -n -k1,1 | head -1 || true)
+    rm -rf "$tmpdir"
+    if [ -z "$best" ]; then
+        echo "$fallback"
+        return 0
+    fi
+    printf '%s\n' "$best" | awk -F '\t' '{print $2}'
+}
+
+fetch_bootstrap_index() {
+    local base="$1"
+    curl -fsS --max-time 10 "${base%/}/" 2>/dev/null
+}
+
+bootstrap_remote_file() {
+    local coin="$1"
+    local prefix="${BOOTSTRAP_PREFIX[$coin]}"
+    printf '%s' "$BOOTSTRAP_INDEX_HTML" \
+        | sed -nE "s/.*href=[\"'](${prefix}-bootstrap-[0-9]+\\.dat\\.xz)[\"'].*/\\1/p" \
+        | sort -V \
+        | tail -1
+}
+
+init_bootstrap_source() {
+    local default_url="https://${BOOTSTRAP_CANONICAL_HOST}"
+    local base host index
+
+    if [ "$BOOTSTRAP_MIRROR_DISCOVERY" = "1" ] && [ "${BOOTSTRAP_URL%/}" = "$default_url" ]; then
+        host=$(pick_25_2_mirror)
+        base="$(bootstrap_base_for_host "$host")"
+        say "using ${BOOTSTRAP_SERIES} bootstrap mirror: ${host}"
+    else
+        base="$(bootstrap_base_from_url "$BOOTSTRAP_URL")"
+        say "using ${BOOTSTRAP_SERIES} bootstrap base: ${base}"
+    fi
+
+    if ! index=$(fetch_bootstrap_index "$base"); then
+        local fallback_base
+        fallback_base="$(bootstrap_base_for_host "$BOOTSTRAP_CANONICAL_HOST")"
+        warn "  bootstrap index failed at ${base}; falling back to ${fallback_base}"
+        base="$fallback_base"
+        index=$(fetch_bootstrap_index "$base") || {
+            warn "  unable to fetch bootstrap index from ${base}"
+            return 1
+        }
+    fi
+
+    BOOTSTRAP_SELECTED_BASE="${base%/}"
+    BOOTSTRAP_FALLBACK_BASE="$(bootstrap_base_for_host "$BOOTSTRAP_CANONICAL_HOST")"
+    BOOTSTRAP_INDEX_HTML="$index"
+    export BOOTSTRAP_SELECTED_BASE BOOTSTRAP_FALLBACK_BASE BOOTSTRAP_INDEX_HTML
+}
+
+remote_content_length() {
+    local url="$1"
+    wget --spider --server-response --tries=1 \
+        --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
+        --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
+        "$url" 2>&1 \
+        | awk '
+            /^  HTTP\// { ok = ($2 ~ /^2/); next }
+            ok && tolower($0) ~ /content-length:/ { print $2 }
+        ' \
+        | tr -d '\r' \
+        | tail -1 \
+        || true
+}
+
+download_verified_xz() {
+    local coin="$1" base="$2" remote_file="$3"
+    local datadir="${COIN_DATADIR[$coin]}"
+    local xz_file="${datadir}/${remote_file}"
+    local xz_tmp="${xz_file}.tmp"
+    local sha_file="${xz_file}.sha256"
+    local sha_tmp="${sha_file}.tmp"
+    local file_url="${base%/}/${remote_file}"
+    local sha_url="${file_url}.sha256"
+    local expected_size actual_size attempt
+
+    expected_size=$(remote_content_length "$file_url")
+    if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
+        write_status "$coin" "DOWNLOADING" "0" "$expected_size" "--"
+    fi
+
+    for attempt in $(seq 1 "$BOOTSTRAP_DOWNLOAD_ATTEMPTS"); do
+        if [ -f "$xz_tmp" ] && [[ "$expected_size" =~ ^[0-9]+$ ]]; then
+            actual_size=$(stat -c '%s' "$xz_tmp" 2>/dev/null || echo 0)
+            if [ "$actual_size" -gt "$expected_size" ]; then
+                warn "  ${coin}: partial ${remote_file} is larger than expected; restarting download"
+                rm -f "$xz_tmp"
+            fi
+        fi
+
+        if wget --continue --tries=1 \
+            --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
+            --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
+            --progress=bar:force \
+            -O "$xz_tmp" "$file_url" \
+            && wget --tries=1 \
+                --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
+                --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
+                -O "$sha_tmp" "$sha_url"; then
+
+            if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
+                actual_size=$(stat -c '%s' "$xz_tmp" 2>/dev/null || echo 0)
+                if [ "$actual_size" != "$expected_size" ]; then
+                    warn "  ${coin}: downloaded ${remote_file} is ${actual_size} bytes; expected ${expected_size}"
+                    if [ "$attempt" -lt "$BOOTSTRAP_DOWNLOAD_ATTEMPTS" ]; then
+                        sleep "$BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S"
+                        continue
+                    fi
+                    return 1
+                fi
+            fi
+
+            mv -f "$xz_tmp" "$xz_file"
+            mv -f "$sha_tmp" "$sha_file"
+            if ( cd "$datadir" && sha256sum -c "$(basename "$sha_file")" >/dev/null ); then
+                ok "  ${coin}: verified ${remote_file}"
+                return 0
+            fi
+            warn "  ${coin}: SHA256 mismatch on ${remote_file}"
+            rm -f "$xz_file" "$sha_file"
+            return 2
+        fi
+
+        if [ "$attempt" -lt "$BOOTSTRAP_DOWNLOAD_ATTEMPTS" ]; then
+            warn "  ${coin}: bootstrap download attempt ${attempt}/${BOOTSTRAP_DOWNLOAD_ATTEMPTS} failed; retrying in ${BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S}s"
+            sleep "$BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S"
+        fi
+    done
+
+    return 1
+}
+
+decompress_bootstrap_xz() {
+    local coin="$1" remote_file="$2"
+    local datadir="${COIN_DATADIR[$coin]}"
+    local xz_file="${datadir}/${remote_file}"
+    local sha_file="${xz_file}.sha256"
+    local bootstrap_file="${datadir}/bootstrap.dat"
+    local bootstrap_tmp="${bootstrap_file}.tmp"
+
+    say "  decompressing ${coin} ${remote_file} -> bootstrap.dat"
+    rm -f "$bootstrap_tmp"
+    if xz -dc "$xz_file" > "$bootstrap_tmp"; then
+        mv -f "$bootstrap_tmp" "$bootstrap_file"
+        rm -f "$xz_file" "$sha_file"
+        local sz_final
+        sz_final=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
+        ok "  ${coin}: bootstrap.dat staged ($(du -h "$bootstrap_file" | cut -f1))"
+        write_status "$coin" "FINISHED" "$sz_final" "$sz_final" "0"
+        return 0
+    fi
+    rm -f "$bootstrap_tmp"
+    warn "  ${coin}: xz decompression failed for ${remote_file}"
+    return 1
+}
+
 download_bootstrap() {
     local coin="$1"
     local datadir="${COIN_DATADIR[$coin]}"
-    local bootstrap_name="${BOOTSTRAP_NAME[$coin]}"
     local bootstrap_file="${datadir}/bootstrap.dat"
-    local bootstrap_tmp="${bootstrap_file}.tmp"
-    local bootstrap_url="${BOOTSTRAP_URL%/}/${bootstrap_name}/bootstrap.dat"
-    local expected_size=""
+    local remote_file xz_file sha_file
     write_status "$coin" "DOWNLOADING" "0" "0" "--"
-
-    # --no-check-certificate: bootstrap.blakestream.io can be served
-    # either through Cloudflare (publicly trusted cert) or directly
-    # from the origin (Cloudflare-managed cert whose CN doesn't match
-    # the hostname, so wget rejects it). Bootstrap data is public,
-    # the download is size-verified against Content-Length below, and
-    # every block is consensus-validated by the daemon — so skipping
-    # TLS hostname verification doesn't compromise integrity here.
-    expected_size=$(
-        wget --spider --server-response --tries=1 --no-check-certificate \
-            --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
-            --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
-            "$bootstrap_url" 2>&1 \
-            | awk '
-                /^  HTTP\// { ok = ($2 ~ /^2/); next }
-                ok && tolower($0) ~ /content-length:/ { print $2 }
-            ' \
-            | tr -d '\r' \
-            | tail -1 \
-            || true
-    )
 
     if [ ! -f "$bootstrap_file" ] && [ -f "${bootstrap_file}.old" ]; then
         ok "  ${coin}: bootstrap.dat already consumed as bootstrap.dat.old ($(du -h "${bootstrap_file}.old" | cut -f1))"
@@ -387,87 +614,68 @@ download_bootstrap() {
     fi
 
     if [ -f "$bootstrap_file" ]; then
-        if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
-            local actual_size
-            actual_size=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
-            if [ "$actual_size" != "$expected_size" ]; then
-                warn "  ${coin}: existing bootstrap.dat is ${actual_size} bytes; expected ${expected_size}; redownloading"
-                rm -f "$bootstrap_file"
-            else
-                ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
-                write_status "$coin" "FINISHED" "$actual_size" "$expected_size" "0"
-                return 0
-            fi
+        ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
+        local sz_existing
+        sz_existing=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
+        write_status "$coin" "FINISHED" "$sz_existing" "$sz_existing" "0"
+        return 0
+    fi
+
+    remote_file=$(bootstrap_remote_file "$coin")
+    if [ -z "$remote_file" ]; then
+        warn "  ${coin}: no ${BOOTSTRAP_PREFIX[$coin]} bootstrap found in ${BOOTSTRAP_SELECTED_BASE}/"
+        write_status "$coin" "FAILED" "0" "0" "0"
+        return 1
+    fi
+    xz_file="${datadir}/${remote_file}"
+    sha_file="${xz_file}.sha256"
+
+    if [ -f "$xz_file" ] && [ -f "$sha_file" ]; then
+        if ( cd "$datadir" && sha256sum -c "$(basename "$sha_file")" >/dev/null ); then
+            ok "  ${coin}: ${remote_file} already present and verified"
+            decompress_bootstrap_xz "$coin" "$remote_file"
+            return $?
+        fi
+        warn "  ${coin}: cached ${remote_file} failed SHA256; redownloading"
+        rm -f "$xz_file" "$sha_file"
+    fi
+
+    say "  downloading ${coin} ${remote_file} from ${BOOTSTRAP_SELECTED_BASE}"
+    if ! download_verified_xz "$coin" "$BOOTSTRAP_SELECTED_BASE" "$remote_file"; then
+        if [ "$BOOTSTRAP_SELECTED_BASE" != "$BOOTSTRAP_FALLBACK_BASE" ]; then
+            warn "  ${coin}: retrying ${remote_file} on canonical fallback ${BOOTSTRAP_FALLBACK_BASE}"
+            rm -f "$xz_file" "$xz_file.tmp" "$sha_file" "$sha_file.tmp"
+            download_verified_xz "$coin" "$BOOTSTRAP_FALLBACK_BASE" "$remote_file" || {
+                warn "  ${coin}: fallback download failed"
+                write_status "$coin" "FAILED" "0" "0" "0"
+                return 1
+            }
         else
-            warn "  ${coin}: could not verify remote bootstrap.dat size; using existing file"
-            ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
-            local sz_existing
-            sz_existing=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
-            write_status "$coin" "FINISHED" "$sz_existing" "$sz_existing" "0"
-            return 0
+            warn "  ${coin}: bootstrap download failed"
+            write_status "$coin" "FAILED" "0" "0" "0"
+            return 1
         fi
     fi
-    if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
-        write_status "$coin" "DOWNLOADING" "0" "$expected_size" "--"
-    fi
 
-    if [ -f "$bootstrap_tmp" ]; then
-        warn "  ${coin}: resuming incomplete bootstrap download ${bootstrap_tmp} ($(du -h "$bootstrap_tmp" | cut -f1))"
-    fi
-
-    say "  downloading ${coin} bootstrap.dat from ${bootstrap_url}"
-    local attempt actual_size
-    for attempt in $(seq 1 "$BOOTSTRAP_DOWNLOAD_ATTEMPTS"); do
-        if [ -f "$bootstrap_tmp" ] && [[ "$expected_size" =~ ^[0-9]+$ ]]; then
-            actual_size=$(stat -c '%s' "$bootstrap_tmp" 2>/dev/null || echo 0)
-            if [ "$actual_size" -gt "$expected_size" ]; then
-                warn "  ${coin}: partial bootstrap is larger than expected; restarting download"
-                rm -f "$bootstrap_tmp"
-            fi
-        fi
-
-        if wget --continue --tries=1 --no-check-certificate \
-            --connect-timeout="$BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S" \
-            --read-timeout="$BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S" \
-            --progress=bar:force \
-            -O "$bootstrap_tmp" "$bootstrap_url"; then
-            if [[ "$expected_size" =~ ^[0-9]+$ ]]; then
-                actual_size=$(stat -c '%s' "$bootstrap_tmp" 2>/dev/null || echo 0)
-                if [ "$actual_size" != "$expected_size" ]; then
-                    warn "  ${coin}: downloaded bootstrap.dat is ${actual_size} bytes; expected ${expected_size}"
-                    if [ "$attempt" -lt "$BOOTSTRAP_DOWNLOAD_ATTEMPTS" ]; then
-                        warn "  ${coin}: retrying download in ${BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S}s (attempt ${attempt}/${BOOTSTRAP_DOWNLOAD_ATTEMPTS})"
-                        sleep "$BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S"
-                        continue
-                    fi
-                    return 1
-                fi
-            fi
-            mv -f "$bootstrap_tmp" "$bootstrap_file"
-            ok "  ${coin}: bootstrap.dat downloaded ($(du -h "$bootstrap_file" | cut -f1))"
-            local sz_final
-            sz_final=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
-            write_status "$coin" "FINISHED" "$sz_final" "$sz_final" "0"
-            return 0
-        fi
-
-        if [ "$attempt" -lt "$BOOTSTRAP_DOWNLOAD_ATTEMPTS" ]; then
-            warn "  ${coin}: bootstrap download attempt ${attempt}/${BOOTSTRAP_DOWNLOAD_ATTEMPTS} failed; retrying in ${BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S}s"
-            sleep "$BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S"
-        fi
-    done
-
-    warn "  ${coin}: bootstrap download failed after ${BOOTSTRAP_DOWNLOAD_ATTEMPTS} attempts"
-    write_status "$coin" "FAILED" "0" "${expected_size:-0}" "0"
-    return 1
+    decompress_bootstrap_xz "$coin" "$remote_file"
 }
 
 start_one() {
     local coin="$1"
+    local loadblock="${2:-0}"
     local datadir="${COIN_DATADIR[$coin]}"
     local daemon="${COIN_DAEMON[$coin]}"
+    local bootstrap_file="${datadir}/bootstrap.dat"
+    local loadblock_arg=""
     local image
     image="$(coin_image "$coin")"
+    if [ "$loadblock" = "1" ]; then
+        [ -f "$bootstrap_file" ] || {
+            warn "  ${coin}: missing ${bootstrap_file}; cannot start with -loadblock"
+            return 1
+        }
+        loadblock_arg=" -loadblock=${bootstrap_file}"
+    fi
     docker run -d \
         --name "$coin" \
         --net=host \
@@ -475,7 +683,7 @@ start_one() {
         --stop-timeout 300 \
         -v "${datadir}:${datadir}" \
         "$image" \
-        /bin/sh -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}" \
+        /bin/sh -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}${loadblock_arg}" \
         >/dev/null
 }
 
@@ -537,7 +745,7 @@ wait_bootstrap_import_done() {
     local saw_import=0
 
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        if grep -q "Importing bootstrap.dat" "$debug_log" 2>/dev/null; then
+        if grep -Eq "Importing (bootstrap.dat|blocks file .*bootstrap.dat)" "$debug_log" 2>/dev/null; then
             saw_import=1
         fi
         if grep -Eq "Loaded [0-9]+ blocks from external file" "$debug_log" 2>/dev/null; then
@@ -656,11 +864,15 @@ bootstrap_group() {
     # Start every coin in the group concurrently.
     for coin in "${coins[@]}"; do
         [ -z "${CONSUMED[$coin]:-}" ] && continue
-        start_one "$coin"
+        if [ "${CONSUMED[$coin]}" = "1" ]; then
+            start_one "$coin"
+        else
+            start_one "$coin" 1
+        fi
         if [ "${CONSUMED[$coin]}" = "1" ]; then
             say "  started ${coin}; bootstrap.dat already consumed (resuming existing chainstate)"
         else
-            say "  started ${coin}; daemon auto-imports bootstrap.dat on first launch"
+            say "  started ${coin}; daemon imports ${COIN_DATADIR[$coin]}/bootstrap.dat with -loadblock"
         fi
     done
 
@@ -669,6 +881,9 @@ bootstrap_group() {
     for coin in "${coins[@]}"; do
         [ -z "${CONSUMED[$coin]:-}" ] && continue
         datadir="${COIN_DATADIR[$coin]}"
+        if [ "${CONSUMED[$coin]}" = "0" ]; then
+            wait_bootstrap_import_done "$coin" "$datadir"
+        fi
         wait_at_tip "$coin" "$datadir"
         local final_tip
         final_tip=$(current_height "$datadir")
@@ -686,6 +901,7 @@ bootstrap_group() {
         sleep 60
         for coin_stop in "${need_stop[@]}"; do
             stop_one "$coin_stop"
+            mark_bootstrap_consumed "$coin_stop"
             # If tmpfs chainstate was used for this coin, kill the
             # checkpoint loop, then move tmpfs contents -> real disk
             # path and unmount before the dbcache flip / next start.
@@ -761,7 +977,8 @@ emit_dashboard_snapshot() {
         case "$state" in
             DOWNLOADING)
                 local cur tmp_path
-                tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
+                tmp_path=$(find "${COIN_DATADIR[$c]}" -maxdepth 1 -name '*-bootstrap-*.dat.xz.tmp' -print -quit 2>/dev/null || true)
+                [ -n "$tmp_path" ] || tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
                 cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
                 local pct=0
                 [ "${t:-0}" -gt 0 ] && pct=$(( cur * 100 / t ))
@@ -816,10 +1033,15 @@ trap 'kill "$DASHBOARD_PID" 2>/dev/null || true; rm -f "$SNAPSHOT_PIDFILE"' EXIT
 # Phase A: download every coin's bootstrap.dat upfront in a ROLLING
 # pool of DOWNLOAD_CONCURRENCY (default 3). As one wget finishes the
 # next coin's download starts — never wait for a "batch" to complete.
-# Pre-staging all files into their datadirs lets the per-coin solo
-# daemon import on first launch with no start → stop → restart dance.
+# Pre-staging all files into their datadirs lets the per-coin solo daemon
+# import run with -loadblock=<datadir>/bootstrap.dat and no start → stop →
+# solo-restart dance.
 say "downloading all bootstraps before any daemon starts (rolling pool of ${DOWNLOAD_CONCURRENCY})"
 valid_for_download=()
+init_bootstrap_source || {
+    warn "  bootstrap mirror/index discovery failed; aborting rotation"
+    exit 1
+}
 for coin in "${ROTATION[@]}"; do
     case "$coin" in
         blc|pho|bbtc|elt|umo|lit)

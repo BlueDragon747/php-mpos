@@ -7,7 +7,7 @@ fail() { printf '   \033[1;31m[FAIL]\033[0m %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT
 FAIL_COUNT=0
 
 declare -A RPC_PORT=(
-    [blc]=8772 [pho]=8984 [bbtc]=8243 [elt]=6852 [lit]=12345 [umo]=19738
+    [blc]=8772 [pho]=8984 [bbtc]=8243 [elt]=6852 [lit]=12000 [umo]=5921
 )
 
 # Wait for the entire pool stack to be fully initialized BEFORE running
@@ -49,7 +49,7 @@ for sym in blc pho bbtc elt lit umo; do
 done
 
 say "pool services"
-for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs; do
+for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer; do
     if systemctl is-active --quiet "${unit}.service"; then
         pass "${unit} active"
     else

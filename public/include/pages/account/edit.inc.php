@@ -9,6 +9,115 @@ $oldtoken_ea = (isset($_POST['ea_token']) && $_POST['ea_token'] !== '') ? $_POST
 $oldtoken_cp = (isset($_POST['cp_token']) && $_POST['cp_token'] !== '') ? $_POST['cp_token'] : @$_GET['cp_token'];
 $oldtoken_wf = (isset($_POST['wf_token']) && $_POST['wf_token'] !== '') ? $_POST['wf_token'] : @$_GET['wf_token'];
 $updating = (@$_POST['do']) ? 1 : 0;
+$_ae_ajax_quote = null;
+
+function _ae_coin_amount_str($amount) {
+  return number_format(max(0, (float)$amount), 8, '.', '');
+}
+
+function _ae_user_slot_address($uid, $addr_col) {
+  global $user;
+  $data = $user->getUserData((int)$uid);
+  if (!is_array($data) || !isset($data[$addr_col])) return '';
+  return trim((string)$data[$addr_col]);
+}
+
+function _ae_estimate_wallet_payout_fee($wallet, $address, $amount) {
+  $gross = round((float)$amount, 8);
+  if ($gross <= 0) throw new Exception('No confirmed balance is available to pay out.');
+  if (!is_object($wallet)) throw new Exception('Wallet RPC is not configured for this coin.');
+
+  $outputs = array(array($address => _ae_coin_amount_str($gross)));
+  $options = array('subtractFeeFromOutputs' => array(0));
+  $quote = $wallet->walletcreatefundedpsbt(array(), $outputs, 0, $options, true);
+  if (!is_array($quote) || !isset($quote['fee'])) {
+    throw new Exception('Wallet did not return a fee quote.');
+  }
+
+  $fee = round((float)$quote['fee'], 8);
+  $send = round($gross - $fee, 8);
+  if ($fee < 0 || $send <= 0) {
+    throw new Exception('Estimated network fee is greater than the payout amount.');
+  }
+
+  return array(
+    'amount'     => _ae_coin_amount_str($gross),
+    'fee'        => _ae_coin_amount_str($fee),
+    'sendAmount' => _ae_coin_amount_str($send),
+  );
+}
+
+function _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method) {
+  global $user, $setting, $config, $csrftoken, $oPayout;
+
+  $uid = isset($_SESSION['USERDATA']['id']) ? (int)$_SESSION['USERDATA']['id'] : 0;
+  if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => $slot_key);
+    return false;
+  }
+  if ($config['csrf']['enabled'] && !$csrftoken->valid) {
+    $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => $slot_key);
+    return false;
+  }
+  $address = _ae_user_slot_address($uid, $addr_col);
+  if ($address === '') {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    return false;
+  }
+  if (!is_object($tx_obj)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'Cash out is not available for this coin.', 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    return false;
+  }
+  if (method_exists($oPayout, $active_method) && $oPayout->{$active_method}($uid)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    return false;
+  }
+  if (!is_object($wallet) || !$wallet->validateaddress($address)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'Wallet rejected your payout address.', 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    return false;
+  }
+
+  $balance = $tx_obj->getBalance($uid);
+  $confirmed = is_array($balance) && isset($balance['confirmed'])
+    ? round((float)$balance['confirmed'], 8)
+    : 0.0;
+  if ($confirmed <= 0) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a confirmed balance to cash out.', 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    return false;
+  }
+
+  try {
+    $quote = _ae_estimate_wallet_payout_fee($wallet, $address, $confirmed);
+  } catch (Exception $e) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'Unable to estimate network fee: ' . $e->getMessage(), 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    return false;
+  }
+
+  $quote['coin'] = $slot_key;
+  $quote['currency'] = (string)$currency;
+  $quote['address'] = $address;
+  return $quote;
+}
+
+function _ae_quote_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method) {
+  global $_ae_ajax_quote;
+  $quote = _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method);
+  if ($quote !== false) $_ae_ajax_quote = $quote;
+}
+
+function _ae_queue_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method, $create_method, $token) {
+  global $oPayout, $log;
+  $quote = _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method);
+  if ($quote === false) return;
+
+  $uid = (int)$_SESSION['USERDATA']['id'];
+  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
+  if (method_exists($oPayout, $create_method) && $iPayoutId = $oPayout->{$create_method}($uid, $token)) {
+    $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => $slot_key, 'TYPE' => 'success');
+  } else {
+    $_SESSION['POPUP'][] = array('CONTENT' => $oPayout->getError(), 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+  }
+}
 
 if ($user->isAuthenticated()) {
   if ($config['twofactor']['enabled']) {
@@ -93,194 +202,61 @@ if ($user->isAuthenticated()) {
         }
       } else {
         switch (@$_POST['do']) {
+          case 'quoteCashOut':
+            _ae_quote_cashout('main', $config['currency'], $transaction, $bitcoin, 'coin_address', 'isPayoutActive');
+          break;
           case 'cashOut':
-        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'main');
-          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'main');
-        	} else {
-        	  $aBalance = $transaction->getBalance($_SESSION['USERDATA']['id']);
-        	  $dBalance = $aBalance['confirmed'];
-        	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
-        	  if ($dBalance > $config['txfee_manual']) {
-        	    if (!$oPayout->isPayoutActive($_SESSION['USERDATA']['id'])) {
-        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-        	        if ($iPayoutId = $oPayout->createPayout($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'main', 'TYPE' => 'success');
-        	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'main');
-        	        }
-        	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'main');
-        	      }
-        	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'main');
-        	    }
-        	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'main');
-        	  }
-        	}
-        	break;
+            _ae_queue_cashout('main', $config['currency'], $transaction, $bitcoin, 'coin_address', 'isPayoutActive', 'createPayout', $oldtoken_wf);
+          break;
 
+          case 'quoteCashOut_mm':
+            _ae_quote_cashout('mm', $config['currency_mm'], $transaction_mm, $bitcoin_mm, 'coin_address_mm', 'isPayoutActive_mm');
+          break;
           case 'cashOut_mm':
-        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm');
-          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm');
-        	} else {
-        	  $aBalance = $transaction_mm->getBalance($_SESSION['USERDATA']['id']);
-        	  $dBalance = $aBalance['confirmed'];
-        	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
-        	  if ($dBalance > $config['txfee_manual']) {
-        	    if (!$oPayout->isPayoutActive_mm($_SESSION['USERDATA']['id'])) {
-        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-        	        if ($iPayoutId = $oPayout->createPayout_mm($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm', 'TYPE' => 'success');
-        	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm');
-        	        }
-        	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm');
-        	      }
-        	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm');
-        	    }
-        	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm');
-        	  }
-        	}
-        	break;
+            _ae_queue_cashout('mm', $config['currency_mm'], $transaction_mm, $bitcoin_mm, 'coin_address_mm', 'isPayoutActive_mm', 'createPayout_mm', $oldtoken_wf);
+          break;
 
+          case 'quoteCashOut_mm1':
+            _ae_quote_cashout('mm1', $config['currency_mm1'], $transaction_mm1, $bitcoin_mm1, 'coin_address_mm1', 'isPayoutActive_mm1');
+          break;
           case 'cashOut_mm1':
-        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm1');
-          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
-        	} else {
-        	  $aBalance = $transaction_mm1->getBalance($_SESSION['USERDATA']['id']);
-        	  $dBalance = $aBalance['confirmed'];
-        	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
-        	  if ($dBalance > $config['txfee_manual']) {
-        	    if (!$oPayout->isPayoutActive_mm1($_SESSION['USERDATA']['id'])) {
-        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-        	        if ($iPayoutId = $oPayout->createPayout_mm1($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm1', 'TYPE' => 'success');
-        	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm1');
-        	        }
-        	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm1');
-        	      }
-        	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
-        	    }
-        	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm1'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm1');
-        	  }
-        	}
-        	break;
+            _ae_queue_cashout('mm1', $config['currency_mm1'], $transaction_mm1, $bitcoin_mm1, 'coin_address_mm1', 'isPayoutActive_mm1', 'createPayout_mm1', $oldtoken_wf);
+          break;
 
-
+          case 'quoteCashOut_mm3':
+            _ae_quote_cashout('mm3', $config['currency_mm3'], $transaction_mm3, $bitcoin_mm3, 'coin_address_mm3', 'isPayoutActive_mm3');
+          break;
           case 'cashOut_mm3':
-        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm3');
-          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
-        	} else {
-        	  $aBalance = $transaction_mm3->getBalance($_SESSION['USERDATA']['id']);
-        	  $dBalance = $aBalance['confirmed'];
-        	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
-        	  if ($dBalance > $config['txfee_manual']) {
-        	    if (!$oPayout->isPayoutActive_mm3($_SESSION['USERDATA']['id'])) {
-        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-        	        if ($iPayoutId = $oPayout->createPayout_mm3($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm3', 'TYPE' => 'success');
-        	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm3');
-        	        }
-        	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm3');
-        	      }
-        	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
-        	    }
-        	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm3'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm3');
-        	  }
-        	}
-        	break;
+            _ae_queue_cashout('mm3', $config['currency_mm3'], $transaction_mm3, $bitcoin_mm3, 'coin_address_mm3', 'isPayoutActive_mm3', 'createPayout_mm3', $oldtoken_wf);
+          break;
 
+          case 'quoteCashOut_mm4':
+            _ae_quote_cashout('mm4', $config['currency_mm4'], $transaction_mm4, $bitcoin_mm4, 'coin_address_mm4', 'isPayoutActive_mm4');
+          break;
           case 'cashOut_mm4':
-        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm4');
-          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
-        	} else {
-        	  $aBalance = $transaction_mm4->getBalance($_SESSION['USERDATA']['id']);
-        	  $dBalance = $aBalance['confirmed'];
-        	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
-        	  if ($dBalance > $config['txfee_manual']) {
-        	    if (!$oPayout->isPayoutActive_mm4($_SESSION['USERDATA']['id'])) {
-        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-        	        if ($iPayoutId = $oPayout->createPayout_mm4($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm4', 'TYPE' => 'success');
-        	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm4');
-        	        }
-        	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm4');
-        	      }
-        	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
-        	    }
-        	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm4'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm4');
-        	  }
-        	}
-        	break;
+            _ae_queue_cashout('mm4', $config['currency_mm4'], $transaction_mm4, $bitcoin_mm4, 'coin_address_mm4', 'isPayoutActive_mm4', 'createPayout_mm4', $oldtoken_wf);
+          break;
 
+          case 'quoteCashOut_mm5':
+            _ae_quote_cashout('mm5', $config['currency_mm5'], $transaction_mm5, $bitcoin_mm5, 'coin_address_mm5', 'isPayoutActive_mm5');
+          break;
           case 'cashOut_mm5':
-        	if ($setting->getValue('disable_payouts') == 1 || $setting->getValue('disable_manual_payouts') == 1) {
-        	  $_SESSION['POPUP'][] = array('CONTENT' => 'Manual payouts are disabled.', 'TYPE' => 'info', 'COIN' => 'mm5');
-          } else if (!$user->getCoinAddress($_SESSION['USERDATA']['id'])) {
-            $_SESSION['POPUP'][] = array('CONTENT' => 'You have no payout address set.', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
-        	} else {
-        	  $aBalance = $transaction_mm5->getBalance($_SESSION['USERDATA']['id']);
-        	  $dBalance = $aBalance['confirmed'];
-        	  $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
-        	  if ($dBalance > $config['txfee_manual']) {
-        	    if (!$oPayout->isPayoutActive_mm5($_SESSION['USERDATA']['id'])) {
-        	      if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
-        	        if ($iPayoutId = $oPayout->createPayout_mm5($_SESSION['USERDATA']['id'], $oldtoken_wf)) {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => 'mm5', 'TYPE' => 'success');
-        	        } else {
-        	          $_SESSION['POPUP'][] = array('CONTENT' => $iPayoutId->getError(), 'TYPE' => 'errormsg', 'COIN' => 'mm5');
-        	        }
-        	      } else {
-        	        $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info', 'COIN' => 'mm5');
-        	      }
-        	    } else {
-        	      $_SESSION['POPUP'][] = array('CONTENT' => 'You already have one active manual payout request.', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
-        	    }
-        	  } else {
-        	    $_SESSION['POPUP'][] = array('CONTENT' => 'You need a balance above ' . $config['txfee_manual'] . ' ' . $config['currency_mm5'] . ' to cover the network transaction fee', 'TYPE' => 'errormsg', 'COIN' => 'mm5');
-        	  }
-        	}
-        	break;
+            _ae_queue_cashout('mm5', $config['currency_mm5'], $transaction_mm5, $bitcoin_mm5, 'coin_address_mm5', 'isPayoutActive_mm5', 'createPayout_mm5', $oldtoken_wf);
+          break;
 
 
 
           case 'updateAccount':
             if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
               if ($user->updateAccount($_SESSION['USERDATA']['id'], $_POST['paymentAddress'] ?? '', $_POST['payoutThreshold'] ?? 0, $_POST['donatePercent'] ?? 0, $_POST['email'] ?? '', $_POST['is_anonymous'] ?? 0, $oldtoken_ea, $_POST['paymentAddress_mm'] ?? '', $_POST['payoutThreshold_mm'] ?? 0, $_POST['paymentAddress_mm1'] ?? '', $_POST['payoutThreshold_mm1'] ?? 0, $_POST['paymentAddress_mm3'] ?? '', $_POST['payoutThreshold_mm3'] ?? 0, $_POST['paymentAddress_mm4'] ?? '', $_POST['payoutThreshold_mm4'] ?? 0, $_POST['paymentAddress_mm5'] ?? '', $_POST['payoutThreshold_mm5'] ?? 0)) {
-              	$_SESSION['POPUP'][] = array('CONTENT' => 'Account details updated', 'TYPE' => 'success');
+               $_SESSION['POPUP'][] = array('CONTENT' => 'Account details updated', 'TYPE' => 'success');
               } else {
-              	$_SESSION['POPUP'][] = array('CONTENT' => 'Failed to update your account: ' . $user->getError(), 'TYPE' => 'errormsg');
+               $_SESSION['POPUP'][] = array('CONTENT' => 'Failed to update your account: ' . $user->getError(), 'TYPE' => 'errormsg');
               }
             } else {
               $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
             }
-         	break;
+          break;
 
           case 'updatePassword':
             if (!$config['csrf']['enabled'] || $config['csrf']['enabled'] && $csrftoken->valid) {
@@ -292,7 +268,7 @@ if ($user->isAuthenticated()) {
             } else {
               $_SESSION['POPUP'][] = array('CONTENT' => $csrftoken->getErrorWithDescriptionHTML(), 'TYPE' => 'info');
             }
-         	break;
+          break;
         }
       }
     }
@@ -317,7 +293,9 @@ if (!empty($_REQUEST['_ajax']) && @$_POST['do']) {
     $_SESSION['POPUP'] = array();
   }
   header('Content-Type: application/json; charset=utf-8');
-  echo json_encode(array('popups' => $ajax_popups));
+  $ajax_response = array('popups' => $ajax_popups);
+  if ($_ae_ajax_quote !== null) $ajax_response['quote'] = $_ae_ajax_quote;
+  echo json_encode($ajax_response);
   exit;
 }
 
@@ -399,9 +377,9 @@ function _ae_balance($tx, $uid) {
 //      * a payouts_<slot> row with completed=0 exists (the moment after
 //        the user clicked Cash Out, before cronjobs-py picks it up), or
 //      * a transactions_outbox row exists for this user/slot whose
-//        status is anything other than 'reconciled' or 'abandoned'
-//        (cronjobs-py has broadcast it but on-chain confs haven't
-//        matured yet), or
+//        status is 'pending' or 'broadcast'. Failed/abandoned rows and
+//        operator-review indeterminate rows are not user-facing pending
+//        payouts, so the balance can show again after a failed send.
 //      * an unarchived Debit_MP row exists in transactions_<slot>
 //        (defensive — covers the gap if outbox row is missing).
 //   - `requestedAt` prefers the outbox.created_at (broadcast time); if
@@ -430,11 +408,11 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
   $outboxSlot = ($slotKey === 'main') ? '' : $slotKey;   // BLC slot in outbox is ''
   if (!isset($payoutsTable[$slotKey]) || $uid <= 0) return $base;
 
-  // 1) Outbox-backed pending: cronjobs-py has broadcast (or is about
-  //    to). status='reconciled' or 'abandoned' is no longer pending.
+  // 1) Outbox-backed pending: cronjobs-py is about to broadcast or has
+  //    broadcast and is waiting for reconciliation confirmations.
   $sql = "SELECT txid, status, created_at, amount FROM transactions_outbox
           WHERE account_id = ? AND slot = ?
-            AND status NOT IN ('reconciled', 'abandoned')
+            AND status IN ('pending', 'broadcast')
           ORDER BY id DESC LIMIT 1";
   if ($stmt = $mysqli->prepare($sql)) {
     if ($stmt->bind_param('is', $uid, $outboxSlot) && $stmt->execute()) {
@@ -462,6 +440,20 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
           if ($stmt->fetch()) {
             $base['kind'] = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
           }
+        }
+        $stmt->close();
+      }
+    }
+    if ($base['kind'] === null) {
+      // Indeterminate/pending outbox rows can exist before a Debit row is
+      // written, so classify by whether this account still has an open
+      // manual payout queue row. Auto-payouts do not use payouts_<slot>.
+      $sql = "SELECT 1 FROM " . $payoutsTable[$slotKey]
+           . " WHERE completed = 0 AND account_id = ? LIMIT 1";
+      if ($stmt = $mysqli->prepare($sql)) {
+        if ($stmt->bind_param('i', $uid) && $stmt->execute()) {
+          $stmt->store_result();
+          $base['kind'] = ($stmt->num_rows > 0) ? 'manual' : 'auto';
         }
         $stmt->close();
       }
@@ -555,11 +547,13 @@ foreach (array(
   $thr_max = isset($ae_threshold_ranges[$tk]) ? $ae_threshold_ranges[$tk]['max'] : $ap_max;
   $coin_name = isset($_wallet_coin_names[$tk]) ? $_wallet_coin_names[$tk] : $currency;
   $icon_url  = _wallet_coin_icon_url($tk);
+  $icon_fallback_url = _wallet_coin_icon_fallback_url($tk);
   $coins[] = array(
     'key'              => $key,
     'currency'         => $currency,
     'coinName'         => $coin_name,
     'iconUrl'          => $icon_url,
+    'iconFallbackUrl'  => $icon_fallback_url,
     'address'          => isset($_userdata[$addr_col]) ? (string)$_userdata[$addr_col] : '',
     'threshold'        => isset($_userdata[$thr_col]) ? (float)$_userdata[$thr_col] : 0.0,
     'thresholdMin'     => $thr_min,
@@ -612,6 +606,12 @@ if (isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP'])) {
 $ap_min = isset($config['ap_threshold']['min']) ? (float)$config['ap_threshold']['min'] : 0.0;
 $ap_max = isset($config['ap_threshold']['max']) ? (float)$config['ap_threshold']['max'] : 0.0;
 $donate_min = isset($config['donate_threshold']['min']) ? (float)$config['donate_threshold']['min'] : 0.0;
+$manual_payouts_disabled = !empty($config['disable_payouts']) || !empty($config['disable_manual_payouts']);
+if (isset($setting) && is_object($setting) && method_exists($setting, 'getValue')) {
+  $manual_payouts_disabled =
+    ((int)$setting->getValue('disable_payouts') === 1)
+    || ((int)$setting->getValue('disable_manual_payouts') === 1);
+}
 
 $ae_initial = array(
   'formAction'           => '?page=account&action=edit',
@@ -626,8 +626,7 @@ $ae_initial = array(
   'donateThreshold'      => array('min' => $donate_min),
   'apThresholdMin'       => $ap_min,
   'apThresholdMax'       => $ap_max,
-  'txFeeManual'          => isset($config['txfee_manual']) ? (float)$config['txfee_manual'] : 0.0,
-  'manualPayoutsDisabled'=> !empty($config['disable_payouts']) || !empty($config['disable_manual_payouts']),
+  'manualPayoutsDisabled'=> $manual_payouts_disabled,
   // CSRF token. index.php (line ~160) assigns this to Smarty as
   // {$CTOKEN}; we read it back so the SPA's hidden inputs match.
   'csrfToken'            => (string)($smarty->getTemplateVars('CTOKEN') ?? ''),

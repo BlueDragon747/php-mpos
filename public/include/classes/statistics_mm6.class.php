@@ -85,7 +85,7 @@ class Statistics_mm6 extends Base {
         IFNULL(SUM(IF(confirmations > -1 AND FROM_UNIXTIME(time) >= DATE_SUB(now(), INTERVAL 29030400 SECOND), amount, 0)), 0) AS 12MonthAmount
       FROM " . $this->block->getTableName());
     if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
-    	return $this->memcache->setCache(get_class($this) . __FUNCTION__, $result->fetch_assoc());
+     return $this->memcache->setCache(get_class($this) . __FUNCTION__, $result->fetch_assoc());
     return $this->sqlError();
   }
 
@@ -188,7 +188,7 @@ class Statistics_mm6 extends Base {
     if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $account_id . $limit)) return $data;
     $stmt = $this->mysqli->prepare("
       SELECT
-      	worker_name AS finder,
+       worker_name AS finder,
         COUNT(id) AS solvedblocks, 
         SUM(amount) AS generatedcoins
       FROM " . $this->block->getTableName() . "
@@ -786,7 +786,7 @@ class Statistics_mm6 extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
         id,
-      	IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
+       IFNULL(ROUND(SUM(IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)) * POW(2, " . $this->config['target_bits'] . ") / 3600 / 1000), 0) AS hashrate,
         HOUR(s.time) AS hour
       FROM " . $this->share->getTableName() . " AS s
       WHERE time <= FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(NOW())/(60*60))*(60*60))

@@ -1,0 +1,23 @@
+{
+  "worker_port": 9992,
+  "parent_urls": [
+    "http://poolrpc:replaceme@127.0.0.1:8772/"
+  ],
+  "aux_urls": [
+    "http://poolrpc:replaceme@127.0.0.1:8243/",
+    "http://poolrpc:replaceme@127.0.0.1:6852/",
+    "http://poolrpc:replaceme@127.0.0.1:12000/",
+    "http://poolrpc:replaceme@127.0.0.1:8984/",
+    "http://poolrpc:replaceme@127.0.0.1:5921/"
+  ],
+  "aux_payout_addresses": [
+    "bbtc1.....poolpayout",
+    "elt1......poolpayout",
+    "lit1......poolpayout",
+    "pho1......poolpayout",
+    "umo1......poolpayout"
+  ],
+  "merkle_size": 16,
+  "rewrite_target": 32,
+  "log_file": "/var/log/blakecoin-pool/mmproxy.log"
+}

@@ -84,18 +84,69 @@ function _system_run_all($cmd, $maxBytes = 8192) {
   return trim($out);
 }
 
+function _system_unit_candidate($unit) {
+  $scope = 'system';
+  $name = (string)$unit;
+  if (preg_match('/^(user|system):(.*)$/', $name, $m)) {
+    $scope = $m[1];
+    $name = $m[2];
+  }
+  if ($name !== '' && substr($name, -8) !== '.service' && substr($name, -6) !== '.timer') {
+    $name .= '.service';
+  }
+  return array('scope' => $scope, 'name' => $name);
+}
+
+function _system_unit_cmd($candidate, $verb) {
+  $prefix = $candidate['scope'] === 'user' ? 'systemctl --user ' : 'systemctl ';
+  return $prefix . $verb . ' ' . escapeshellarg($candidate['name']);
+}
+
+function _system_unit_best($units) {
+  if (!is_array($units)) $units = array($units);
+
+  $fallback = null;
+  foreach ($units as $unit) {
+    $candidate = _system_unit_candidate($unit);
+    if ($candidate['name'] === '') continue;
+    $state = _system_run(_system_unit_cmd($candidate, 'is-active'));
+    if ($state === '' || $state === 'unknown') continue;
+
+    $row = array(
+      'scope' => $candidate['scope'],
+      'name' => $candidate['name'],
+      'state' => $state,
+    );
+    if (in_array($state, array('active', 'activating', 'failed'), true)) return $row;
+    if ($fallback === null) $fallback = $row;
+  }
+
+  return $fallback ?: array('scope' => '', 'name' => '', 'state' => '');
+}
+
 /**
- * `systemctl is-active <unit>` → returns the literal state string
+ * systemctl is-active <unit> → returns the literal state string
  * ("active", "inactive", "failed", "activating", or "" on error).
+ * Candidate arrays are checked in order, with active/failed states taking
+ * precedence over inactive legacy units.
  */
 function _system_unit_state($unit) {
-  return _system_run('systemctl is-active ' . escapeshellarg($unit));
+  $best = _system_unit_best($unit);
+  return $best['state'];
 }
 
 function _system_unit_active_since($unit) {
-  $ts = _system_run('systemctl show ' . escapeshellarg($unit) . ' -p ActiveEnterTimestamp --value');
+  $best = _system_unit_best($unit);
+  if ($best['name'] === '') return '';
+  $ts = _system_run(_system_unit_cmd($best, 'show') . ' -p ActiveEnterTimestamp --value');
   if ($ts === '' || $ts === '0' || $ts === 'n/a') return '';
   return $ts;
+}
+
+function _system_unit_selected_name($unit) {
+  $best = _system_unit_best($unit);
+  if ($best['name'] === '') return '';
+  return ($best['scope'] !== '' ? $best['scope'] . ':' : '') . $best['name'];
 }
 
 function _system_first_existing_dir($paths) {
@@ -208,9 +259,15 @@ function _system_txid_short($txid) {
 function _system_tx_explorer_url($coin, $txid, $setting) {
   $txid = trim((string)$txid);
   $base = trim((string)$setting);
-  if ($txid === '' || $base === '') return '';
+  if ($txid === '') return '';
+  if ($base === '' || stripos($base, 'explorer.litecoin.net') !== false) {
+    $base = 'https://explorer.blakestream.io/{coin}?tx=';
+  }
   if (strpos($base, '{coin}') !== false) {
-    $base = str_replace('{coin}', strtolower((string)$coin), $base);
+    $base = str_replace('{coin}', rawurlencode(strtolower((string)$coin)), $base);
+  }
+  if (strpos($base, '{txid}') !== false) {
+    return str_replace('{txid}', rawurlencode($txid), $base);
   }
   return $base . rawurlencode($txid);
 }
@@ -398,21 +455,19 @@ $mpos_versions = array(
 
 // ---- Services panel -------------------------------------------------
 $services = array(
-  'eloipool'    => 'blakestream-mpos-eloipool',
-  'cronjobs-py' => 'blakestream-mpos-cronjobs',
-  'mergeminer'  => 'blakestream-mpos-mergeminer',
-  'sse'         => 'blakestream-mpos-sse',
-  'php-fpm'     => 'php8.3-fpm',
-  'mariadb'     => 'mariadb',
-  'memcached'   => 'memcached',
-  'nginx'       => 'nginx',
-  'backup-timer'=> 'blakestream-mpos-backup.timer',
+  'go-eliopool'    => array('user:mpos25-go-eliopool.service', 'system:blakestream-eloipool-25.2-go.service', 'system:blakestream-eliopool-25.2-go.service', 'system:blakestream-mpos-eloipool.service'),
+  'cronjobs-py'    => array('user:mpos25-cronjobs.service', 'system:blakestream-mpos-cronjobs.service'),
+  'merged-mining'  => array('user:mpos25-go-eliopool.service', 'system:blakestream-eloipool-25.2-go.service', 'system:blakestream-eliopool-25.2-go.service', 'user:mpos25-mmp.service', 'system:blakestream-mpos-mergeminer.service'),
+  'web'            => array('user:mpos25-web.service', 'system:nginx.service'),
+  'mariadb'        => array('user:mpos25-mariadb.service', 'system:mariadb.service'),
+  'memcached'      => 'system:memcached.service',
+  'backup-timer'   => array('user:mpos25-backup.timer', 'system:blakestream-mpos-backup.timer'),
 );
 $service_rows = array();
 foreach ($services as $label => $unit) {
   $service_rows[] = array(
     'label'  => $label,
-    'unit'   => $unit,
+    'unit'   => _system_unit_selected_name($unit),
     'state'  => _system_unit_state($unit),
     'since'  => _system_unit_active_since($unit),
   );
@@ -437,6 +492,7 @@ $last_backup_size = !empty($backup_status['last_size'])
 // exists, otherwise use the accessible backing filesystem so the operator
 // still sees the capacity pressure for the daemon storage.
 $daemon_disk_path = _system_first_existing_dir(array(
+  '/var/lib/blakestream-25.2',
   '/var/lib/blakestream-mpos',
   '/root/.blakecoin',
   '/root/.photon',
@@ -554,7 +610,7 @@ foreach ($daemons as $sym => $btc) {
       // Older daemons may not expose getnetworkinfo — leave blank.
     }
   }
-  $rule_status = bsx_daemon_rule_status($btc, array(), $netinfo, $info);
+  $rule_status = bsx_daemon_rule_status($btc, array(), $netinfo, $info, $sym);
   $daemon_rows[] = array(
     'sym'     => $sym,
     'chain'   => $chain ?: '?',
@@ -705,7 +761,7 @@ $memory_available_str = $mem_avail > 0 ? _system_mb($mem_avail) : '—';
 
 // ---- Process RSS ---------------------------------------------------
 $processes = array(
-  'eloipool'   => "ps -C python -o pid=,rss=,cmd= | grep eloipool.py | head -1 | awk '{print \$1\"|\"\$2}'",
+  'go-eliopool'=> "pgrep -af 'eliopool-25\\.2-go' | head -1 | awk '{cmd=\"ps -o rss= -p \"\$1; cmd | getline rss; print \$1\"|\"rss}'",
   // cronjobs-py renames its kernel comm to 'cronjobs-py' (setproctitle),
   // so we can't grep through `ps -C python`. The scheduler is bound to
   // 'serve'; the SSE worker uses 'sse' — pick the scheduler.
@@ -755,6 +811,7 @@ if (!preg_match('/^[A-Za-z0-9_]+$/', $accounts_table)) $accounts_table = 'accoun
 $tx_explorer_url = !empty($setting->getValue('website_transactionexplorer_disabled'))
   ? ''
   : (string)$setting->getValue('website_transactionexplorer_url');
+$tx_link_min_confirmations = 2;
 $outbox_counts = array(
   'pending'    => 0,
   'broadcast'  => 0,
@@ -777,7 +834,7 @@ if (isset($mysqli) && $stmt = $mysqli->prepare(
       $status = (string)$row['status'];
       $cnt = (int)$row['cnt'];
       $group = 'other';
-      if ($status === 'pending' || $status === 'indeterminate') {
+      if ($status === 'pending') {
         $group = 'pending';
       } elseif ($status === 'broadcast') {
         $group = 'broadcast';
@@ -795,7 +852,7 @@ if (isset($mysqli) && $stmt = $mysqli->prepare(
           )
         : 0;
       $outbox_counts[$group] += $cnt;
-      if (in_array($row['status'], array('pending', 'broadcast', 'indeterminate'), true)) {
+      if (in_array($row['status'], array('pending', 'broadcast'), true)) {
         $outbox_open_count += $cnt;
       }
       $outbox_rows[] = array(
@@ -807,7 +864,7 @@ if (isset($mysqli) && $stmt = $mysqli->prepare(
         'txid'   => $txid,
         'txshort'=> _system_txid_short($txid),
         'txconfirmations' => $tx_confirmations,
-        'txurl'  => $tx_confirmations > 0
+        'txurl'  => $tx_confirmations >= $tx_link_min_confirmations
                     ? _system_tx_explorer_url($ticker, $txid, $tx_explorer_url)
                     : '',
         'user'   => _system_user_summary($row['user_count'], $row['users']),
@@ -823,7 +880,10 @@ if (isset($mysqli) && $stmt = $mysqli->prepare(
 // Manual payout requests spend a short time in the legacy payouts_<slot>
 // tables before the payout worker converts them into transactions_outbox.
 // Include those completed=0 rows in Pending so a fresh Cash Out click is
-// visible immediately instead of only after the worker broadcasts it.
+// visible immediately. Once an open outbox row exists for the same
+// account/slot, the outbox is authoritative; showing both rows makes one
+// payout look like two. Failed/abandoned/review rows are not active payout
+// requests and must not hide the legacy queue row.
 $manual_payout_tables = array(
   ''    => array('payouts',     'transactions',     'blocks'),
   'mm'  => array('payouts_mm',  'transactions_mm',  'blocks_mm'),
@@ -833,13 +893,12 @@ $manual_payout_tables = array(
   'mm5' => array('payouts_mm5', 'transactions_mm5', 'blocks_mm5'),
 );
 $_manual_confirmations = isset($config['confirmations']) ? max(0, (int)$config['confirmations']) : 0;
-$_manual_txfee = isset($config['txfee_manual']) ? (float)$config['txfee_manual'] : 0.0;
-$_manual_txfee_sql = number_format($_manual_txfee, 8, '.', '');
 foreach ($manual_payout_tables as $_slot => $_tables) {
   list($_table, $_tx_table, $_block_table) = $_tables;
   if (!preg_match('/^payouts(_mm[1345]?)?$/', $_table)) continue;
   if (!preg_match('/^transactions(_mm[1345]?)?$/', $_tx_table)) continue;
   if (!preg_match('/^blocks(_mm[1345]?)?$/', $_block_table)) continue;
+  $_slot_sql = isset($mysqli) ? $mysqli->real_escape_string($_slot) : $_slot;
   $_confirmed_expr =
     "IFNULL(ROUND(("
     . "SUM(IF(((t.type IN ('Credit','Bonus') AND b.confirmations >= " . $_manual_confirmations . ") OR t.type = 'Credit_PPS'), t.amount, 0)) "
@@ -851,12 +910,18 @@ foreach ($manual_payout_tables as $_slot => $_tables) {
        . "SUM(q.net_amount) AS total_amount, MIN(q.time) AS oldest, MAX(q.time) AS latest "
        . "FROM ("
        . "SELECT p.id, p.account_id, a.username, p.time, "
-       . "GREATEST(ROUND((" . $_confirmed_expr . ") - " . $_manual_txfee_sql . ", 8), 0) AS net_amount "
+       . "GREATEST(ROUND((" . $_confirmed_expr . "), 8), 0) AS net_amount "
        . "FROM " . $_table . " AS p "
        . "LEFT JOIN " . $accounts_table . " AS a ON a.id = p.account_id "
        . "LEFT JOIN " . $_tx_table . " AS t ON t.account_id = p.account_id AND t.archived = 0 "
        . "LEFT JOIN " . $_block_table . " AS b ON b.id = t.block_id "
        . "WHERE p.completed = 0 "
+       . "AND NOT EXISTS ("
+       . "  SELECT 1 FROM transactions_outbox AS o "
+       . "  WHERE o.slot = '" . $_slot_sql . "' "
+       . "    AND o.account_id = p.account_id "
+       . "    AND o.status IN ('pending','broadcast')"
+       . ") "
        . "GROUP BY p.id, p.account_id, a.username, p.time"
        . ") AS q";
   if (isset($mysqli) && $stmt = $mysqli->prepare($sql)) {

@@ -117,10 +117,11 @@ class PplnsPayout:
         # P2Pool-style schemes). Default 'block' matches MPOS dist.
         reward_type = str(cfg.raw.get("reward_type", "block"))
         fixed_reward = float(cfg.raw.get("reward", 0.0))
-        # `config.difficulty` — almost always 32 for SHA-256-style chains.
-        # Used by the diff-normalisation math here; matches the value
-        # MPOS uses in its share.class.php SQL.
-        difficulty_const = int(cfg.raw.get("difficulty", 32))
+        # `config.difficulty` controls MPOS's diff-normalisation divisor.
+        # BlakeStream 15.21/25.2 sets this to 21 (`diff_32`), so keep the
+        # fallback aligned with global.inc.dist.php if the private override
+        # is incomplete.
+        difficulty_const = int(cfg.raw.get("difficulty", 21))
 
         log.info(
             "[%s/%s] %d unaccounted, last_share_id=%d, target_mode=%s "

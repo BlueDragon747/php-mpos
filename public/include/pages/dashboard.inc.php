@@ -85,6 +85,12 @@ $smarty->assign('COIN_ICON_MM1',    _wallet_coin_icon_url(isset($config['currenc
 $smarty->assign('COIN_ICON_MM3',    _wallet_coin_icon_url(isset($config['currency_mm3']) ? $config['currency_mm3'] : ''));
 $smarty->assign('COIN_ICON_MM4',    _wallet_coin_icon_url(isset($config['currency_mm4']) ? $config['currency_mm4'] : ''));
 $smarty->assign('COIN_ICON_MM5',    _wallet_coin_icon_url(isset($config['currency_mm5']) ? $config['currency_mm5'] : ''));
+$smarty->assign('COIN_ICON_PARENT_FALLBACK', _wallet_coin_icon_fallback_url(isset($config['currency'])     ? $config['currency']     : ''));
+$smarty->assign('COIN_ICON_MM_FALLBACK',     _wallet_coin_icon_fallback_url(isset($config['currency_mm'])  ? $config['currency_mm']  : ''));
+$smarty->assign('COIN_ICON_MM1_FALLBACK',    _wallet_coin_icon_fallback_url(isset($config['currency_mm1']) ? $config['currency_mm1'] : ''));
+$smarty->assign('COIN_ICON_MM3_FALLBACK',    _wallet_coin_icon_fallback_url(isset($config['currency_mm3']) ? $config['currency_mm3'] : ''));
+$smarty->assign('COIN_ICON_MM4_FALLBACK',    _wallet_coin_icon_fallback_url(isset($config['currency_mm4']) ? $config['currency_mm4'] : ''));
+$smarty->assign('COIN_ICON_MM5_FALLBACK',    _wallet_coin_icon_fallback_url(isset($config['currency_mm5']) ? $config['currency_mm5'] : ''));
 
 // PPLNS target — only meaningful when payout_system is pplns. Read from
 // the same place the legacy template does ($GLOBAL.pplns.target via the
@@ -228,6 +234,7 @@ foreach (array('primary','mm','mm1','mm3','mm4','mm5') as $slot) {
     'key'           => $slot,
     'currency'      => $currency,
     'icon_url'      => _wallet_coin_icon_url($currency),
+    'icon_fallback_url' => _wallet_coin_icon_fallback_url($currency),
     'payout_system' => $payout_systems[$slot] !== '' ? $payout_systems[$slot] : $payout_systems['primary'],
     'pplns_target'  => $pplns_targets[$slot],
     'roundshares'   => array(

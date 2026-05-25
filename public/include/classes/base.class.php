@@ -45,6 +45,12 @@ class Base {
   public function getTableName() {
     return $this->table;
   }
+  protected function getCanonicalShareMaxId() {
+    $stmt = $this->mysqli->prepare("SELECT IFNULL(MAX(id), 0) AS id FROM shares");
+    if ($this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result())
+      return $result->fetch_object()->id;
+    return 0;
+  }
   public function setDebug($debug) {
     $this->debug = $debug;
   }

@@ -1,0 +1,160 @@
+openapi: 3.1.0
+info:
+  title: Blakestream MPOS Go API
+  version: 0.1.0
+  summary: Backend-first API contract for the MPOS 25.2 Go rewrite.
+servers:
+  - url: /api/v1
+security:
+  - cookieSession: []
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: __Host-session
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+    CoinSlot:
+      type: object
+      required: [slot, ticker, name, role]
+      properties:
+        slot:
+          type: string
+        ticker:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [parent, aux]
+    Session:
+      type: object
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+        userId:
+          type: integer
+        username:
+          type: string
+        isAdmin:
+          type: boolean
+paths:
+  /healthz:
+    get:
+      security: []
+      summary: Process health.
+      responses:
+        "200":
+          description: Healthy.
+  /readyz:
+    get:
+      security: []
+      summary: Dependency readiness.
+      responses:
+        "200":
+          description: Ready or degraded readiness payload.
+  /session:
+    get:
+      summary: Current browser session state.
+      responses:
+        "200":
+          description: Session state.
+  /me:
+    get:
+      summary: Current authenticated account.
+      responses:
+        "200":
+          description: Current account or anonymous state.
+  /pools:
+    get:
+      summary: Pool and coin slot inventory.
+      responses:
+        "200":
+          description: Active slot map.
+  /pools/{poolId}/stats:
+    get:
+      summary: Pool statistics parity endpoint.
+      parameters:
+        - name: poolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /pools/{poolId}/blocks:
+    get:
+      summary: Blocks with cursor pagination.
+      parameters:
+        - name: poolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /pools/{poolId}/payments:
+    get:
+      summary: Pool payments and payout state.
+      parameters:
+        - name: poolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /miners/{address}/dashboard:
+    get:
+      summary: Miner dashboard parity endpoint.
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /miners/{address}/workers:
+    get:
+      summary: Miner worker list and hashrate parity endpoint.
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /admin/users:
+    get:
+      summary: Admin user management.
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /admin/jobs:
+    get:
+      summary: Durable job state.
+      responses:
+        "501":
+          description: Planned backend-first implementation.
+  /admin/audit:
+    get:
+      summary: Administrative audit events.
+      responses:
+        "501":
+          description: Planned backend-first implementation.

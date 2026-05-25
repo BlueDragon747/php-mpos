@@ -10,10 +10,13 @@ export interface CoinSlotState {
   currency: string;
   // Long coin name for the per-coin card header, e.g. 'Blakecoin'.
   coinName: string;
-  // GitHub raw URL to the coin's bitcoin.png icon, derived from its
-  // releases-URL via _ae_coin_icon_url(). Empty string if unmapped —
-  // the Vue side hides the <img> in that case.
+  // GitHub raw URL to the coin's current Qt icon basename, derived from
+  // its releases-URL via _wallet_coin_icon_url(). Empty string if
+  // unmapped — the Vue side hides the <img> in that case.
   iconUrl: string;
+  // Optional fallback to src/qt/res/icons/bitcoin.png when a 25.2 repo
+  // has a coin-specific basename configured but the URL fails to load.
+  iconFallbackUrl: string;
   // Current saved values from the accounts table.
   address: string;
   threshold: number;
@@ -122,8 +125,6 @@ export interface EditAccountInitial {
   apThresholdMin: number;
   apThresholdMax: number;
 
-  // Manual payout transaction fee (display only).
-  txFeeManual: number;
   manualPayoutsDisabled: boolean;
 
   // CSRF token (rendered into every form's hidden input).

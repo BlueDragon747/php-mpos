@@ -72,6 +72,7 @@
     justify-self: stretch;
     width: auto;
     max-width: 100%;
+    overflow: visible;
   }
   .bsx-system-page .daemon-outbox-grid > .bsx-card {
     margin-bottom: 0;
@@ -459,6 +460,8 @@
     position: absolute;
     bottom: calc(100% + 8px);
     right: 0;
+    width: max-content;
+    max-width: min(760px, calc(100vw - 32px));
     background: rgba(20, 23, 28, 0.96);
     border: 1px solid rgba(79, 195, 247, 0.35);
     color: #cdd;
@@ -468,7 +471,10 @@
     font-weight: 400;
     letter-spacing: normal;
     text-transform: none;
+    line-height: 1.35;
+    text-align: left;
     white-space: nowrap;
+    overflow-wrap: normal;
     opacity: 0;
     pointer-events: none;
     transition: opacity 150ms ease, transform 150ms ease;
@@ -503,6 +509,16 @@
     color: #1f2933;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
+  .bsx-system-page .daemon-rule-note {
+    margin-top: 4px;
+    max-width: 360px;
+    color: #e57373;
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  [data-theme="light"] .bsx-system-page .daemon-rule-note { color: #b71c1c; }
 </style>
 
 {* ===== Backups (full-width top section, with inline settings) ===== *}
@@ -898,6 +914,9 @@
             {else}
               <span class="pill pill-active" data-tooltip="{$SYS_DAEMONS[d].rules.detail|escape}">{$SYS_DAEMONS[d].rules.label|escape|default:"OK"}</span>
             {/if}
+            {if $SYS_DAEMONS[d].rules.raw_warning|default:"" && !$SYS_DAEMONS[d].rules.warning_explained}
+              <div class="daemon-rule-note">{$SYS_DAEMONS[d].rules.raw_warning|escape}</div>
+            {/if}
           </td>
         </tr>
       {/section}
@@ -934,7 +953,7 @@
       <button type="button" class="outbox-filter" data-outbox-filter="pending">Pending <span id="sys-outbox-count-pending" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.pending|default:"0"|escape}</span></button>
       <button type="button" class="outbox-filter" data-outbox-filter="broadcast">Broadcasted <span id="sys-outbox-count-broadcast" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.broadcast|default:"0"|escape}</span></button>
       <button type="button" class="outbox-filter" data-outbox-filter="reconciled">Reconciled <span id="sys-outbox-count-reconciled" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.reconciled|default:"0"|escape}</span></button>
-      <button type="button" class="outbox-filter" data-outbox-filter="other"{if !$SYS_OUTBOX_COUNTS.other} hidden{/if} data-tooltip="Abandoned or unknown payout states">Other <span id="sys-outbox-count-other" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.other|default:"0"|escape}</span></button>
+      <button type="button" class="outbox-filter" data-outbox-filter="other"{if !$SYS_OUTBOX_COUNTS.other} hidden{/if} data-tooltip="Abandoned or review payout states">Other <span id="sys-outbox-count-other" class="outbox-filter-count">{$SYS_OUTBOX_COUNTS.other|default:"0"|escape}</span></button>
     </div>
   </header>
   <div class="bsx-card-body">
@@ -952,7 +971,7 @@
             {elseif $SYS_OUTBOX[o].status == "reconciled"}
               <span class="pill pill-active">reconciled</span>
             {elseif $SYS_OUTBOX[o].status == "indeterminate"}
-              <span class="pill pill-inactive">indeterminate</span>
+              <span class="pill pill-inactive">review</span>
             {elseif $SYS_OUTBOX[o].status == "abandoned"}
               <span class="pill pill-disabled">abandoned</span>
             {else}
@@ -964,8 +983,10 @@
           <td>{$SYS_OUTBOX[o].age|escape}</td>
           <td class="outbox-user-col">{$SYS_OUTBOX[o].user|escape|default:"—"}</td>
           <td class="outbox-tx-col">
-            {if $SYS_OUTBOX[o].status == "broadcast" && $SYS_OUTBOX[o].txurl && $SYS_OUTBOX[o].txconfirmations > 0}
+            {if $SYS_OUTBOX[o].status == "broadcast" && $SYS_OUTBOX[o].txurl && $SYS_OUTBOX[o].txid}
               <a class="outbox-tx-link" href="{$SYS_OUTBOX[o].txurl|escape}" target="_blank" rel="noopener">{$SYS_OUTBOX[o].txshort|escape}</a>
+            {elseif $SYS_OUTBOX[o].status == "broadcast" && $SYS_OUTBOX[o].txid}
+              <span class="outbox-tx-link" title="{$SYS_OUTBOX[o].txid|escape}">{$SYS_OUTBOX[o].txshort|escape}</span>
             {else}
               —
             {/if}
@@ -1008,12 +1029,16 @@
     if (s === 'pending')       return '<span class="pill pill-warn">pending</span>';
     if (s === 'broadcast')     return '<span class="pill pill-warn">broadcast</span>';
     if (s === 'reconciled')    return '<span class="pill pill-active">reconciled</span>';
-    if (s === 'indeterminate') return '<span class="pill pill-inactive">indeterminate</span>';
+    if (s === 'indeterminate') return '<span class="pill pill-inactive">review</span>';
     if (s === 'abandoned')     return '<span class="pill pill-disabled">abandoned</span>';
     return '<span class="pill pill-disabled">' + esc(s) + '</span>';
   }
   function outboxTxLink(row) {
-    if (!row || row.status !== 'broadcast' || !row.txurl || !row.txid || Number(row.txconfirmations || 0) < 1) return '—';
+    if (!row || row.status !== 'broadcast' || !row.txid) return '—';
+    if (!row.txurl) {
+      return '<span class="outbox-tx-link" title="' + esc(row.txid) + '">' +
+             esc(row.txshort || row.txid) + '</span>';
+    }
     return '<a class="outbox-tx-link" href="' + esc(row.txurl) + '" target="_blank" rel="noopener">' +
            esc(row.txshort || row.txid) + '</a>';
   }
@@ -1023,7 +1048,7 @@
     var status = String((row && row.status) || '');
     var group = String((row && row.group) || '');
     if (group) return group;
-    if (status === 'pending' || status === 'indeterminate') return 'pending';
+    if (status === 'pending') return 'pending';
     if (status === 'broadcast') return 'broadcast';
     if (status === 'reconciled') return 'reconciled';
     return 'other';
@@ -1109,7 +1134,11 @@
     else if (rule.class === 'err') cls = 'pill-inactive';
     else if (rule.class === 'warn') cls = 'pill-warn';
     var title = rule.detail ? ' data-tooltip="' + esc(rule.detail) + '"' : '';
-    return '<span class="pill ' + cls + '"' + title + '>' + esc(rule.label || 'OK') + '</span>';
+    var note = '';
+    if (rule.raw_warning && !rule.warning_explained) {
+      note = '<div class="daemon-rule-note">' + esc(rule.raw_warning) + '</div>';
+    }
+    return '<span class="pill ' + cls + '"' + title + '>' + esc(rule.label || 'OK') + '</span>' + note;
   }
 
   function fill(id, html) {

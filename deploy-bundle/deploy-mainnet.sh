@@ -5,9 +5,10 @@
 #
 #   1. Pull or reuse the six mainnet daemon Docker images.
 #   2. Create data folders, render configs with active mainnet peer
-#      addnodes (from explorer.blakestream.io), and start the 6 daemons.
-#   3. If bootstrap is enabled, replay each coin's bootstrap.dat
-#      sequentially so ELT/UMO do not OOM the host.
+#      addnodes (from explorer.blakestream.io), and stage daemon images.
+#   3. If bootstrap is enabled, download each coin bootstrap and start
+#      each 25.2 daemon with -loadblock=<datadir>/bootstrap.dat so ELT/UMO
+#      do not OOM the host.
 #   4. Wait for every daemon's RPC to respond.
 #   5. Push the Blakestream-Eliopool tree (or its tarball) and stand up
 #      eloipool stratum + merged-mine-proxy with MAINNET ports.
@@ -19,6 +20,8 @@
 #   8. Install + start cronjobs-py as the AUTHORITATIVE scheduler.
 #      (Drift mode is documented in 70-install-cronjobs-py.sh and
 #      can be enabled per-host for rebase soak windows.)
+#   9. Install the share-log importer so Go Eloipool shares feed the MPOS
+#      MariaDB `shares` table used by dashboard, statistics, and payouts.
 #
 # Usage:
 #   sudo bash deploy-bundle/deploy-mainnet.sh
@@ -41,9 +44,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/BlueDragon747/php-mpos.git}"
+MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/SidGrip/php-mpos.git}"
+# Pre-live: use 25.2-GO until the Go Eloipool cutover is live, then switch
+# ELIOPOOL_BRANCH to master once master carries these updates.
 ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
-ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-master}"
+ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
 ELIOPOOL_TMPROOT=""
 ENVRC=""
 
@@ -86,7 +91,7 @@ Source repos:
 Daemon images:
   The six coin daemons are pulled directly from Docker Hub by default:
 
-    \${MPOS_DOCKER_HUB:-sidgrip}/<coin>:\${MPOS_IMAGE_TAG:-latest}
+    \${MPOS_DOCKER_HUB:-sidgrip}/<coin>:\${MPOS_IMAGE_TAG:-25.2}
 
   To clone the coin repos and build local runtime images on the target
   server instead of pulling daemon images:
@@ -97,12 +102,13 @@ Tunables (env):
   MPOS_DOCKER_HUB     Docker Hub org/user for coin daemon images
                        (default: sidgrip when pulling, local when building).
   MPOS_IMAGE_TAG      Docker image tag for all daemon images
-                       (default: latest when pulling, 15.21-local when building).
+                       (default: 25.2 when pulling, 25.2-local when building).
   MPOS_PULL_DAEMON_IMAGES
                        1 pulls daemon images; 0 clones coin repos and builds
                        local daemon images first (default: 1).
   MPOS_DAEMON_SOURCE_REF
-                       Branch/tag used for source builds (default: master).
+                       Branch/tag used for source builds (default: 0.25.2).
+                       Switch to master after live cutover.
   MPOS_DAEMON_BUILD_ROOT
                        Source-build working directory
                        (default: /root/blakestream-daemon-builds).
@@ -117,8 +123,14 @@ Tunables (env):
   MPOS_EXPLORER_API_BASE
                        Explorer API used to fetch addnode peers
                        (default: https://explorer.blakestream.io/api).
-  BOOTSTRAP_URL       Base URL for bootstrap.dat files
+  BOOTSTRAP_URL       Base URL for 25.2 bootstrap discovery
                        (default: https://bootstrap.blakestream.io).
+  BOOTSTRAP_SERIES    Bootstrap series path (default: 25.2).
+  BOOTSTRAP_MIRROR_DISCOVERY
+                       1 queries mirrors.json and probes mirrors; 0 uses
+                       BOOTSTRAP_URL directly (default: 1).
+  BOOTSTRAP_MIRROR_HOST
+                       Optional fixed mirror hostname override.
   ELIOPOOL_TREE        Local checkout of eloipool_Blakecoin
                        (optional; auto-cloned from \${ELIOPOOL_REPO_URL}
                        on branch \${ELIOPOOL_BRANCH} if unset).
@@ -155,14 +167,14 @@ Tunables (env):
   SKIP_BOOTSTRAP       Skip sequential bootstrap.dat replay (rely on p2p sync)
 
 Daemon image examples:
-  # Default: pull sidgrip/<coin>:latest
+  # Default: pull sidgrip/<coin>:25.2
   $0
 
-  # Clone coin repos and build local/<coin>:15.21-local runtime images
+  # Clone coin repos and build local/<coin>:25.2-local runtime images
   MPOS_PULL_DAEMON_IMAGES=0 $0
 
   # Use already-loaded custom images without pulling or building
-  MPOS_DOCKER_HUB=local MPOS_IMAGE_TAG=15.21-test \\
+  MPOS_DOCKER_HUB=local MPOS_IMAGE_TAG=25.2-test \\
   MPOS_PULL_DAEMON_IMAGES=0 SKIP_DAEMON_IMAGE_BUILD=1 $0
 
 Source-build notes:
@@ -175,7 +187,7 @@ Bootstrap examples:
   # Default public bootstrap pull
   $0
 
-  # Local/private bootstrap mirror with per-coin subdirs
+  # Local/private bootstrap mirror with /25.2/*.dat.xz and sidecars
   BOOTSTRAP_URL=http://127.0.0.1:8080 $0
 
   # Skip bootstrap replay and sync from peers
@@ -295,7 +307,7 @@ if [ -n "${PRIOR_ENV}" ]; then
         # operator's current environment, or live config win so an old
         # /root/.mpos-deploy.env cannot pin stale release values.
         case "$key" in
-            MPOS_STRATUM_PORT|BOOTSTRAP_IMPORT_TIMEOUT_S|BOOTSTRAP_IMPORT_SLEEP_S|BOOTSTRAP_DOWNLOAD_ATTEMPTS|BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S|BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S|BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S|TIP_CATCH_TIMEOUT_S|TIP_CATCH_LAG|SKIP_DAEMONS|SKIP_BOOTSTRAP)
+            MPOS_STRATUM_PORT|BOOTSTRAP_URL|BOOTSTRAP_SERIES|BOOTSTRAP_MIRROR_DISCOVERY|BOOTSTRAP_MIRROR_HOST|BOOTSTRAP_IMPORT_TIMEOUT_S|BOOTSTRAP_IMPORT_SLEEP_S|BOOTSTRAP_DOWNLOAD_ATTEMPTS|BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S|BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S|BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S|TIP_CATCH_TIMEOUT_S|TIP_CATCH_LAG|SKIP_DAEMONS|SKIP_BOOTSTRAP)
                 continue
                 ;;
         esac
@@ -332,18 +344,24 @@ export MPOS_NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-$(random_hex 24)}"
 export MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
 if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
     export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
-    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-15.21-local}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2-local}"
 else
     export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
 fi
-export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
+# Pre-live: source-build daemons from the 0.25.2 wallet branches. Change to
+# master after live cutover once master carries the 25.2 wallet updates.
+export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
 export MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 export MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
 export MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
 export SKIP_DAEMON_IMAGE_BUILD="${SKIP_DAEMON_IMAGE_BUILD:-0}"
 export MPOS_EXPLORER_API_BASE="${MPOS_EXPLORER_API_BASE:-https://explorer.blakestream.io/api}"
 export BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
+export BOOTSTRAP_SERIES="${BOOTSTRAP_SERIES:-25.2}"
+export BOOTSTRAP_CANONICAL_HOST="${BOOTSTRAP_CANONICAL_HOST:-bootstrap.blakestream.io}"
+export BOOTSTRAP_MIRROR_DISCOVERY="${BOOTSTRAP_MIRROR_DISCOVERY:-1}"
+export BOOTSTRAP_MIRROR_HOST="${BOOTSTRAP_MIRROR_HOST:-}"
 export BOOTSTRAP_IMPORT_TIMEOUT_S="${BOOTSTRAP_IMPORT_TIMEOUT_S:-21600}"
 export BOOTSTRAP_IMPORT_SLEEP_S="${BOOTSTRAP_IMPORT_SLEEP_S:-60}"
 export BOOTSTRAP_DOWNLOAD_ATTEMPTS="${BOOTSTRAP_DOWNLOAD_ATTEMPTS:-12}"
@@ -395,6 +413,12 @@ require_pattern MPOS_DAEMON_BUILD_DOCKER_MODE "${MPOS_DAEMON_BUILD_DOCKER_MODE}"
 require_pattern SKIP_DAEMON_IMAGE_BUILD "${SKIP_DAEMON_IMAGE_BUILD}" '[01]'
 require_pattern MPOS_EXPLORER_API_BASE "${MPOS_EXPLORER_API_BASE}" 'https?://[A-Za-z0-9._:/%-]+'
 require_pattern BOOTSTRAP_URL     "${BOOTSTRAP_URL}"     'https?://[A-Za-z0-9._:/%-]+'
+require_pattern BOOTSTRAP_SERIES  "${BOOTSTRAP_SERIES}"  '[A-Za-z0-9._-]{1,32}'
+require_pattern BOOTSTRAP_CANONICAL_HOST "${BOOTSTRAP_CANONICAL_HOST}" '[A-Za-z0-9.-]{1,253}'
+require_pattern BOOTSTRAP_MIRROR_DISCOVERY "${BOOTSTRAP_MIRROR_DISCOVERY}" '[01]'
+if [ -n "$BOOTSTRAP_MIRROR_HOST" ]; then
+    require_pattern BOOTSTRAP_MIRROR_HOST "${BOOTSTRAP_MIRROR_HOST}" '[A-Za-z0-9.-]{1,253}'
+fi
 require_pattern BOOTSTRAP_IMPORT_TIMEOUT_S "${BOOTSTRAP_IMPORT_TIMEOUT_S}" '[1-9][0-9]{0,5}'
 require_pattern BOOTSTRAP_IMPORT_SLEEP_S "${BOOTSTRAP_IMPORT_SLEEP_S}" '[1-9][0-9]{0,4}'
 require_pattern BOOTSTRAP_DOWNLOAD_ATTEMPTS "${BOOTSTRAP_DOWNLOAD_ATTEMPTS}" '[1-9][0-9]{0,3}'
@@ -422,7 +446,8 @@ ENVRC=$(mktemp)
                MPOS_DAEMON_BUILD_ROOT MPOS_DAEMON_BUILD_JOBS \
                MPOS_DAEMON_BUILD_DOCKER_MODE SKIP_DAEMON_IMAGE_BUILD \
                MPOS_EXPLORER_API_BASE \
-               BOOTSTRAP_URL \
+               BOOTSTRAP_URL BOOTSTRAP_SERIES BOOTSTRAP_CANONICAL_HOST \
+               BOOTSTRAP_MIRROR_DISCOVERY BOOTSTRAP_MIRROR_HOST \
                BOOTSTRAP_IMPORT_TIMEOUT_S BOOTSTRAP_IMPORT_SLEEP_S \
                BOOTSTRAP_DOWNLOAD_ATTEMPTS BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S \
                BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S \
@@ -651,6 +676,11 @@ deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/70-install-cronjobs-py.sh"
 deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/75-install-sse.sh"
 
 # ---------------------------------------------------------------
+# Step 7.6: Import Go Eloipool accepted shares into MPOS MariaDB
+# ---------------------------------------------------------------
+deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/76-install-sharelog-importer.sh"
+
+# ---------------------------------------------------------------
 # Step 8: Open firewall, install logrotate, install daily backup,
 #          run final verify pass.
 # ---------------------------------------------------------------
@@ -684,7 +714,6 @@ echo
 echo "  Web UI:        http://${VPS_IP}:${MPOS_HTTP_PORT}/"
 echo "  Stratum:       stratum+tcp://${VPS_IP}:${MPOS_STRATUM_PORT}"
 echo "  Admin user:    ${MPOS_ADMIN_USER}"
-echo "  Admin pass:    ${MPOS_ADMIN_PASS}"
 echo "  Admin email:   ${MPOS_ADMIN_EMAIL}"
 echo "  Saved env:     /root/.mpos-deploy.env"
 if [ "${LOCAL_DEPLOY}" = "1" ]; then
@@ -698,10 +727,12 @@ if [ "${LOCAL_DEPLOY}" = "1" ]; then
     echo "    daemons:     docker ps; docker logs blc --tail 30"
     echo "    eloipool:    journalctl -u blakestream-mpos-eloipool -fn 50"
     echo "    cronjobs-py: tail -f /var/log/blakestream-mpos/cronjobs.stdout"
+    echo "    shares:      tail -f /var/log/blakestream-mpos/sharelog-importer.stdout"
     echo "    PHP ad-hoc:  ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true"
 else
     echo "    daemons:     ssh ${HOST} 'docker ps; docker logs blc --tail 30'"
     echo "    eloipool:    ssh ${HOST} 'journalctl -u blakestream-mpos-eloipool -fn 50'"
     echo "    cronjobs-py: ssh ${HOST} 'tail -f /var/log/blakestream-mpos/cronjobs.stdout'"
+    echo "    shares:      ssh ${HOST} 'tail -f /var/log/blakestream-mpos/sharelog-importer.stdout'"
     echo "    PHP ad-hoc:  ssh ${HOST} 'ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true'"
 fi

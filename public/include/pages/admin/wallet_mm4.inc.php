@@ -7,6 +7,7 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
   die("404 Page not found");
 }
 require_once __DIR__ . '/_daemon_rule_status.inc.php';
+$wallet_ticker = isset($config['currency_mm4']) ? $config['currency_mm4'] : '';
 
 if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $debug->append('No cached version available, fetching from backend', 3);
@@ -46,14 +47,13 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $smarty->assign("LOCKED", $dLockedBalance_mm4);
   $smarty->assign("NEWMINT", $dNewmint_mm4);
   $smarty->assign("COININFO", $aGetInfo_mm4);
-  $smarty->assign("COIN_RULE_STATUS", bsx_daemon_rule_status($bitcoin_mm4, $aGetInfo_mm4));
+  $smarty->assign("COIN_RULE_STATUS", bsx_daemon_rule_status($bitcoin_mm4, $aGetInfo_mm4, null, null, $wallet_ticker));
 
   // Tempalte specifics
 } else {
   $debug->append('Using cached page', 3);
 }
 
-$wallet_ticker = isset($config['currency_mm4']) ? $config['currency_mm4'] : '';
 include __DIR__ . '/_wallet_coin_meta.inc.php';
 
 $smarty->assign("CONTENT", "default.tpl");

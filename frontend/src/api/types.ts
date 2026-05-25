@@ -104,6 +104,7 @@ export interface CoinStats {
   key: string;
   currency: string;
   icon_url: string;
+  icon_fallback_url: string;
   payout_system: string;
   pplns_target: number | string | null;
   roundshares: { valid: number; invalid: number; estimated: number; progress: number };

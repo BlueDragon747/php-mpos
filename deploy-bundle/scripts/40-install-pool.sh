@@ -15,7 +15,7 @@ ELOIPOOL_SRC="${ELIOPOOL_TREE}/deploy-bundle/eloipool"
 POOL_ROOT="${MPOS_INSTALL_ROOT}/eloipool"
 VENV="${MPOS_INSTALL_ROOT}/venv"
 LOG_POOL="${MPOS_LOG_ROOT}/pool"
-mkdir -p "$LOG_POOL"
+mkdir -p "$LOG_POOL" "${MPOS_INSTALL_ROOT}/bin"
 chown -R blakestream-mpos:blakestream-mpos "$LOG_POOL"
 
 say "syncing eloipool tree to ${POOL_ROOT}"
@@ -40,6 +40,19 @@ fi
     setproctitle \
     pyasynchat \
     pyasyncore
+
+say "building Go merged-mine-proxy"
+if ! command -v go >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y golang-go >/dev/null
+    else
+        echo "go toolchain is required to build merged-mine-proxy-go" >&2
+        exit 1
+    fi
+fi
+(cd "${POOL_ROOT}/merged-mine-proxy-go" && go test ./... && CGO_ENABLED=0 go build -trimpath -o "${MPOS_INSTALL_ROOT}/bin/merged-mine-proxy-go" ./cmd/merged-mine-proxy)
+chmod 755 "${MPOS_INSTALL_ROOT}/bin/merged-mine-proxy-go"
 
 # Generate a testnet pool tracker address from the running blakecoin
 # daemon if the operator didn't pin one.
@@ -186,7 +199,7 @@ Type=simple
 User=blakestream-mpos
 Group=blakestream-mpos
 WorkingDirectory=${POOL_ROOT}
-ExecStart=${VENV}/bin/python -u ${POOL_ROOT}/merged-mine-proxy.py3 ${MMP_ARGS}
+ExecStart=${MPOS_INSTALL_ROOT}/bin/merged-mine-proxy-go ${MMP_ARGS}
 StandardOutput=append:${LOG_POOL}/mergeminer.stdout
 StandardError=append:${LOG_POOL}/mergeminer.stderr
 Restart=always

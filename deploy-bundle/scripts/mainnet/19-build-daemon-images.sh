@@ -10,8 +10,10 @@ say()  { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;31m!! %s\033[0m\n' "$*" >&2; }
 
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-15.21-local}"
-MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
+MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2-local}"
+# Pre-live: source-build daemons from the 0.25.2 wallet branches. Change to
+# master after live cutover once master carries the 25.2 wallet updates.
+MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
 MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
 MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
@@ -29,6 +31,8 @@ esac
 
 COINS=(blc pho bbtc elt lit umo)
 
+# Wallet repos are pinned by MPOS_DAEMON_SOURCE_REF. Use 0.25.2 for pre-live
+# 25.2 builds; change the source ref to master after live cutover.
 declare -A COIN_REPO=(
     [blc]="https://github.com/BlueDragon747/Blakecoin.git"
     [pho]="https://github.com/BlueDragon747/photon.git"
@@ -146,6 +150,7 @@ RUN apt-get update -qq \\
         libevent-2.1-7 \\
         libevent-pthreads-2.1-7 \\
         libminiupnpc17 \\
+        libsqlite3-0 \\
         libssl3 \\
         libstdc++6 \\
         libzmq5 \\
@@ -208,9 +213,10 @@ build_one_coin() {
 
 say "building daemons with concurrency ${BUILD_CONCURRENCY} (monitor: ${MONITOR_LOG})"
 PIDS=()
+BUILD_FAIL=0
 for coin in "${COINS[@]}"; do
     while [ "${#PIDS[@]}" -ge "$BUILD_CONCURRENCY" ]; do
-        wait -n 2>/dev/null || true
+        wait -n 2>/dev/null || BUILD_FAIL=1
         survivors=()
         for p in "${PIDS[@]}"; do
             kill -0 "$p" 2>/dev/null && survivors+=("$p")
@@ -223,8 +229,16 @@ for coin in "${COINS[@]}"; do
 done
 # Drain remaining
 for p in "${PIDS[@]}"; do
-    wait "$p" || warn "build pid $p exited non-zero"
+    wait "$p" || {
+        warn "build pid $p exited non-zero"
+        BUILD_FAIL=1
+    }
 done
+
+if [ "$BUILD_FAIL" = "1" ]; then
+    warn "one or more daemon image builds failed"
+    exit 1
+fi
 
 cleanup_monitor
 
