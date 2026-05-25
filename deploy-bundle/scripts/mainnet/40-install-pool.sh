@@ -24,6 +24,7 @@ POOL_ROOT="${INSTALL_ROOT}/eloipool"
 VENV="${INSTALL_ROOT}/venv"
 LOG_POOL="${LOG_ROOT}/pool"
 CONFIG_DIR="${INSTALL_ROOT}/config"
+GO_SHARE_LOG_PATH="${GO_SHARE_LOG_PATH:-/var/log/blakestream-eliopool-25.2-go/shares.log}"
 mkdir -p "$LOG_POOL" "${INSTALL_ROOT}/bin" "$CONFIG_DIR"
 chown -R blakestream-mpos:blakestream-mpos "$LOG_POOL"
 chown root:blakestream-mpos "$CONFIG_DIR"
@@ -49,6 +50,8 @@ if [ -d "${OVERRIDES_DIR}" ]; then
 fi
 
 say "installing MPOS auth backend"
+mkdir -p "${POOL_ROOT}/authentication"
+touch "${POOL_ROOT}/authentication/__init__.py"
 install -m 644 "${MPOS_REPO}/ops/eloipool-authentication-mpos.py" \
     "${POOL_ROOT}/authentication/mpos.py"
 
@@ -57,6 +60,16 @@ say "preparing python venv"
 "${VENV}/bin/pip" install -q --upgrade pip
 "${VENV}/bin/pip" install -q \
     cymysql PyMySQL base58 twisted setproctitle pyasynchat pyasyncore
+
+find_go_source() {
+    if [ -d "${POOL_ROOT}/merged-mine-proxy-go" ]; then
+        printf '%s\n' "${POOL_ROOT}/merged-mine-proxy-go"
+    elif [ -f "${POOL_ROOT}/go.mod" ] && [ -d "${POOL_ROOT}/cmd/merged-mine-proxy" ]; then
+        printf '%s\n' "${POOL_ROOT}"
+    fi
+}
+
+GO_POOL_SRC="$(find_go_source)"
 
 if [ -n "${MMP_GO_PREBUILT_BIN:-}" ]; then
     say "installing prebuilt Go merged-mine-proxy from ${MMP_GO_PREBUILT_BIN}"
@@ -76,9 +89,27 @@ else
             exit 1
         fi
     fi
-    (cd "${POOL_ROOT}/merged-mine-proxy-go" && go test ./... && CGO_ENABLED=0 go build -trimpath -o "${INSTALL_ROOT}/bin/merged-mine-proxy-go" ./cmd/merged-mine-proxy)
+    [ -n "$GO_POOL_SRC" ] || {
+        echo "merged-mine-proxy Go source not found under ${POOL_ROOT}" >&2
+        exit 1
+    }
+    say "building Go merged-mine-proxy from ${GO_POOL_SRC}"
+    (cd "$GO_POOL_SRC" && go test ./... && CGO_ENABLED=0 go build -trimpath -o "${INSTALL_ROOT}/bin/merged-mine-proxy-go" ./cmd/merged-mine-proxy)
 fi
 chmod 755 "${INSTALL_ROOT}/bin/merged-mine-proxy-go"
+
+if [ -n "${ELIOPOOL_GO_PREBUILT_BIN:-}" ]; then
+    say "installing prebuilt Go eloipool from ${ELIOPOOL_GO_PREBUILT_BIN}"
+    install -m 755 "${ELIOPOOL_GO_PREBUILT_BIN}" "${INSTALL_ROOT}/bin/eloipool-go"
+else
+    [ -n "$GO_POOL_SRC" ] || {
+        echo "Go eloipool source not found under ${POOL_ROOT}" >&2
+        exit 1
+    }
+    say "building Go eloipool from ${GO_POOL_SRC}"
+    (cd "$GO_POOL_SRC" && CGO_ENABLED=0 go build -trimpath -o "${INSTALL_ROOT}/bin/eloipool-go" ./cmd/eloipool)
+fi
+chmod 755 "${INSTALL_ROOT}/bin/eloipool-go"
 
 MMP_READY_CHECK="${INSTALL_ROOT}/bin/check-mmp-ready.py"
 cat > "$MMP_READY_CHECK" <<'PY'
@@ -131,26 +162,62 @@ declare -A RPC_PORT=(
     [umo]=5921
 )
 
+rpc_call() {
+    local port="$1" rpc_user="$2" rpc_pass="$3" method="$4" params="${5:-[]}"
+    curl -sS --max-time 10 -u "${rpc_user}:${rpc_pass}" \
+        --data "{\"jsonrpc\":\"1.0\",\"id\":\"deploy\",\"method\":\"${method}\",\"params\":${params}}" \
+        -H 'content-type: text/plain' \
+        "http://127.0.0.1:${port}/" 2>/dev/null || true
+}
+
+rpc_success() {
+    python3 -c 'import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if data.get("error") is None and data.get("result") is not None else 1)'
+}
+
+ensure_default_wallet_loaded() {
+    local port="$1" rpc_user="$2" rpc_pass="$3" resp
+
+    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getwalletinfo '[]')
+    if printf '%s' "$resp" | rpc_success; then
+        return 0
+    fi
+
+    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" loadwallet '[""]')
+    if ! printf '%s' "$resp" | rpc_success; then
+        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" createwallet '[""]')
+    fi
+    if ! printf '%s' "$resp" | rpc_success; then
+        echo "failed to load or create the default wallet on RPC port ${port}: ${resp}" >&2
+        return 1
+    fi
+
+    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getwalletinfo '[]')
+    if ! printf '%s' "$resp" | rpc_success; then
+        echo "default wallet is not usable on RPC port ${port}: ${resp}" >&2
+        return 1
+    fi
+}
+
 # Helper: ask a daemon for a fresh address. Tries the requested address type
 # first; on any error falls back to the daemon's default address type.
 get_address() {
     local port="$1" label="$2" rpc_user="$3" rpc_pass="$4"
     local address_type="${5:-bech32}"
     local resp addr
-    resp=$(curl -sS --max-time 5 -u "${rpc_user}:${rpc_pass}" \
-        --data "{\"jsonrpc\":\"1.0\",\"id\":\"deploy\",\"method\":\"getnewaddress\",\"params\":[\"${label}\",\"${address_type}\"]}" \
-        -H 'content-type: text/plain' \
-        "http://127.0.0.1:${port}/" 2>/dev/null || true)
+    ensure_default_wallet_loaded "$port" "$rpc_user" "$rpc_pass" || return 1
+    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\",\"${address_type}\"]")
     addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
     if [ -n "$addr" ]; then
         printf '%s' "$addr"
         return 0
     fi
     # Fallback to default (legacy P2PKH).
-    resp=$(curl -sS --max-time 5 -u "${rpc_user}:${rpc_pass}" \
-        --data "{\"jsonrpc\":\"1.0\",\"id\":\"deploy\",\"method\":\"getnewaddress\",\"params\":[\"${label}\"]}" \
-        -H 'content-type: text/plain' \
-        "http://127.0.0.1:${port}/" 2>/dev/null || true)
+    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\"]")
     addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
     printf '%s' "$addr"
 }
@@ -274,6 +341,10 @@ PY
 chown root:blakestream-mpos "$MMP_CONFIG"
 chmod 640 "$MMP_CONFIG"
 
+install -d -m 0755 -o blakestream-mpos -g blakestream-mpos "$(dirname "$GO_SHARE_LOG_PATH")"
+touch "$GO_SHARE_LOG_PATH"
+chown blakestream-mpos:blakestream-mpos "$GO_SHARE_LOG_PATH"
+
 chown -R blakestream-mpos:blakestream-mpos "$POOL_ROOT" "$VENV" "${INSTALL_ROOT}/bin"
 
 say "writing systemd units"
@@ -289,15 +360,9 @@ Type=simple
 User=blakestream-mpos
 Group=blakestream-mpos
 WorkingDirectory=${POOL_ROOT}
-Environment=PYTHONPATH=${POOL_ROOT}:${POOL_ROOT}/vendor
-# Wait for MariaDB to be ACTUALLY ready before eloipool tries to
-# initialise the MPOS auth module. systemd's After=mariadb.service
-# only waits for the unit's exec to start; mariadb may still be
-# loading databases when eloipool's authentication.mpos.connect()
-# fires. A failed auth-module init is fatal: eloipool stays up but
-# every mining.authorize is silently rejected.
+Environment=ELIOPOOL_PARENT_RPC_URL=http://${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}@127.0.0.1:8772/
 ExecStartPre=/bin/sh -c 'for i in \$(seq 1 30); do mysqladmin ping -h ${MPOS_DB_HOST} --silent && exit 0; sleep 1; done; echo "mariadb never came ready" >&2; exit 1'
-ExecStart=${VENV}/bin/python -u ${POOL_ROOT}/eloipool.py
+ExecStart=${INSTALL_ROOT}/bin/eloipool-go -start-proxy=false -stratum 0.0.0.0:${MPOS_STRATUM_PORT} -rpc 127.0.0.1:19334 -proxy 127.0.0.1:19335 -tracker-address ${MPOS_TRACKER_ADDR} -share-log ${GO_SHARE_LOG_PATH} -pool-log ${LOG_POOL}/eloipool-go.log
 StandardOutput=append:${LOG_POOL}/eloipool.stdout
 StandardError=append:${LOG_POOL}/eloipool.stderr
 Restart=always
@@ -326,6 +391,7 @@ StandardOutput=append:${LOG_POOL}/mergeminer.stdout
 StandardError=append:${LOG_POOL}/mergeminer.stderr
 Restart=always
 RestartSec=5
+TimeoutStartSec=240
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

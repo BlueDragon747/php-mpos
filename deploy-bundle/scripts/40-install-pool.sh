@@ -24,6 +24,8 @@ rsync -a --delete --exclude='__pycache__' --exclude='*.pyc' \
     "${ELOIPOOL_SRC}/" "${POOL_ROOT}/"
 
 say "installing MPOS auth backend"
+mkdir -p "${POOL_ROOT}/authentication"
+touch "${POOL_ROOT}/authentication/__init__.py"
 install -m 644 "${MPOS_REPO_ROOT}/ops/eloipool-authentication-mpos.py" \
     "${POOL_ROOT}/authentication/mpos.py"
 
@@ -51,21 +53,84 @@ if ! command -v go >/dev/null 2>&1; then
         exit 1
     fi
 fi
-(cd "${POOL_ROOT}/merged-mine-proxy-go" && go test ./... && CGO_ENABLED=0 go build -trimpath -o "${MPOS_INSTALL_ROOT}/bin/merged-mine-proxy-go" ./cmd/merged-mine-proxy)
+MMP_GO_SRC=
+if [ -d "${POOL_ROOT}/merged-mine-proxy-go" ]; then
+    MMP_GO_SRC="${POOL_ROOT}/merged-mine-proxy-go"
+elif [ -f "${POOL_ROOT}/go.mod" ] && [ -d "${POOL_ROOT}/cmd/merged-mine-proxy" ]; then
+    MMP_GO_SRC="${POOL_ROOT}"
+fi
+[ -n "$MMP_GO_SRC" ] || {
+    echo "merged-mine-proxy Go source not found under ${POOL_ROOT}" >&2
+    exit 1
+}
+say "building Go merged-mine-proxy from ${MMP_GO_SRC}"
+(cd "$MMP_GO_SRC" && go test ./... && CGO_ENABLED=0 go build -trimpath -o "${MPOS_INSTALL_ROOT}/bin/merged-mine-proxy-go" ./cmd/merged-mine-proxy)
 chmod 755 "${MPOS_INSTALL_ROOT}/bin/merged-mine-proxy-go"
 
 # Generate a testnet pool tracker address from the running blakecoin
 # daemon if the operator didn't pin one.
 NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-blakestream-testnet}"
+
+rpc_call() {
+    local port="$1" method="$2" params="${3:-[]}"
+    curl -sS --max-time 10 -u "${NODE_RPC_USER}:${NODE_RPC_PASS}" \
+        --data "{\"jsonrpc\":\"1.0\",\"id\":\"deploy\",\"method\":\"${method}\",\"params\":${params}}" \
+        -H 'content-type: text/plain' \
+        "http://127.0.0.1:${port}/" 2>/dev/null || true
+}
+
+rpc_success() {
+    python3 -c 'import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if data.get("error") is None and data.get("result") is not None else 1)'
+}
+
+ensure_default_wallet_loaded() {
+    local port="$1" resp
+
+    resp=$(rpc_call "$port" getwalletinfo '[]')
+    if printf '%s' "$resp" | rpc_success; then
+        return 0
+    fi
+
+    resp=$(rpc_call "$port" loadwallet '[""]')
+    if ! printf '%s' "$resp" | rpc_success; then
+        resp=$(rpc_call "$port" createwallet '[""]')
+    fi
+    if ! printf '%s' "$resp" | rpc_success; then
+        echo "failed to load or create the default wallet on RPC port ${port}: ${resp}" >&2
+        return 1
+    fi
+
+    resp=$(rpc_call "$port" getwalletinfo '[]')
+    if ! printf '%s' "$resp" | rpc_success; then
+        echo "default wallet is not usable on RPC port ${port}: ${resp}" >&2
+        return 1
+    fi
+}
+
+get_address() {
+    local port="$1" label="$2" address_type="${3:-bech32}"
+    local resp addr
+    ensure_default_wallet_loaded "$port" || return 1
+    resp=$(rpc_call "$port" getnewaddress "[\"${label}\",\"${address_type}\"]")
+    addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
+    if [ -n "$addr" ]; then
+        printf '%s' "$addr"
+        return 0
+    fi
+    resp=$(rpc_call "$port" getnewaddress "[\"${label}\"]")
+    addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
+    printf '%s' "$addr"
+}
+
 if [ -z "${MPOS_TRACKER_ADDR:-}" ]; then
     say "asking blakecoind for a fresh tracker address"
-    MPOS_TRACKER_ADDR=$(curl -fsSL --max-time 5 \
-        -u "${NODE_RPC_USER}:${NODE_RPC_PASS}" \
-        --data '{"jsonrpc":"1.0","id":"deploy","method":"getnewaddress","params":["pool-tracker","bech32"]}' \
-        -H 'content-type: text/plain' \
-        http://127.0.0.1:29332/ \
-        | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
+    MPOS_TRACKER_ADDR=$(get_address 29332 "pool-tracker" bech32)
     if [ -z "$MPOS_TRACKER_ADDR" ]; then
         echo "failed to obtain tracker address from daemon" >&2
         exit 1
@@ -89,12 +154,7 @@ for sym in bbtc elt lit pho umo; do
         continue
     fi
     say "asking ${sym} daemon for an aux payout address"
-    AUX_TBADDR[$sym]=$(curl -fsSL --max-time 5 \
-        -u "${NODE_RPC_USER}:${NODE_RPC_PASS}" \
-        --data '{"jsonrpc":"1.0","id":"deploy","method":"getnewaddress","params":["pool-aux","bech32"]}' \
-        -H 'content-type: text/plain' \
-        "http://127.0.0.1:${AUX_RPC_PORT[$sym]}/" \
-        | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
+    AUX_TBADDR[$sym]=$(get_address "${AUX_RPC_PORT[$sym]}" "pool-aux" bech32)
     [ -n "${AUX_TBADDR[$sym]}" ] || { echo "failed to obtain ${sym} aux address" >&2; exit 1; }
 done
 

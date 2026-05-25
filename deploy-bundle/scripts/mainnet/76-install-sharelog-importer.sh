@@ -13,6 +13,7 @@ VENV="${CRON_DEST}/.venv"
 IMPORTER_SRC="${MPOS_REPO}/deploy-bundle/scripts/go-share-log-importer.py"
 IMPORTER_DEST="${BIN_DIR}/go-share-log-importer.py"
 SHARE_LOG_PATH="${GO_SHARE_LOG_PATH:-/var/log/blakestream-eliopool-25.2-go/shares.log}"
+SYSTEMD_ENV="${INSTALL_ROOT}/.deploy.systemd.env"
 
 if ! id blakestream-mpos >/dev/null 2>&1; then
     useradd --system --no-create-home --shell /usr/sbin/nologin blakestream-mpos
@@ -26,6 +27,12 @@ install -d -m 0755 -o root -g root "${BIN_DIR}"
 install -m 0755 -o root -g root "${IMPORTER_SRC}" "${IMPORTER_DEST}"
 install -d -m 0755 -o blakestream-mpos -g blakestream-mpos "${STATE_DIR}"
 install -d -m 0755 -o blakestream-mpos -g blakestream-mpos "${LOG_ROOT}"
+install -d -m 0755 -o blakestream-mpos -g blakestream-mpos "$(dirname "$SHARE_LOG_PATH")"
+touch "$SHARE_LOG_PATH"
+chown blakestream-mpos:blakestream-mpos "$SHARE_LOG_PATH"
+sed -n 's/^export //p' /root/.mpos-deploy.env > "$SYSTEMD_ENV"
+chown root:blakestream-mpos "$SYSTEMD_ENV"
+chmod 640 "$SYSTEMD_ENV"
 
 say "writing /etc/systemd/system/blakestream-mpos-sharelog-importer.service"
 cat > /etc/systemd/system/blakestream-mpos-sharelog-importer.service <<EOF
@@ -39,7 +46,7 @@ Type=simple
 User=blakestream-mpos
 Group=blakestream-mpos
 WorkingDirectory=${INSTALL_ROOT}
-EnvironmentFile=${INSTALL_ROOT}/.deploy.env
+EnvironmentFile=${SYSTEMD_ENV}
 Environment=GO_SHARE_LOG_PATH=${SHARE_LOG_PATH}
 Environment=SHARE_IMPORT_STATE=${STATE_DIR}/go-share-log-importer.state
 ExecStart=${VENV}/bin/python ${IMPORTER_DEST}
