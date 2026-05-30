@@ -79,6 +79,20 @@ class Base {
     $this->session = $session;
   }
   public function setConfig($config) {
+    $slot = '';
+    if (preg_match('/_(mm[0-9]*)$/', $this->table, $m)) {
+      $slot = $m[1];
+    }
+    if ($slot !== '') {
+      $confirmationsKey = 'confirmations_' . $slot;
+      if (isset($config[$confirmationsKey])) {
+        $config['confirmations'] = $config[$confirmationsKey];
+      }
+      $networkConfirmationsKey = 'network_confirmations_' . $slot;
+      if (isset($config[$networkConfirmationsKey])) {
+        $config['network_confirmations'] = $config[$networkConfirmationsKey];
+      }
+    }
     $this->config = $config;
   }
   public function setErrorCodes(&$aErrorCodes) {

@@ -23,7 +23,7 @@ apt-get -qq update
 # step 60 needs cron, step 85 needs logrotate.
 say "apt install (LAMP + helpers + docker prereqs)"
 apt-get -qq install -y \
-    curl jq wget rsync xz-utils xxd ca-certificates gnupg lsb-release sudo \
+    curl jq wget rsync unzip xz-utils xxd ca-certificates gnupg lsb-release sudo \
     git ufw cron logrotate \
     nginx \
     mariadb-server \

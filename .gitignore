@@ -15,6 +15,7 @@
 /cronjobs/logs/**.txt
 /cronjobs/logs/**.txt.*.gz
 /logs/*
+/mpos-25.2-go-deploy-*.log
 
 # Test configs
 public/include/config/global.inc.scrypt.php

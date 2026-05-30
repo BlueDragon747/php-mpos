@@ -63,6 +63,13 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       $aPoolActiveSlots[$tk] = $s;
     }
   }
+  $aPoolConfirmationsByCoin = array();
+  foreach ($aPoolActiveSlots as $sTicker => $sSuffix) {
+    $sConfirmKey = ($sSuffix === '') ? 'confirmations' : ('confirmations_' . $sSuffix);
+    $aPoolConfirmationsByCoin[$sTicker] = isset($config[$sConfirmKey])
+      ? (int)$config[$sConfirmKey]
+      : (int)$config['confirmations'];
+  }
   $aPoolUnions = array();
   foreach ($aPoolActiveSlots as $sTicker => $sSuffix) {
     $sBlocksTbl = 'blocks' . ($sSuffix !== '' ? '_' . $sSuffix : '');
@@ -84,6 +91,11 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   if ($oRes = $mysqli->query("SELECT * FROM $sPoolSql")) {
     while ($r = $oRes->fetch_assoc()) $aBlocksFoundData[] = $r;
     $oRes->free();
+  }
+  foreach ($aBlocksFoundData as $key => $aData) {
+    $aBlocksFoundData[$key]['confirmations_required'] = isset($aPoolConfirmationsByCoin[$aData['chain']])
+      ? $aPoolConfirmationsByCoin[$aData['chain']]
+      : (int)$config['confirmations'];
   }
   count($aBlocksFoundData) > 0 ? $aBlockData = $aBlocksFoundData[0] : $aBlockData = array();
 

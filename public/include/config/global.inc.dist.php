@@ -408,14 +408,14 @@ $config['reward_mm6'] = 50;
  *  Credit and Network confirmation settings
  *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-confirmations
  */
-$config['confirmations'] = 140;
-$config['confirmations_mm'] = 140;
-$config['confirmations_mm1'] = 120;
-$config['confirmations_mm2'] = 140;
-$config['confirmations_mm3'] = 480;
-$config['confirmations_mm4'] = 140;
-$config['confirmations_mm5'] = 140;
-$config['confirmations_mm6'] = 140;
+$config['confirmations'] = 120;
+$config['confirmations_mm'] = 120;
+$config['confirmations_mm1'] = 100;
+$config['confirmations_mm2'] = 120;
+$config['confirmations_mm3'] = 460;
+$config['confirmations_mm4'] = 120;
+$config['confirmations_mm5'] = 120;
+$config['confirmations_mm6'] = 120;
 $config['network_confirmations'] = 120;
 $config['network_confirmations_mm'] = 120;
 $config['network_confirmations_mm1'] = 100;

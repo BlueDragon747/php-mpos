@@ -28,7 +28,7 @@
 {if $GLOBAL.config.payout_system != 'pps'}
 <footer>
 <ul>
-  <li>Note: Round Earnings are not credited until <font color="orange">{$GLOBAL.confirmations}</font> confirms.</font></li>
+  <li>Note: Round Earnings are credited after each chain reaches its configured maturity.</li>
 </ul>
 {/if}
 </footer>

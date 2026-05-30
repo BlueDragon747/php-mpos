@@ -31,12 +31,13 @@
         <td align="center">{$BLOCKSFOUND[block].height}</td>
 {/if}
         <td align="center">
-{if $BLOCKSFOUND[block].confirmations >= $GLOBAL.confirmations}
+{assign var="required_confirmations" value=$BLOCKSFOUND[block].confirmations_required|default:$GLOBAL.confirmations}
+{if $BLOCKSFOUND[block].confirmations >= $required_confirmations}
           <span class="confirmed">Confirmed</span>
 {else if $BLOCKSFOUND[block].confirmations == -1}
           <span class="orphan">Orphan</span>
 {else}
-          <span class="unconfirmed">{$GLOBAL.confirmations - $BLOCKSFOUND[block].confirmations} left</span>
+          <span class="unconfirmed">{$required_confirmations - $BLOCKSFOUND[block].confirmations} left</span>
 {/if}
         </td>
         <td>{if $BLOCKSFOUND[block].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$BLOCKSFOUND[block].finder|default:"unknown"|escape}{/if}</td>
@@ -65,6 +66,6 @@
     </tbody>
   </table>
   <footer>
-    {if $GLOBAL.config.payout_system != 'pps'}<ul><li>Note: Round Earnings are not credited until <font color="orange">{$GLOBAL.confirmations}</font> confirms.</li></ul>{/if}
+    {if $GLOBAL.config.payout_system != 'pps'}<ul><li>Note: Round Earnings are credited after each chain reaches its configured maturity.</li></ul>{/if}
   </footer>
 </article>

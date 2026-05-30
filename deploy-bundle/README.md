@@ -17,6 +17,10 @@ What it installs:
 - `cronjobs-py` scheduler running as a systemd service
 - daily DB + wallet backup helper and systemd timer, controlled by the
   MPOS `settings.backups_enabled` admin setting
+- logrotate policy for MPOS, Go Eloipool, MMP, share importer, nginx,
+  backup, and cron logs
+- optional resource-based `/swapfile` setup before source builds and
+  bootstrap replay
 - a root-owned, no-argument disk stats helper with a sudoers rule limited
   to `www-data` running `/usr/local/sbin/blakestream-mpos-disk-stats`
 
@@ -35,6 +39,7 @@ deploy-bundle/
 │   ├── 50-install-mpos.sh    # MariaDB DB, web tree, render global.inc.php, nginx vhost
 │   ├── 60-install-cronjobs-py.sh
 │   ├── mainnet/
+│   │   ├── 11-configure-swap.sh  # show current swap and apply operator choice
 │   │   ├── 19-build-daemon-images.sh  # optional source-build runtime images
 │   │   ├── 21-bootstrap-coins.sh  # sequential solo daemon bootstrap (see below)
 │   │   └── ...
@@ -83,18 +88,71 @@ The script also ensures `dbcache=200` and `maxmempool=50` are set in
 each `<coin>.conf`, which keeps post-bootstrap steady-state RAM well
 within budget when all 6 daemons run concurrently.
 
+## Swapfile prompt
+
+`deploy-mainnet.sh` runs `scripts/mainnet/11-configure-swap.sh` at the
+start of the deploy, before package installs, source builds, bootstrap
+downloads, or imports. The step clears the screen, prints current RAM,
+active swap, root disk free, and a resource-based recommendation. By
+default it opens an arrow-key menu so the operator can pick the
+recommended size, enter a custom size in GB, or leave swap unchanged, then
+leave the deploy running. If a file-backed swap entry already exists, the
+deploy resizes/replaces that file instead of adding a second swapfile. The
+same step writes `/etc/sysctl.d/99-swappiness.conf` with
+`vm.swappiness=10` and applies it with `sysctl --system`, even when swap is
+left unchanged.
+
+Useful overrides:
+
+```bash
+# Apply the recommended size without prompting
+MPOS_SWAP_ACTION=auto sudo -E bash deploy-bundle/deploy-mainnet.sh
+
+# Force 12 GiB, useful on small Ubuntu 24.04 builders
+MPOS_SWAP_ACTION=auto MPOS_SWAP_SIZE_MB=12288 sudo -E bash deploy-bundle/deploy-mainnet.sh
+
+# Leave host swap untouched
+MPOS_SWAP_ACTION=skip sudo -E bash deploy-bundle/deploy-mainnet.sh
+```
+
+## Log rotation
+
+`deploy-mainnet.sh` installs `deploy-bundle/logrotate/blakestream-mpos`
+as `/etc/logrotate.d/blakestream-mpos`. The policy rotates and compresses
+the direct pool logs so `shares.log`, `mmp.log`, `eloipool-go.log`,
+systemd stdout/stderr captures, nginx logs, backup logs, and cron logs do
+not grow unbounded. Pool-facing logs keep 7 daily rotations and rotate
+early at 100 MB. PHP cron per-job logs keep 4 weekly rotations with a
+30-day max age.
+
+Validate the active policy with:
+
+```bash
+sudo logrotate --debug /etc/logrotate.d/blakestream-mpos
+systemctl status logrotate.timer
+```
+
 ## Mainnet Usage
 
 Every scenario starts by cloning this repo, on either the pool server
 (local install) or your workstation (SSH install):
 
 ```bash
-git clone https://github.com/SidGrip/php-mpos.git php-mpos
+git clone -b 25.2-GO https://github.com/BlueDragon747/php-mpos.git php-mpos
 cd php-mpos
 ```
 
 `sudo -E` preserves the `export`ed env vars across the privilege jump.
 If you are already root, replace `sudo -E bash …` with `bash …`.
+
+Each run writes a full deploy transcript in the repo root by default:
+
+```text
+mpos-25.2-go-deploy-<utc>.log
+```
+
+Override it with `MPOS_DEPLOY_LOG=/path/to/deploy.log`, or set
+`MPOS_DEPLOY_LOG=0` to disable transcript logging.
 
 ### Deploy on the VPS — pull pre-built daemon containers (recommended)
 
@@ -191,7 +249,8 @@ If `bootstrap.dat` is already staged in `/root/.<coin>/` from a prior
 run, the deploy detects it and skips re-download.
 
 Eliopool is pulled from
-`https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `25.2-GO` when
+`https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `25.2-GO`
+(`https://github.com/BlueDragon747/eloipool_Blakecoin/tree/25.2-GO`) when
 `ELIOPOOL_TREE` is unset. To deploy from a local Eliopool checkout
 instead:
 
@@ -231,7 +290,7 @@ need to change `MPOS_DOMAIN` (for non-catch-all nginx vhosts) and
 ## Dependencies
 
 - Mainnet deployment must be run from a clone of
-  `https://github.com/SidGrip/php-mpos`.
+  `https://github.com/BlueDragon747/php-mpos/tree/25.2-GO`.
 - Mainnet daemon images are pulled from Docker Hub by default. The default
   image set is
   `sidgrip/{blakecoin,photon,blakebitcoin,electron,lithium,universalmolecule}:25.2`.
@@ -240,7 +299,8 @@ need to change `MPOS_DOMAIN` (for non-catch-all nginx vhosts) and
   target host, also set `SKIP_DAEMON_IMAGE_BUILD=1`.
 - This bundle expects an `eloipool_Blakecoin` tree available
   at deploy time. By default the deploy script auto-clones it from
-  `https://github.com/BlueDragon747/eloipool_Blakecoin.git` (branch `25.2-GO`)
+  `https://github.com/BlueDragon747/eloipool_Blakecoin.git` (branch `25.2-GO`;
+  `https://github.com/BlueDragon747/eloipool_Blakecoin/tree/25.2-GO`)
   into a temp directory; override with `ELIOPOOL_TREE=/path/to/checkout`
   to use a local copy instead. It rsyncs the eloipool tree from there
   rather than maintaining a parallel copy.

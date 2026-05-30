@@ -19,15 +19,4 @@ if ! logrotate --debug /etc/logrotate.d/blakestream-mpos >/tmp/logrotate-debug.o
     exit 1
 fi
 
-# Truncate the two known-noisy logs that already exceed sane size,
-# so we get the disk back without waiting for the first rotation
-# tick. The systemd `copytruncate` will keep doing this thereafter.
-for f in /var/log/blakestream-mpos/pool/mmp.log \
-         /var/log/blakestream-mpos/pool/mergeminer.stderr; do
-    if [ -f "$f" ] && [ "$(stat -c%s "$f")" -gt $((50*1024*1024)) ]; then
-        say "truncating $(basename "$f") (was $(du -h "$f" | cut -f1))"
-        : > "$f"
-    fi
-done
-
 say "step 85 done — logrotate policy live"

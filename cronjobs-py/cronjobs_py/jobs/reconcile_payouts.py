@@ -49,6 +49,7 @@ from dataclasses import dataclass
 
 from ..logger import get
 from ..scheduler import JobContext
+from ..settings import slot_int
 
 log = get(__name__)
 
@@ -90,7 +91,7 @@ class ReconcilePayouts:
         # tunable existed.
         min_confs = int(
             cfg.raw.get("reconcile_min_confirmations")
-            or cfg.raw.get("confirmations", 100)
+            or slot_int(cfg.raw, "confirmations", self.slot, 100)
         )
 
         log.info(

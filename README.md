@@ -52,10 +52,13 @@ Server requirements:
 * Outbound HTTPS and git access for package installs, Docker image pulls,
   bootstrap downloads, and optional source builds.
 * Docker Engine for the six 25.2 wallet daemon containers.
-* Nginx, PHP-FPM, MariaDB, memcached, Python 3 venv tooling, Bun, and Go.
-  The mainnet deploy installs these on the pool server.
+* Nginx, PHP-FPM, MariaDB, memcached, Python 3 venv tooling, Bun, Go, and
+  helper tools including `unzip`. The mainnet deploy installs these on the
+  pool server.
 * Enough disk for chain data, Docker images, MPOS, logs, and backups. Source
   builds need about 15 GB extra under `/root/blakestream-daemon-builds`.
+* Swap sized for the host. The deploy shows current swap, recommends a
+  resource-based swapfile size, and lets the operator create or skip it.
 
 Pool software and branch requirements:
 
@@ -220,6 +223,7 @@ sudo -E bash deploy-bundle/deploy-mainnet.sh
 
 Eliopool is cloned automatically from
 `https://github.com/BlueDragon747/eloipool_Blakecoin.git` branch `25.2-GO`
+(`https://github.com/BlueDragon747/eloipool_Blakecoin/tree/25.2-GO`)
 unless you set `ELIOPOOL_TREE` to a local checkout.
 Switch the Eloipool branch default to `master` after live cutover once
 master carries the Go Eloipool updates.

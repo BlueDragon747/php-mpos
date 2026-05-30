@@ -44,7 +44,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/SidGrip/php-mpos.git}"
+MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/BlueDragon747/php-mpos.git}"
 # Pre-live: use 25.2-GO until the Go Eloipool cutover is live, then switch
 # ELIOPOOL_BRANCH to master once master carries these updates.
 ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
@@ -103,6 +103,9 @@ Tunables (env):
                        (default: sidgrip when pulling, local when building).
   MPOS_IMAGE_TAG      Docker image tag for all daemon images
                        (default: 25.2 when pulling, 25.2-local when building).
+  MPOS_DEPLOY_LOG     Full deploy transcript path. Defaults to
+                       ./mpos-25.2-go-deploy-<utc>.log in the repo root.
+                       Set to 0, off, or none to disable.
   MPOS_PULL_DAEMON_IMAGES
                        1 pulls daemon images; 0 clones coin repos and builds
                        local daemon images first (default: 1).
@@ -120,6 +123,13 @@ Tunables (env):
   SKIP_DAEMON_IMAGE_BUILD
                        With MPOS_PULL_DAEMON_IMAGES=0, skip source builds and
                        use already-loaded local daemon images (default: 0).
+  MPOS_SWAP_ACTION    prompt shows current swap + recommendation and asks;
+                       auto applies the recommendation; skip leaves swap
+                       unchanged (default: prompt).
+  MPOS_SWAP_SIZE_MB   Optional explicit swapfile size in MiB. If unset,
+                       deploy recommends from host RAM and free disk.
+  MPOS_SWAP_FILE      Swapfile path. Default is the first existing file-backed
+                       swap entry, otherwise /swapfile.
   MPOS_EXPLORER_API_BASE
                        Explorer API used to fetch addnode peers
                        (default: https://explorer.blakestream.io/api).
@@ -199,6 +209,29 @@ fi
 say() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 
+setup_deploy_log() {
+    local log_setting="${MPOS_DEPLOY_LOG:-}" log_path log_dir
+    if [ "${MPOS_DEPLOY_LOG_ACTIVE:-0}" = "1" ]; then
+        return
+    fi
+    case "$log_setting" in
+        0|false|FALSE|off|OFF|none|NONE)
+            return
+            ;;
+    esac
+
+    log_path="${log_setting:-${REPO_ROOT}/mpos-25.2-go-deploy-$(date -u +%Y%m%dT%H%M%SZ).log}"
+    log_dir="$(dirname "$log_path")"
+    mkdir -p "$log_dir"
+    touch "$log_path"
+    export MPOS_DEPLOY_LOG_ACTIVE=1
+    export MPOS_DEPLOY_LOG_PATH="$log_path"
+    exec > >(tee -a "$log_path") 2>&1
+    say "deploy transcript log: ${log_path}"
+}
+
+setup_deploy_log
+
 LOCAL_DEPLOY=0
 HOST="${1:-}"
 case "${HOST}" in
@@ -216,17 +249,7 @@ if [ "${LOCAL_DEPLOY}" = "1" ] && [ "$(id -u)" != "0" ]; then
     die "local install must be run as root (use sudo -E bash deploy-bundle/deploy-mainnet.sh)"
 fi
 
-# Eliopool: prefer a local checkout if ELIOPOOL_TREE is set; otherwise
-# auto-clone the published repo into a temp dir so the deploy is
-# self-contained for users who only have the MPOS repo.
-if [ -z "${ELIOPOOL_TREE:-}" ]; then
-    ELIOPOOL_TMPROOT="$(mktemp -d)"
-    ELIOPOOL_TREE="${ELIOPOOL_TMPROOT}/eloipool"
-    git clone --depth 1 -b "${ELIOPOOL_BRANCH}" "${ELIOPOOL_REPO_URL}" "${ELIOPOOL_TREE}"
-fi
-
-# Pre-flight: paths exist locally. SSH mode also verifies remote auth.
-[ -d "${ELIOPOOL_TREE}" ] || die "eloipool_Blakecoin checkout not found at ${ELIOPOOL_TREE}"
+DEPLOY_OVERALL_START=$(date +%s)
 
 host_run() {
     if [ "${LOCAL_DEPLOY}" = "1" ]; then
@@ -247,6 +270,54 @@ else
     SSH_PORT_DETECTED="$(ssh -G "${HOST}" 2>/dev/null | awk '/^port / {print $2; exit}')"
     export MPOS_SSH_PORT="${MPOS_SSH_PORT:-${SSH_PORT_DETECTED:-22}}"
 fi
+
+export MPOS_SWAP_ACTION="${MPOS_SWAP_ACTION:-prompt}"
+export MPOS_SWAP_SIZE_MB="${MPOS_SWAP_SIZE_MB:-}"
+export MPOS_SWAP_FILE="${MPOS_SWAP_FILE:-}"
+export MPOS_SWAP_PROMPT_TIMEOUT_S="${MPOS_SWAP_PROMPT_TIMEOUT_S:-120}"
+export MPOS_SWAP_DISK_RESERVE_MB="${MPOS_SWAP_DISK_RESERVE_MB:-4096}"
+
+run_initial_swap_config() {
+    local script="${SCRIPT_DIR}/scripts/mainnet/11-configure-swap.sh"
+    say "initial swap check"
+    if [ "${LOCAL_DEPLOY}" = "1" ]; then
+        bash "$script"
+    else
+        local ssh_tty=()
+        if [ "$MPOS_SWAP_ACTION" = "prompt" ] && [ -t 0 ]; then
+            ssh_tty=(-tt)
+        fi
+        scp -q "$script" "${HOST}:/tmp/11-configure-swap.sh"
+        ssh "${ssh_tty[@]}" "${HOST}" "env \
+            MPOS_SWAP_ACTION=$(printf '%q' "$MPOS_SWAP_ACTION") \
+            MPOS_SWAP_SIZE_MB=$(printf '%q' "$MPOS_SWAP_SIZE_MB") \
+            MPOS_SWAP_FILE=$(printf '%q' "$MPOS_SWAP_FILE") \
+            MPOS_SWAP_PROMPT_TIMEOUT_S=$(printf '%q' "$MPOS_SWAP_PROMPT_TIMEOUT_S") \
+            MPOS_SWAP_DISK_RESERVE_MB=$(printf '%q' "$MPOS_SWAP_DISK_RESERVE_MB") \
+            bash /tmp/11-configure-swap.sh"
+    fi
+}
+
+run_initial_swap_config
+
+if [ "${LOCAL_DEPLOY}" = "1" ] && ! command -v git >/dev/null 2>&1; then
+    say "installing git for local deploy bootstrap"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -qq update
+    apt-get -qq install -y git ca-certificates
+fi
+
+# Eliopool: prefer a local checkout if ELIOPOOL_TREE is set; otherwise
+# auto-clone the published repo into a temp dir so the deploy is
+# self-contained for users who only have the MPOS repo.
+if [ -z "${ELIOPOOL_TREE:-}" ]; then
+    ELIOPOOL_TMPROOT="$(mktemp -d)"
+    ELIOPOOL_TREE="${ELIOPOOL_TMPROOT}/eloipool"
+    git clone --depth 1 -b "${ELIOPOOL_BRANCH}" "${ELIOPOOL_REPO_URL}" "${ELIOPOOL_TREE}"
+fi
+
+# Pre-flight: paths exist locally. SSH mode also verifies remote auth.
+[ -d "${ELIOPOOL_TREE}" ] || die "eloipool_Blakecoin checkout not found at ${ELIOPOOL_TREE}"
 
 # random_hex producing N hex characters (8 = 32 bits, 32 = 128 bits, ...)
 random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$1"; }
@@ -307,7 +378,7 @@ if [ -n "${PRIOR_ENV}" ]; then
         # operator's current environment, or live config win so an old
         # /root/.mpos-deploy.env cannot pin stale release values.
         case "$key" in
-            MPOS_STRATUM_PORT|BOOTSTRAP_URL|BOOTSTRAP_SERIES|BOOTSTRAP_MIRROR_DISCOVERY|BOOTSTRAP_MIRROR_HOST|BOOTSTRAP_IMPORT_TIMEOUT_S|BOOTSTRAP_IMPORT_SLEEP_S|BOOTSTRAP_DOWNLOAD_ATTEMPTS|BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S|BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S|BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S|TIP_CATCH_TIMEOUT_S|TIP_CATCH_LAG|SKIP_DAEMONS|SKIP_BOOTSTRAP)
+            MPOS_STRATUM_PORT|MPOS_SWAP_ACTION|MPOS_SWAP_SIZE_MB|MPOS_SWAP_FILE|MPOS_SWAP_PROMPT_TIMEOUT_S|MPOS_SWAP_DISK_RESERVE_MB|BOOTSTRAP_URL|BOOTSTRAP_SERIES|BOOTSTRAP_MIRROR_DISCOVERY|BOOTSTRAP_MIRROR_HOST|BOOTSTRAP_IMPORT_TIMEOUT_S|BOOTSTRAP_IMPORT_SLEEP_S|BOOTSTRAP_DOWNLOAD_ATTEMPTS|BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S|BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S|BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S|TIP_CATCH_TIMEOUT_S|TIP_CATCH_LAG|SKIP_DAEMONS|SKIP_BOOTSTRAP)
                 continue
                 ;;
         esac
@@ -411,6 +482,15 @@ if [ -n "$MPOS_DAEMON_BUILD_JOBS" ]; then
 fi
 require_pattern MPOS_DAEMON_BUILD_DOCKER_MODE "${MPOS_DAEMON_BUILD_DOCKER_MODE}" '(pull|build)'
 require_pattern SKIP_DAEMON_IMAGE_BUILD "${SKIP_DAEMON_IMAGE_BUILD}" '[01]'
+require_pattern MPOS_SWAP_ACTION "${MPOS_SWAP_ACTION}" '(prompt|auto|skip)'
+if [ -n "$MPOS_SWAP_SIZE_MB" ]; then
+    require_pattern MPOS_SWAP_SIZE_MB "${MPOS_SWAP_SIZE_MB}" '[1-9][0-9]{2,5}'
+fi
+if [ -n "$MPOS_SWAP_FILE" ]; then
+    require_pattern MPOS_SWAP_FILE "${MPOS_SWAP_FILE}" '/[A-Za-z0-9._/-]+'
+fi
+require_pattern MPOS_SWAP_PROMPT_TIMEOUT_S "${MPOS_SWAP_PROMPT_TIMEOUT_S}" '[0-9]{1,5}'
+require_pattern MPOS_SWAP_DISK_RESERVE_MB "${MPOS_SWAP_DISK_RESERVE_MB}" '[1-9][0-9]{2,5}'
 require_pattern MPOS_EXPLORER_API_BASE "${MPOS_EXPLORER_API_BASE}" 'https?://[A-Za-z0-9._:/%-]+'
 require_pattern BOOTSTRAP_URL     "${BOOTSTRAP_URL}"     'https?://[A-Za-z0-9._:/%-]+'
 require_pattern BOOTSTRAP_SERIES  "${BOOTSTRAP_SERIES}"  '[A-Za-z0-9._-]{1,32}'
@@ -445,6 +525,8 @@ ENVRC=$(mktemp)
                MPOS_DAEMON_SOURCE_REF \
                MPOS_DAEMON_BUILD_ROOT MPOS_DAEMON_BUILD_JOBS \
                MPOS_DAEMON_BUILD_DOCKER_MODE SKIP_DAEMON_IMAGE_BUILD \
+               MPOS_SWAP_ACTION MPOS_SWAP_SIZE_MB MPOS_SWAP_FILE \
+               MPOS_SWAP_PROMPT_TIMEOUT_S MPOS_SWAP_DISK_RESERVE_MB \
                MPOS_EXPLORER_API_BASE \
                BOOTSTRAP_URL BOOTSTRAP_SERIES BOOTSTRAP_CANONICAL_HOST \
                BOOTSTRAP_MIRROR_DISCOVERY BOOTSTRAP_MIRROR_HOST \
@@ -490,7 +572,6 @@ push_tree() {
 # table at the end of the deploy and see where wall time goes.
 SECTION_TIMING_LOG="${SECTION_TIMING_LOG:-/tmp/mpos-section-timings.log}"
 : > "$SECTION_TIMING_LOG"
-DEPLOY_OVERALL_START=$(date +%s)
 
 section_run() {
     # section_run "<label>" <command...>

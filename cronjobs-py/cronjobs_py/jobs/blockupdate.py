@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from ..errors import Skip, Transient
 from ..logger import get
 from ..scheduler import JobContext
+from ..settings import slot_int
 
 log = get(__name__)
 
@@ -44,8 +45,8 @@ class BlockUpdate:
         # `max(config.network_confirmations, config.confirmations)`.
         cfg = ctx.settings
         threshold = max(
-            int(cfg.raw.get("network_confirmations", 120)),
-            int(cfg.raw.get("confirmations", 100)),
+            slot_int(cfg.raw, "network_confirmations", self.slot, 120),
+            slot_int(cfg.raw, "confirmations", self.slot, 100),
         )
 
         rows = db.get_blocks_below_threshold_confirmations(self.slot, threshold)

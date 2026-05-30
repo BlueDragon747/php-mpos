@@ -47,14 +47,33 @@ render() {
         case "$state" in
             DOWNLOADING)
                 local cur tmp_path pct
-                tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
+                tmp_path=$(find "${COIN_DATADIR[$c]}" -maxdepth 1 -name '*-bootstrap-*.dat.xz.tmp' -print -quit 2>/dev/null || true)
                 cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
                 pct=0
                 [ "${t:-0}" -gt 0 ] && pct=$(( cur * 100 / t ))
+                [ "$pct" -gt 100 ] && pct=100
                 printf '   %-5s [DL]    %-10s / %-10s (%3d%%)\n' "${c}:" \
                     "$(numfmt --to=iec --suffix=B "$cur" 2>/dev/null || echo "$cur")" \
                     "$(numfmt --to=iec --suffix=B "$t"   2>/dev/null || echo "$t")" \
                     "$pct"
+                ;;
+            DECOMPRESSING)
+                local cur tmp_path
+                tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
+                cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
+                printf '   %-5s [XZ]    staging bootstrap.dat (%s)\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$cur" 2>/dev/null || echo "$cur")"
+                ;;
+            STAGED)
+                printf '   %-5s [STAGED] bootstrap.dat=%s\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$h" 2>/dev/null || echo "$h")"
+                ;;
+            IMPORTING)
+                local pct
+                pct=0
+                [ "${t:-0}" -gt 0 ] && pct=$(( h * 100 / t ))
+                [ "$pct" -gt 100 ] && pct=100
+                printf '   %-5s [IMPORT] h=%-12s target=%-12s (%3d%%)\n' "${c}:" "$h" "$t" "$pct"
                 ;;
             SYNCING)
                 printf '   %-5s [SYNC]  h=%-12s tip=%-12s delta=%s\n' "${c}:" "$h" "$t" "$d"

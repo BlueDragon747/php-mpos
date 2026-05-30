@@ -91,7 +91,7 @@
     </div>
 {if $GLOBAL.config.payout_system != 'pps'}
     <footer class="pool-card-footer">
-      Round Earnings credited after <strong>{$GLOBAL.confirmations}</strong> confirmations.
+      Round Earnings credited after each chain reaches its configured maturity.
     </footer>
 {/if}
   </article>

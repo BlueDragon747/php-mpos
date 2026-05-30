@@ -898,7 +898,9 @@
           <td class="num">{$SYS_DAEMONS[d].headers|escape}</td>
           <td><code>{$SYS_DAEMONS[d].version|escape}</code></td>
           <td>
-            {if $SYS_DAEMONS[d].synced}
+            {if $SYS_DAEMONS[d].stale|default:false}
+              <span class="pill pill-warn" data-tooltip="{$SYS_DAEMONS[d].stale_detail|escape}">stale</span>
+            {elseif $SYS_DAEMONS[d].synced}
               <span class="pill pill-active">synced</span>
             {elseif $SYS_DAEMONS[d].blocks == "—"}
               <span class="pill pill-inactive">unreachable</span>
@@ -1123,6 +1125,10 @@
     if (empty) empty.hidden = shown > 0;
   }
   function syncPill(d) {
+    if (d.stale) {
+      var tip = d.stale_detail ? ' data-tooltip="' + esc(d.stale_detail) + '"' : '';
+      return '<span class="pill pill-warn"' + tip + '>stale</span>';
+    }
     if (d.synced) return '<span class="pill pill-active">synced</span>';
     if (d.blocks === '—' || d.blocks === '') return '<span class="pill pill-inactive">unreachable</span>';
     return '<span class="pill pill-warn">syncing</span>';

@@ -20,6 +20,10 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   } else {
     $sCoinSlot = $aTickerToSlot[$sRoundCoin];
   }
+  $sRoundConfirmKey = ($sCoinSlot === '') ? 'confirmations' : ('confirmations_' . $sCoinSlot);
+  $iRoundConfirmations = isset($config[$sRoundConfirmKey])
+    ? (int)$config[$sRoundConfirmKey]
+    : (int)$config['confirmations'];
   $sBlocksTable = $sCoinSlot === '' ? 'blocks'       : ('blocks_'       . $sCoinSlot);
   $sTransTable  = $sCoinSlot === '' ? 'transactions' : ('transactions_' . $sCoinSlot);
 
@@ -104,6 +108,9 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       }
       $stmt->close();
     }
+  }
+  if (is_array($aDetailsForBlockHeight)) {
+    $aDetailsForBlockHeight['confirmations_required'] = $iRoundConfirmations;
   }
 
   // Per-account round shares come from `shares_archive` (per-share
@@ -222,6 +229,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   }
 
   $smarty->assign('BLOCKDETAILS', $aDetailsForBlockHeight);
+  $smarty->assign("ROUND_CONFIRMATIONS", $iRoundConfirmations);
   $smarty->assign('ROUNDSHARES', $aRoundShareStats);
   $smarty->assign("ROUNDTRANSACTIONS", $aUserRoundTransactions);
   $smarty->assign("ROUND_COIN", $sRoundCoin);

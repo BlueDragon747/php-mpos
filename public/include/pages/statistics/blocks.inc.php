@@ -35,6 +35,13 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       $aActiveSlots[$tk] = $s;
     }
   }
+  $aConfirmationsByCoin = array();
+  foreach ($aActiveSlots as $sTicker => $sSuffix) {
+    $sConfirmKey = ($sSuffix === '') ? 'confirmations' : ('confirmations_' . $sSuffix);
+    $aConfirmationsByCoin[$sTicker] = isset($config[$sConfirmKey])
+      ? (int)$config[$sConfirmKey]
+      : (int)$config['confirmations'];
+  }
 
   // ---- 2) Coin filter ---------------------------------------------------
   $sSelectedCoin = isset($_REQUEST['coin']) ? strtoupper(trim($_REQUEST['coin'])) : 'ALL';
@@ -131,6 +138,12 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   // Flag for the Newer pager: true if we're paged into history.
   $bHasNewer = ($iBefore || $iAfter);
 
+  foreach ($aBlocksFoundData as $key => $aData) {
+    $aBlocksFoundData[$key]['confirmations_required'] = isset($aConfirmationsByCoin[$aData['chain']])
+      ? $aConfirmationsByCoin[$aData['chain']]
+      : (int)$config['confirmations'];
+  }
+
   // ---- 5) Per-block decorations ----------------------------------------
   $bUseAverage = false;
   if ($config['payout_system'] == 'pplns') {
@@ -197,6 +210,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   $smarty->assign("POOLSTATS",        $aPoolStatistics);
 
   $smarty->assign("SELECTED_COIN",    $sSelectedCoin);
+  $smarty->assign("SELECTED_CONFIRMATIONS", $sSelectedCoin !== 'ALL' && isset($aConfirmationsByCoin[$sSelectedCoin]) ? $aConfirmationsByCoin[$sSelectedCoin] : 0);
   $smarty->assign("COIN_OPTIONS",     $aCoinOptions);
   $smarty->assign("COIN_NAMES",       array(
     'BLC'  => isset($config['gettingstarted']['coinname']) ? (string)$config['gettingstarted']['coinname'] : 'Blakecoin',

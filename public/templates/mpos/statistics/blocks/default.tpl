@@ -285,12 +285,13 @@
 {/if}
             </td>
             <td class="center">
-{if $BLOCKSFOUND[block].confirmations >= $GLOBAL.confirmations}
+{assign var="required_confirmations" value=$BLOCKSFOUND[block].confirmations_required|default:$GLOBAL.confirmations}
+{if $BLOCKSFOUND[block].confirmations >= $required_confirmations}
               <span class="status-pill ok">Confirmed</span>
 {else if $BLOCKSFOUND[block].confirmations == -1}
               <span class="status-pill bad">Orphan</span>
 {else}
-              <span class="status-pill pending">{$GLOBAL.confirmations - $BLOCKSFOUND[block].confirmations} left</span>
+              <span class="status-pill pending">{$required_confirmations - $BLOCKSFOUND[block].confirmations} left</span>
 {/if}
             </td>
             <td class="td-name">{if $BLOCKSFOUND[block].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}<span class="anon">anonymous</span>{else}{$BLOCKSFOUND[block].finder|default:"unknown"|escape}{/if}</td>
@@ -322,7 +323,11 @@
     </div>
 {if $GLOBAL.config.payout_system != 'pps'}
     <footer class="blocks-card-footer">
-      Round Earnings credited after <strong>{$GLOBAL.confirmations}</strong> confirmations.
+{if $SELECTED_COIN|default:"ALL" == "ALL"}
+      Round Earnings credited after each chain reaches its configured maturity.
+{else}
+      Round Earnings credited after <strong>{$SELECTED_CONFIRMATIONS|default:$GLOBAL.confirmations}</strong> confirmations.
+{/if}
     </footer>
 {/if}
   </article>

@@ -176,6 +176,8 @@ BOOTSTRAP_DOWNLOAD_ATTEMPTS="${BOOTSTRAP_DOWNLOAD_ATTEMPTS:-12}"
 BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S="${BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S:-60}"
 BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S="${BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S:-30}"
 BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S="${BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S:-90}"
+BOOTSTRAP_POST_IMPORT_CHECK_TIMEOUT_S="${BOOTSTRAP_POST_IMPORT_CHECK_TIMEOUT_S:-3600}"
+BOOTSTRAP_POST_IMPORT_STALL_TIMEOUT_S="${BOOTSTRAP_POST_IMPORT_STALL_TIMEOUT_S:-300}"
 BOOTSTRAP_SERIES="${BOOTSTRAP_SERIES:-25.2}"
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
 BOOTSTRAP_CANONICAL_HOST="${BOOTSTRAP_CANONICAL_HOST:-bootstrap.blakestream.io}"
@@ -205,7 +207,8 @@ TMPFS_CHAINSTATE_SIZE_MB="${TMPFS_CHAINSTATE_SIZE_MB:-6000}"
 TMPFS_BLOCKS_INDEX_SIZE_MB="${TMPFS_BLOCKS_INDEX_SIZE_MB:-512}"
 
 # write_status <coin> <STATE> [h] [t] [d]
-# STATE one of: QUEUED, DOWNLOADING, SYNCING, FINISHED, FAILED.
+# STATE one of: QUEUED, DOWNLOADING, DECOMPRESSING, STAGED, IMPORTING,
+# SYNCING, FINISHED, FAILED.
 # Atomic write via mv-from-tmp so the dashboard renderer never reads a
 # partial line.
 write_status() {
@@ -356,6 +359,9 @@ mark_bootstrap_consumed() {
     local bootstrap_file="${COIN_DATADIR[$coin]}/bootstrap.dat"
     if [ -f "$bootstrap_file" ]; then
         mv -f "$bootstrap_file" "${bootstrap_file}.old"
+        if [ -f "${bootstrap_file}.height" ]; then
+            mv -f "${bootstrap_file}.height" "${bootstrap_file}.old.height"
+        fi
         ok "  ${coin}: bootstrap.dat moved to bootstrap.dat.old after -loadblock import"
     fi
 }
@@ -460,6 +466,32 @@ bootstrap_remote_file() {
         | sed -nE "s/.*href=[\"'](${prefix}-bootstrap-[0-9]+\\.dat\\.xz)[\"'].*/\\1/p" \
         | sort -V \
         | tail -1
+}
+
+bootstrap_height_from_filename() {
+    local remote_file="$1"
+    sed -nE 's/.*-bootstrap-([0-9]+)\.dat\.xz$/\1/p' <<<"$remote_file"
+}
+
+bootstrap_height_file() {
+    local coin="$1"
+    printf '%s/bootstrap.dat.height' "${COIN_DATADIR[$coin]}"
+}
+
+record_bootstrap_height() {
+    local coin="$1" remote_file="$2" height
+    height="$(bootstrap_height_from_filename "$remote_file")"
+    if [[ "$height" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' "$height" > "$(bootstrap_height_file "$coin")"
+    fi
+}
+
+expected_bootstrap_height() {
+    local coin="$1" file height
+    file="$(bootstrap_height_file "$coin")"
+    [ -f "$file" ] || return 0
+    height="$(head -1 "$file" 2>/dev/null | tr -d '[:space:]' || true)"
+    [[ "$height" =~ ^[0-9]+$ ]] && printf '%s\n' "$height"
 }
 
 init_bootstrap_source() {
@@ -583,16 +615,19 @@ decompress_bootstrap_xz() {
     local bootstrap_tmp="${bootstrap_file}.tmp"
 
     say "  decompressing ${coin} ${remote_file} -> bootstrap.dat"
+    write_status "$coin" "DECOMPRESSING" "0" "0" "0"
     rm -f "$bootstrap_tmp"
     if xz -dc "$xz_file" > "$bootstrap_tmp"; then
         mv -f "$bootstrap_tmp" "$bootstrap_file"
+        record_bootstrap_height "$coin" "$remote_file"
         rm -f "$xz_file" "$sha_file"
         local sz_final
         sz_final=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
         ok "  ${coin}: bootstrap.dat staged ($(du -h "$bootstrap_file" | cut -f1))"
-        write_status "$coin" "FINISHED" "$sz_final" "$sz_final" "0"
+        write_status "$coin" "STAGED" "$sz_final" "$sz_final" "0"
         return 0
     fi
+    write_status "$coin" "FAILED" "0" "0" "0"
     rm -f "$bootstrap_tmp"
     warn "  ${coin}: xz decompression failed for ${remote_file}"
     return 1
@@ -609,7 +644,7 @@ download_bootstrap() {
         ok "  ${coin}: bootstrap.dat already consumed as bootstrap.dat.old ($(du -h "${bootstrap_file}.old" | cut -f1))"
         local sz_old
         sz_old=$(stat -c '%s' "${bootstrap_file}.old" 2>/dev/null || echo 0)
-        write_status "$coin" "FINISHED" "$sz_old" "$sz_old" "0"
+        write_status "$coin" "STAGED" "$sz_old" "$sz_old" "0"
         return 0
     fi
 
@@ -617,7 +652,7 @@ download_bootstrap() {
         ok "  ${coin}: bootstrap.dat already present ($(du -h "$bootstrap_file" | cut -f1))"
         local sz_existing
         sz_existing=$(stat -c '%s' "$bootstrap_file" 2>/dev/null || echo 0)
-        write_status "$coin" "FINISHED" "$sz_existing" "$sz_existing" "0"
+        write_status "$coin" "STAGED" "$sz_existing" "$sz_existing" "0"
         return 0
     fi
 
@@ -678,12 +713,14 @@ start_one() {
     fi
     docker run -d \
         --name "$coin" \
+        --user 0:0 \
         --net=host \
         --restart=unless-stopped \
         --stop-timeout 300 \
+        --entrypoint /bin/sh \
         -v "${datadir}:${datadir}" \
         "$image" \
-        /bin/sh -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}${loadblock_arg}" \
+        -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}${loadblock_arg}" \
         >/dev/null
 }
 
@@ -731,6 +768,63 @@ rpc_peer_tip() {
         | sort -n \
         | tail -1 \
         || true
+}
+
+verify_bootstrap_import_height() {
+    local coin="$1" datadir="$2" expected deadline h now last_h last_progress_ts stalled last_log_ts
+    expected="$(expected_bootstrap_height "$coin")"
+    if [ -z "$expected" ]; then
+        warn "  ${coin}: no bootstrap height metadata found; skipping post-import height check"
+        return 0
+    fi
+
+    deadline=$(( $(date +%s) + BOOTSTRAP_POST_IMPORT_CHECK_TIMEOUT_S ))
+    h=0
+    last_h=0
+    last_progress_ts=$(date +%s)
+    last_log_ts=0
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if ! docker ps --filter "name=^${coin}$" --format '{{.Status}}' | grep -q '^Up'; then
+            warn "  ${coin}: container exited before post-import height check completed"
+            docker logs "$coin" --tail 50 2>&1 || true
+            return 1
+        fi
+
+        h=$(rpc_height "$coin" "$datadir")
+        [ -n "$h" ] || h=$(current_height "$datadir")
+        h="${h:-0}"
+        now=$(date +%s)
+        if [[ "$h" =~ ^[0-9]+$ ]] && [ "$h" -gt "$last_h" ]; then
+            last_h="$h"
+            last_progress_ts="$now"
+        fi
+        write_status "$coin" "IMPORTING" "$h" "$expected" "0"
+        if [[ "$h" =~ ^[0-9]+$ ]] && [ "$h" -ge "$expected" ]; then
+            ok "  ${coin}: bootstrap height check passed (height=${h}, expected>=${expected})"
+            return 0
+        fi
+
+        stalled=$(( now - last_progress_ts ))
+        if [ "$stalled" -ge "$BOOTSTRAP_POST_IMPORT_STALL_TIMEOUT_S" ]; then
+            warn "  ${coin}: post-import height stalled at ${h} for ${stalled}s (expected>=${expected})"
+            return 1
+        fi
+
+        if [ "$last_log_ts" -eq 0 ] || [ $(( now - last_log_ts )) -ge "$DASHBOARD_SNAPSHOT_INTERVAL_S" ]; then
+            if [ "$stalled" -gt 0 ]; then
+                printf '   [%s] %-5s importing bootstrap height=%s/%s (no height change for %ss)\n' \
+                    "$(date +%H:%M:%S)" "${coin}:" "$h" "$expected" "$stalled"
+            else
+                printf '   [%s] %-5s importing bootstrap height=%s/%s\n' \
+                    "$(date +%H:%M:%S)" "${coin}:" "$h" "$expected"
+            fi
+            last_log_ts="$now"
+        fi
+        sleep 10
+    done
+
+    warn "  ${coin}: post-import height ${h:-0} stayed below bootstrap height ${expected} after ${BOOTSTRAP_POST_IMPORT_CHECK_TIMEOUT_S}s"
+    return 1
 }
 
 wait_bootstrap_import_done() {
@@ -883,6 +977,7 @@ bootstrap_group() {
         datadir="${COIN_DATADIR[$coin]}"
         if [ "${CONSUMED[$coin]}" = "0" ]; then
             wait_bootstrap_import_done "$coin" "$datadir"
+            verify_bootstrap_import_height "$coin" "$datadir"
         fi
         wait_at_tip "$coin" "$datadir"
         local final_tip
@@ -978,14 +1073,31 @@ emit_dashboard_snapshot() {
             DOWNLOADING)
                 local cur tmp_path
                 tmp_path=$(find "${COIN_DATADIR[$c]}" -maxdepth 1 -name '*-bootstrap-*.dat.xz.tmp' -print -quit 2>/dev/null || true)
-                [ -n "$tmp_path" ] || tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
                 cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
                 local pct=0
                 [ "${t:-0}" -gt 0 ] && pct=$(( cur * 100 / t ))
+                [ "$pct" -gt 100 ] && pct=100
                 printf '   %-5s [DL]    %s / %s (%d%%)\n' "${c}:" \
                     "$(numfmt --to=iec --suffix=B "$cur" 2>/dev/null || echo "$cur")" \
                     "$(numfmt --to=iec --suffix=B "$t"   2>/dev/null || echo "$t")" \
                     "$pct"
+                ;;
+            DECOMPRESSING)
+                local cur tmp_path
+                tmp_path="${COIN_DATADIR[$c]}/bootstrap.dat.tmp"
+                cur=$(stat -c '%s' "$tmp_path" 2>/dev/null || echo "${h:-0}")
+                printf '   %-5s [XZ]    staging bootstrap.dat (%s)\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$cur" 2>/dev/null || echo "$cur")"
+                ;;
+            STAGED)
+                printf '   %-5s [STAGED] bootstrap.dat=%s\n' "${c}:" \
+                    "$(numfmt --to=iec --suffix=B "$h" 2>/dev/null || echo "$h")"
+                ;;
+            IMPORTING)
+                local pct=0
+                [ "${t:-0}" -gt 0 ] && pct=$(( h * 100 / t ))
+                [ "$pct" -gt 100 ] && pct=100
+                printf '   %-5s [IMPORT] h=%-12s target=%-12s (%d%%)\n' "${c}:" "$h" "$t" "$pct"
                 ;;
             SYNCING)
                 printf '   %-5s [SYNC]  h=%-12s tip=%-12s delta=%s\n' "${c}:" "$h" "$t" "$d"
@@ -1130,24 +1242,36 @@ while [ ${#QUEUE[@]} -gt 0 ] || [ "$POOL_COUNT" -gt 0 ]; do
 
     # Wait for any one running coin to finish; identify which one
     finished_pid=""
-    wait -n -p finished_pid 2>/dev/null || true
+    finished_status=0
+    if wait -n -p finished_pid 2>/dev/null; then
+        finished_status=0
+    else
+        finished_status=$?
+    fi
     if [ -z "${finished_pid:-}" ]; then
         # Fallback: poll for dead pids
         for c in "${!PID_FOR_COIN[@]}"; do
             if ! kill -0 "${PID_FOR_COIN[$c]:-1}" 2>/dev/null; then
                 finished_pid="${PID_FOR_COIN[$c]}"
+                wait "$finished_pid" 2>/dev/null || finished_status=$?
                 break
             fi
         done
     fi
+    finished_coin=""
     for c in "${!PID_FOR_COIN[@]}"; do
         if [ "${PID_FOR_COIN[$c]:-}" = "${finished_pid:-}" ]; then
+            finished_coin="$c"
             unset "PID_FOR_COIN[$c]"
             POOL_COUNT=$((POOL_COUNT - 1))
             say "[scheduler] ${c} finished; slot freed"
             break
         fi
     done
+    if [ "$finished_status" -ne 0 ]; then
+        warn "[scheduler] ${finished_coin:-worker} failed with exit ${finished_status}; stopping bootstrap rotation"
+        exit "$finished_status"
+    fi
 done
 
 if [ "$START_AFTER" = "1" ]; then

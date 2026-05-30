@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from ..errors import Skip
 from ..logger import get
 from ..scheduler import JobContext
+from ..settings import slot_int
 
 log = get(__name__)
 
@@ -83,7 +84,10 @@ class LiquidPayout:
         except Exception as exc:
             raise Skip(f"getbalance failed: {exc}")
 
-        locked = db.get_locked_balance(self.slot)
+        locked = db.get_locked_balance(
+            self.slot,
+            min_confirmations=slot_int(cfg.raw, "confirmations", self.slot, 100),
+        )
         float_target = locked + reserve
         sweep = round(wallet_balance - float_target, 8)
 

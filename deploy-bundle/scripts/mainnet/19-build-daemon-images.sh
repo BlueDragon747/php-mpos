@@ -161,7 +161,7 @@ COPY ${tx} /usr/local/bin/${tx}
 RUN chmod 0755 /usr/local/bin/${daemon} /usr/local/bin/${cli} /usr/local/bin/${tx}
 EOF
 
-    docker run --rm "$image" /bin/sh -lc \
+    docker run --rm --entrypoint /bin/sh "$image" -lc \
         "/usr/local/bin/${daemon} --version >/dev/null 2>&1 || /usr/local/bin/${daemon} -version >/dev/null"
 }
 

@@ -36,14 +36,21 @@ if (file_exists($_tx_manifest_path)) {
 }
 
 // Confirmations threshold + explorer URL.
-// Read the Setting rows directly: smarty_globals.inc.php runs AFTER
+// Read the per-slot config directly: smarty_globals.inc.php runs AFTER
 // page controllers in index.php, so $aGlobal isn't populated yet when
 // this file executes. The configured URL may contain `{coin}` —
 // substituted with the lowercase ticker of the current slot so one
 // settings row covers all 6 coins. Matches the round-page pattern in
 // templates/mpos/statistics/round/default.tpl (deep-link into the
 // BlakeStream Explorer's per-coin dashboard via a query param).
-$_tx_confirmations_threshold = isset($GLOBAL['confirmations']) ? (int)$GLOBAL['confirmations'] : 6;
+$_tx_slot = isset($tx_v2_slot) ? (string)$tx_v2_slot : '';
+if ($_tx_slot === '' && isset($tx_v2_action) && preg_match('/transactions_(mm[0-9]*)$/', (string)$tx_v2_action, $_tx_slot_match)) {
+  $_tx_slot = $_tx_slot_match[1];
+}
+$_tx_confirmations_key = ($_tx_slot === '') ? 'confirmations' : ('confirmations_' . $_tx_slot);
+$_tx_confirmations_threshold = isset($config[$_tx_confirmations_key])
+  ? (int)$config[$_tx_confirmations_key]
+  : (isset($config['confirmations']) ? (int)$config['confirmations'] : 6);
 $_tx_explorer_disabled = !empty($setting->getValue('website_transactionexplorer_disabled'));
 $_tx_explorer_url = $_tx_explorer_disabled ? '' : (string)$setting->getValue('website_transactionexplorer_url');
 if ($_tx_explorer_url !== '' && strpos($_tx_explorer_url, '{coin}') !== false) {

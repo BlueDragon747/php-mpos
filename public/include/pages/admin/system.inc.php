@@ -172,6 +172,53 @@ function _system_size_from_mb($mb) {
   return number_format($mb) . ' MB';
 }
 
+function _system_daemon_status_cache_file() {
+  $uid = function_exists('posix_geteuid') ? (string)posix_geteuid() : (string)getmyuid();
+  return sys_get_temp_dir() . '/blakestream-mpos-daemon-status-v1-' . $uid . '.json';
+}
+
+function _system_daemon_status_cache_load() {
+  $file = _system_daemon_status_cache_file();
+  if (!is_file($file)) return array();
+  $raw = @file_get_contents($file);
+  if ($raw === false || $raw === '') return array();
+  $data = json_decode($raw, true);
+  return is_array($data) ? $data : array();
+}
+
+function _system_daemon_status_cache_save($cache) {
+  if (!is_array($cache)) return;
+  @file_put_contents(_system_daemon_status_cache_file(), json_encode($cache), LOCK_EX);
+}
+
+function _system_daemon_status_cache_entry($cache, $sym, $now, $grace_seconds) {
+  $sym = strtoupper((string)$sym);
+  if (!is_array($cache) || empty($cache[$sym]) || !is_array($cache[$sym])) return null;
+  $entry = $cache[$sym];
+  $ts = isset($entry['ts']) ? (int)$entry['ts'] : 0;
+  if ($ts <= 0 || ($now - $ts) > $grace_seconds) return null;
+  if (empty($entry['row']) || !is_array($entry['row'])) return null;
+  return $entry;
+}
+
+function _system_daemon_status_cached_row($cache, $sym, $now, $grace_seconds, $error = '') {
+  $entry = _system_daemon_status_cache_entry($cache, $sym, $now, $grace_seconds);
+  if (!$entry) return null;
+
+  $row = $entry['row'];
+  $age = max(0, $now - (int)$entry['ts']);
+  $detail = 'Using cached daemon status from ' . $age . 's ago after an RPC timeout.';
+  $error = trim((string)$error);
+  if ($error !== '') {
+    $detail .= ' Last error: ' . substr($error, 0, 160);
+  }
+
+  $row['stale'] = true;
+  $row['stale_age'] = $age;
+  $row['stale_detail'] = $detail;
+  return $row;
+}
+
 function _system_disk_stats_helper_sizes() {
   $helper = '/usr/local/sbin/blakestream-mpos-disk-stats';
   if (!is_file($helper) || !is_executable($helper)) return array();
@@ -577,6 +624,10 @@ if (!empty($backup_status['wallets'])) {
 // access; the daemons' RPC ports are already reachable on localhost
 // with the wallet credentials in $config['wallet*'].
 $daemon_rows = array();
+$daemon_cache_grace = 90;
+$daemon_cache_now = time();
+$daemon_cache = _system_daemon_status_cache_load();
+$daemon_cache_dirty = false;
 $daemons = array(
   'BLC'  => isset($bitcoin)     ? $bitcoin     : null,
   'PHO'  => isset($bitcoin_mm)  ? $bitcoin_mm  : null,
@@ -589,6 +640,9 @@ foreach ($daemons as $sym => $btc) {
   $blocks = ''; $headers = ''; $chain = ''; $version = '';
   $info = array();
   $netinfo = array();
+  $rpc_error = '';
+  $blockchain_ok = false;
+  $cached_entry = _system_daemon_status_cache_entry($daemon_cache, $sym, $daemon_cache_now, $daemon_cache_grace);
   if ($btc) {
     try {
       $info = $btc->getblockchaininfo();
@@ -596,48 +650,81 @@ foreach ($daemons as $sym => $btc) {
         if (isset($info['blocks']))  $blocks  = (string)$info['blocks'];
         if (isset($info['headers'])) $headers = (string)$info['headers'];
         if (isset($info['chain']))   $chain   = (string)$info['chain'];
+        $blockchain_ok = true;
       }
     } catch (Exception $e) {
-      // Leave the row blank — UI renders "UNREACHABLE".
+      $rpc_error = $e->getMessage();
     }
-    try {
-      $netinfo = $btc->getnetworkinfo();
-      if (is_array($netinfo) && isset($netinfo['subversion'])) {
-        // Strip the leading/trailing slashes from "/Satoshi:0.15.21/".
-        $version = trim((string)$netinfo['subversion'], "/ \t");
+    if ($blockchain_ok) {
+      try {
+        $netinfo = $btc->getnetworkinfo();
+        if (is_array($netinfo) && isset($netinfo['subversion'])) {
+          // Strip the leading/trailing slashes from "/Satoshi:0.15.21/".
+          $version = trim((string)$netinfo['subversion'], "/ \t");
+        }
+      } catch (Exception $e) {
+        if ($cached_entry && !empty($cached_entry['row']['version'])
+            && $cached_entry['row']['version'] !== '—') {
+          $version = (string)$cached_entry['row']['version'];
+        }
       }
-    } catch (Exception $e) {
-      // Older daemons may not expose getnetworkinfo — leave blank.
     }
   }
-  $rule_status = bsx_daemon_rule_status($btc, array(), $netinfo, $info, $sym);
-  $daemon_rows[] = array(
-    'sym'     => $sym,
-    'chain'   => $chain ?: '?',
-    'version' => $version ?: '—',
-    'blocks'  => $blocks ?: '—',
-    'headers' => $headers ?: '—',
-    'synced'  => ($blocks !== '' && $headers !== '' && $blocks === $headers),
-    'rules'   => $rule_status,
+
+  if (!$blockchain_ok) {
+    $cached_row = _system_daemon_status_cached_row($daemon_cache, $sym, $daemon_cache_now, $daemon_cache_grace, $rpc_error);
+    if ($cached_row) {
+      $daemon_rows[] = $cached_row;
+      continue;
+    }
+  }
+
+  $rule_status = $blockchain_ok
+    ? bsx_daemon_rule_status($btc, array(), $netinfo, $info, $sym)
+    : bsx_daemon_rule_status($btc, array(), $netinfo, $info, $sym, array());
+  $row = array(
+    'sym'          => $sym,
+    'chain'        => $chain ?: '?',
+    'version'      => $version ?: '—',
+    'blocks'       => $blocks ?: '—',
+    'headers'      => $headers ?: '—',
+    'synced'       => ($blocks !== '' && $headers !== '' && $blocks === $headers),
+    'stale'        => false,
+    'stale_age'    => 0,
+    'stale_detail' => '',
+    'rules'        => $rule_status,
   );
+  $daemon_rows[] = $row;
+
+  if ($blockchain_ok) {
+    $daemon_cache[strtoupper($sym)] = array(
+      'ts' => $daemon_cache_now,
+      'row' => $row,
+    );
+    $daemon_cache_dirty = true;
+  }
+}
+if ($daemon_cache_dirty) {
+  _system_daemon_status_cache_save($daemon_cache);
 }
 
 // ---- Wallets -------------------------------------------------------
 // Per-coin spendable balance + DB-tracked locked + maturing unconfirmed.
 // Distinct from Coin Daemons (chain state) and Payout Outbox (queue) —
 // answers "do I have enough cash on hand to drain my payment queue?".
-empty($config['network_confirmations']) ? $wallet_confs = 120 : $wallet_confs = (int)$config['network_confirmations'];
 $wallet_slot_globals = array(
-  'BLC'  => array(isset($bitcoin)     ? $bitcoin     : null, isset($transaction)     ? $transaction     : null, isset($block)     ? $block     : null),
-  'PHO'  => array(isset($bitcoin_mm)  ? $bitcoin_mm  : null, isset($transaction_mm)  ? $transaction_mm  : null, isset($block_mm)  ? $block_mm  : null),
-  'BBTC' => array(isset($bitcoin_mm1) ? $bitcoin_mm1 : null, isset($transaction_mm1) ? $transaction_mm1 : null, isset($block_mm1) ? $block_mm1 : null),
-  'ELT'  => array(isset($bitcoin_mm3) ? $bitcoin_mm3 : null, isset($transaction_mm3) ? $transaction_mm3 : null, isset($block_mm3) ? $block_mm3 : null),
-  'UMO'  => array(isset($bitcoin_mm4) ? $bitcoin_mm4 : null, isset($transaction_mm4) ? $transaction_mm4 : null, isset($block_mm4) ? $block_mm4 : null),
-  'LIT'  => array(isset($bitcoin_mm5) ? $bitcoin_mm5 : null, isset($transaction_mm5) ? $transaction_mm5 : null, isset($block_mm5) ? $block_mm5 : null),
+  'BLC'  => array('',    isset($bitcoin)     ? $bitcoin     : null, isset($transaction)     ? $transaction     : null, isset($block)     ? $block     : null),
+  'PHO'  => array('mm',  isset($bitcoin_mm)  ? $bitcoin_mm  : null, isset($transaction_mm)  ? $transaction_mm  : null, isset($block_mm)  ? $block_mm  : null),
+  'BBTC' => array('mm1', isset($bitcoin_mm1) ? $bitcoin_mm1 : null, isset($transaction_mm1) ? $transaction_mm1 : null, isset($block_mm1) ? $block_mm1 : null),
+  'ELT'  => array('mm3', isset($bitcoin_mm3) ? $bitcoin_mm3 : null, isset($transaction_mm3) ? $transaction_mm3 : null, isset($block_mm3) ? $block_mm3 : null),
+  'UMO'  => array('mm4', isset($bitcoin_mm4) ? $bitcoin_mm4 : null, isset($transaction_mm4) ? $transaction_mm4 : null, isset($block_mm4) ? $block_mm4 : null),
+  'LIT'  => array('mm5', isset($bitcoin_mm5) ? $bitcoin_mm5 : null, isset($transaction_mm5) ? $transaction_mm5 : null, isset($block_mm5) ? $block_mm5 : null),
 );
 $wallet_panel_rows = array();
 foreach ($wallet_slot_globals as $sym => $tuple) {
-  list($btc, $txn, $blk) = $tuple;
+  list($slot, $btc, $txn, $blk) = $tuple;
+  $wallet_confs_key = $slot === '' ? 'network_confirmations' : ('network_confirmations_' . $slot);
+  $wallet_confs = empty($config[$wallet_confs_key]) ? 120 : (int)$config[$wallet_confs_key];
   $balance = null; $locked = null; $unconfirmed = null;
   if ($btc) {
     try { if ($btc->can_connect() === true) { $balance = (float)$btc->getbalance(); } } catch (Exception $e) {}
