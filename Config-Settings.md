@@ -24,6 +24,14 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 
 ---
 
+## Deploy logging
+
+| Variable | Default | Notes |
+|---|---|---|
+| `MPOS_DEPLOY_LOG` | `./mpos-25.2-go-deploy-<utc>.log` | Full deploy transcript path. Defaults to the repo root. Set to `0`, `off`, or `none` to disable transcript logging. |
+
+---
+
 ## Daemon image source
 
 | Variable | Default | Notes |
@@ -109,12 +117,55 @@ source ref to `master` after live cutover.
 | `SKIP_BOOTSTRAP` | `0` | `1` skips the sequential bootstrap.dat rotation entirely and syncs via peers. Much slower for first deploys. |
 | `BOOTSTRAP_IMPORT_TIMEOUT_S` | `21600` (6h) | Max time waiting for a daemon's bootstrap.dat import to finish. |
 | `BOOTSTRAP_IMPORT_SLEEP_S` | `60` | Poll interval while waiting for import. |
+| `BOOTSTRAP_POST_IMPORT_CHECK_TIMEOUT_S` | `3600` (1h) | Absolute safety-net timeout for daemon RPC height to reach the downloaded bootstrap height after `-loadblock` reports completion. |
+| `BOOTSTRAP_POST_IMPORT_STALL_TIMEOUT_S` | `300` (5m) | Fail post-import verification if daemon height stops increasing for this long. |
 | `BOOTSTRAP_DOWNLOAD_ATTEMPTS` | `12` | Per-coin download retries. |
 | `BOOTSTRAP_DOWNLOAD_RETRY_SLEEP_S` | `60` | Sleep between download retries. |
 | `BOOTSTRAP_DOWNLOAD_CONNECT_TIMEOUT_S` | `30` | wget connect timeout. |
 | `BOOTSTRAP_DOWNLOAD_READ_TIMEOUT_S` | `90` | wget read timeout. |
 | `TIP_CATCH_TIMEOUT_S` | `7200` (2h) | Max time waiting for a daemon to catch up to the network tip after import. |
 | `TIP_CATCH_LAG` | `5` | Tolerable distance (in blocks) from the peer-reported tip. |
+
+---
+
+## Accounting confirmations
+
+MPOS uses two maturity knobs per active coin slot. `confirmations*` controls
+when payout/accounting jobs may spend or credit mature rewards.
+`network_confirmations*` controls block status refresh windows. Keep both set
+to the coin's actual coinbase maturity unless there is a specific operational
+reason to widen the block refresh window.
+
+| Coin | Active slot | `confirmations` key | `network_confirmations` key | Value |
+|---|---:|---|---|---:|
+| Blakecoin | parent | `confirmations` | `network_confirmations` | `120` |
+| Photon | `mm` | `confirmations_mm` | `network_confirmations_mm` | `120` |
+| BlakeBitcoin | `mm1` | `confirmations_mm1` | `network_confirmations_mm1` | `100` |
+| Electron | `mm3` | `confirmations_mm3` | `network_confirmations_mm3` | `460` |
+| UniversalMolecule | `mm4` | `confirmations_mm4` | `network_confirmations_mm4` | `120` |
+| Lithium | `mm5` | `confirmations_mm5` | `network_confirmations_mm5` | `120` |
+
+`reconcile_min_confirmations` defaults to `6` and is intentionally global:
+it is the finality threshold for already-broadcast payout transactions, not
+the per-coin coinbase maturity threshold above. Legacy `mm2` and `mm6` values
+remain compatibility placeholders and are not active in the 25.2-GO pool.
+
+---
+
+## Swapfile
+
+The deploy starts with an interactive swap screen before package installs,
+source builds, or bootstrap work. It shows current RAM, current swap, root disk
+free, and the recommended swapfile size. In prompt mode, use the arrow keys to
+pick the recommendation, enter a custom size in GB, or leave swap unchanged.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `MPOS_SWAP_ACTION` | `prompt` | `prompt` shows the arrow-key menu, `auto` applies the recommendation without asking, `skip` leaves swap unchanged. |
+| `MPOS_SWAP_SIZE_MB` | auto | Optional explicit swapfile size in MiB for unattended runs. Interactive custom entry is in GB and converted to MiB. |
+| `MPOS_SWAP_FILE` | existing file swap, else `/swapfile` | Swapfile path managed by the deploy. By default, the deploy replaces the first existing file-backed swap entry instead of adding a second swapfile. |
+| `MPOS_SWAP_PROMPT_TIMEOUT_S` | `120` | Prompt timeout before leaving swap unchanged. |
+| `MPOS_SWAP_DISK_RESERVE_MB` | `4096` | Minimum root filesystem free space to leave unused when capping the recommendation. |
 
 ---
 
@@ -234,6 +285,7 @@ sudo -E bash deploy-bundle/deploy-mainnet.sh
 
 - `deploy-bundle/deploy-mainnet.sh` — top-level orchestrator, sources `/root/.mpos-deploy.env` for re-runs.
 - `deploy-bundle/scripts/mainnet/10-vps-system-deps.sh` — apt + docker + bun.
+- `deploy-bundle/scripts/mainnet/11-configure-swap.sh` — swap status, recommendation, and optional swapfile creation.
 - `deploy-bundle/scripts/mainnet/19-build-daemon-images.sh` — source-build daemons (only when `MPOS_PULL_DAEMON_IMAGES=0`).
 - `deploy-bundle/scripts/mainnet/20-deploy-daemons.sh` — datadirs + configs + image confirmation. Reads `dbcache` default.
 - `deploy-bundle/scripts/mainnet/21-bootstrap-coins.sh` — bootstrap rotation. Reads `BOOTSTRAP_DBCACHE_MB`, `STEADY_DBCACHE_MB`, `MAXMEMPOOL_MB`, `BOOTSTRAP_*`, `TIP_CATCH_*`, `PEERS_ON_MAXCONN`.

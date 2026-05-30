@@ -30,7 +30,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
     $_SESSION['POPUP'][] = array('CONTENT' => 'Wallet RPC Error: ' . $e->getMessage(), 'TYPE' => 'errormsg');
   }
   // Fetch unconfirmed amount from blocks table
-  empty($config['network_confirmations']) ? $confirmations = 120 : $confirmations = $config['network_confirmations'];
+  empty($config['network_confirmations_mm3']) ? $confirmations = 120 : $confirmations = $config['network_confirmations_mm3'];
   $aBlocksUnconfirmed_mm3 = $block_mm3->getAllUnconfirmed($confirmations);
   $dBlocksUnconfirmedBalance_mm3 = 0;
   if (!empty($aBlocksUnconfirmed_mm3))

@@ -54,6 +54,7 @@ from dataclasses import dataclass
 from ..errors import Fatal, Indeterminate, Skip
 from ..logger import get
 from ..scheduler import JobContext
+from ..settings import slot_int
 
 log = get(__name__)
 
@@ -126,11 +127,10 @@ class Payouts:
             )
 
         # Coinbase-maturity threshold: payouts only count credits from
-        # blocks that have at least this many confirmations. Defaults to
-        # MPOS's `config.confirmations` (100 in the live config) — the
-        # standard bitcoin-core coinbase maturity. Orphaned blocks
-        # (`confirmations = -1`) drop out of the balance automatically.
-        min_confs = int(cfg.raw.get("confirmations", 100))
+        # blocks that have reached this slot's daemon maturity. Orphaned
+        # blocks (`confirmations = -1`) drop out of the balance
+        # automatically.
+        min_confs = slot_int(cfg.raw, "confirmations", self.slot, 100)
 
         # Wave 2: pay out the manual queue first. Operator queues these
         # via the web UI when a user explicitly asks for a payout

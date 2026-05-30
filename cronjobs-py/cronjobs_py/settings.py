@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .errors import Fatal
 from .rpc import Endpoint
 
 
@@ -73,6 +74,29 @@ class Settings:
             if c.slot == "":
                 return c
         raise RuntimeError("no parent wallet (slot='') configured")
+
+
+def slot_int(raw: dict[str, Any], base: str, slot: str, default: int) -> int:
+    key = base if slot == "" else f"{base}_{slot}"
+    if key in raw:
+        source_key = key
+        value = raw[key]
+    elif base in raw:
+        source_key = base
+        value = raw[base]
+    else:
+        source_key = base
+        value = default
+
+    try:
+        if isinstance(value, bool):
+            raise TypeError("boolean is not a valid integer setting")
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        slot_label = slot or "parent"
+        raise Fatal(
+            f"invalid integer config {source_key!r} for slot {slot_label!r}: {value!r}"
+        ) from exc
 
 
 def _php_dump_config(config_path: Path) -> dict[str, Any]:

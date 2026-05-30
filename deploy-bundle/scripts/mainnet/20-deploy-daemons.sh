@@ -266,12 +266,14 @@ launch_coin() {
     say "starting ${coin} from ${image}"
     docker run -d \
         --name "$coin" \
+        --user 0:0 \
         --net=host \
         --restart=unless-stopped \
         --stop-timeout "$MPOS_DAEMON_STOP_TIMEOUT_S" \
+        --entrypoint /bin/sh \
         -v "${datadir}:${datadir}" \
         "$image" \
-        /bin/sh -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}" \
+        -lc "mkdir -p ${datadir} && touch ${datadir}/debug.log && chmod 644 ${datadir}/debug.log && exec /usr/local/bin/${daemon} -datadir=${datadir}" \
         >/dev/null
 }
 

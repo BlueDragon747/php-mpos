@@ -22,7 +22,8 @@ with a single SSH-driven script.
 - A local checkout of `Blakestream-Containers` for the daemon image
   build. Export its path as `CONTAINERS_REPO` (required).
 - The deploy auto-clones the 25.2 Go eloipool half from
-  `https://github.com/BlueDragon747/eloipool_Blakecoin.git` (branch `25.2-GO`).
+  `https://github.com/BlueDragon747/eloipool_Blakecoin.git` (branch `25.2-GO`;
+  branch page `https://github.com/BlueDragon747/eloipool_Blakecoin/tree/25.2-GO`).
   If you want to deploy from a local checkout instead, export
   `ELIOPOOL_TREE=/path/to/Blakestream-Eliopool-25.2-GO`.
 - `ssh-copy-id <your-pool-host>` first so the deploy script has
@@ -129,7 +130,7 @@ BBTC, ELT, UMO, and LIT.
 
 The MPOS upstream lineage is tracked at
 [`BlueDragon747/php-mpos`](https://github.com/BlueDragon747/php-mpos), while
-this 25.2 deploy lane keeps MPOS on the SidGrip branch, Eloipool on
+this 25.2 deploy lane keeps MPOS on the BlueDragon747 `25.2-GO` branch, Eloipool on
 `BlueDragon747/eloipool_Blakecoin` branch `25.2-GO`, and wallet source builds
 on the six `0.25.2` wallet branches until live cutover. Switch the Eloipool
 and wallet source branch defaults to `master` after master carries those

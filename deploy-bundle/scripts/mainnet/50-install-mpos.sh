@@ -131,6 +131,39 @@ for slot, port in ports.items():
 open(path, "w").write(src)
 PY
 
+# Enforce the 25.2 maturity map on every deploy. Existing installs keep
+# their global.inc.php, so these values must be refreshed explicitly.
+python3 - "$GLOBAL" <<'PY'
+import re, sys
+path = sys.argv[1]
+src = open(path).read()
+values = {
+    "confirmations": 120,
+    "confirmations_mm": 120,
+    "confirmations_mm1": 100,
+    "confirmations_mm2": 120,
+    "confirmations_mm3": 460,
+    "confirmations_mm4": 120,
+    "confirmations_mm5": 120,
+    "confirmations_mm6": 120,
+    "network_confirmations": 120,
+    "network_confirmations_mm": 120,
+    "network_confirmations_mm1": 100,
+    "network_confirmations_mm2": 120,
+    "network_confirmations_mm3": 460,
+    "network_confirmations_mm4": 120,
+    "network_confirmations_mm5": 120,
+    "network_confirmations_mm6": 120,
+}
+for key, value in values.items():
+    pattern = rf"^(\$config\['{re.escape(key)}'\]\s*=\s*)[0-9]+;"
+    replacement = rf"\g<1>{value};"
+    src, count = re.subn(pattern, replacement, src, flags=re.MULTILINE)
+    if count == 0:
+        src += f"\n$config['{key}'] = {value};\n"
+open(path, "w").write(src)
+PY
+
 chown www-data:www-data "$GLOBAL"
 chmod 640 "$GLOBAL"
 

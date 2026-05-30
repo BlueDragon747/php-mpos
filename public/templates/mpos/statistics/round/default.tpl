@@ -71,14 +71,15 @@
 
         <dt>Confirmations</dt>
         <dd>
-        {if $BLOCKDETAILS.confirmations >= $GLOBAL.confirmations}
+        {assign var="required_confirmations" value=$BLOCKDETAILS.confirmations_required|default:$ROUND_CONFIRMATIONS|default:$GLOBAL.confirmations}
+        {if $BLOCKDETAILS.confirmations >= $required_confirmations}
           <span class="status-pill ok">Confirmed</span>
         {else if $BLOCKDETAILS.confirmations == -1}
           <span class="status-pill bad">Orphan</span>
         {else if $BLOCKDETAILS.confirmations == 0}
           <span class="status-pill pending">0</span>
         {else}
-          <span class="status-pill pending">{($GLOBAL.confirmations - $BLOCKDETAILS.confirmations)|default:"0"} left</span>
+          <span class="status-pill pending">{($required_confirmations - $BLOCKDETAILS.confirmations)|default:"0"} left</span>
         {/if}
         </dd>
 

@@ -22,12 +22,12 @@
         <td>Amount</td>
         <td>{$BLOCKDETAILS.amount|number_format|default:"0"}</td>
         <td>Confirmations</td>
-        <td>{if $BLOCKDETAILS.confirmations >= $GLOBAL.confirmations}
+        <td>{assign var="required_confirmations" value=$BLOCKDETAILS.confirmations_required|default:$ROUND_CONFIRMATIONS|default:$GLOBAL.confirmations}{if $BLOCKDETAILS.confirmations >= $required_confirmations}
           <font color="green">Confirmed</font>
         {else if $BLOCKDETAILS.confirmations == -1}
           <font color="red">Orphan</font>
         {else if $BLOCKDETAILS.confirmations == 0}0
-        {else}{($GLOBAL.confirmations - $BLOCKDETAILS.confirmations)|default:"0"} left{/if}</td>
+        {else}{($required_confirmations - $BLOCKDETAILS.confirmations)|default:"0"} left{/if}</td>
       </tr>
       <tr class="even">
         <td>Difficulty</td>
