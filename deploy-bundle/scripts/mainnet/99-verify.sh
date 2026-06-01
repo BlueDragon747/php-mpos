@@ -6,6 +6,15 @@ pass() { printf '   \033[1;32m[OK]\033[0m   %s\n' "$*"; }
 fail() { printf '   \033[1;31m[FAIL]\033[0m %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT+1)); }
 FAIL_COUNT=0
 
+wait_unit_active() {
+    local unit="$1" deadline=$(( $(date +%s) + 180 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        systemctl is-active --quiet "${unit}.service" && return 0
+        sleep 3
+    done
+    return 1
+}
+
 declare -A RPC_PORT=(
     [blc]=8772 [pho]=8984 [bbtc]=8243 [elt]=6852 [lit]=12000 [umo]=5921
 )
@@ -33,6 +42,9 @@ for port in 3334 19335 19334 "${MPOS_HTTP_PORT}"; do
         sleep 3
     done
 done
+for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer; do
+    wait_unit_active "$unit" || true
+done
 
 say "daemon RPCs"
 for sym in blc pho bbtc elt lit umo; do
@@ -50,7 +62,7 @@ done
 
 say "pool services"
 for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer; do
-    if systemctl is-active --quiet "${unit}.service"; then
+    if wait_unit_active "$unit"; then
         pass "${unit} active"
     else
         fail "${unit} not active"

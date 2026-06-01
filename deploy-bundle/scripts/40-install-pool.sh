@@ -195,7 +195,7 @@ expected = int(sys.argv[2])
 payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "getaux", "params": []}).encode()
 req = urllib.request.Request(f"http://127.0.0.1:{port}/", data=payload, headers={"Content-Type": "application/json"})
 last = "no response"
-for _ in range(120):
+for _ in range(300):
     try:
         with urllib.request.urlopen(req, timeout=8) as resp:
             body = json.loads(resp.read())
@@ -264,7 +264,7 @@ StandardOutput=append:${LOG_POOL}/mergeminer.stdout
 StandardError=append:${LOG_POOL}/mergeminer.stderr
 Restart=always
 RestartSec=5
-TimeoutStartSec=240
+TimeoutStartSec=360
 
 [Install]
 WantedBy=multi-user.target
