@@ -35,14 +35,12 @@ done
 say "pool services"
 systemctl is-active --quiet blakestream-mpos-eloipool.service && pass "eloipool active" || fail "eloipool not active"
 systemctl is-active --quiet blakestream-mpos-mergeminer.service && pass "mergeminer active" || fail "mergeminer not active"
-# cronjobs-py is opt-in — only verify it when the operator has activated
-# it. Otherwise the production scheduler is the PHP cronjob set, which
-# this verify script does not currently exercise (PHP cronjobs are
-# triggered ad-hoc / via system cron, not as a long-lived service).
-if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-0}" = "1" ]; then
+# cronjobs-py is the default scheduler, matching mainnet. Operators may
+# set MPOS_PYTHON_CRONJOBS_ACTIVE=0 to install it disabled for ad-hoc tests.
+if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
     systemctl is-active --quiet blakestream-mpos-cronjobs.service && pass "cronjobs-py active" || fail "cronjobs-py not active"
 else
-    pass "cronjobs-py installed but disabled (PHP cron is authoritative)"
+    pass "cronjobs-py installed but disabled by MPOS_PYTHON_CRONJOBS_ACTIVE=0"
 fi
 
 say "ports"

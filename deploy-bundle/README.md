@@ -275,6 +275,13 @@ export ELIOPOOL_TREE="$(cd Blakestream-Eliopool-25.2-GO && pwd)"
 
 ## Testnet Usage
 
+Testnet uses the same MPOS web stack, share importer, scheduler, payout
+pipeline, and verification path as mainnet. The network-specific differences
+are the testnet daemon mode/config, testnet ports, testnet addresses, and
+testnet chain data. `cronjobs-py` starts by default; set
+`MPOS_PYTHON_CRONJOBS_ACTIVE=0` only when intentionally staging it disabled
+for ad-hoc tests.
+
 ```bash
 # All-in-one install on the local host:
 sudo bash deploy-bundle/deploy-testnet.sh -local
