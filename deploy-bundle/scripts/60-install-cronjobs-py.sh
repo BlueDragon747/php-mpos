@@ -4,9 +4,10 @@
 #   - venv + pip install -e .
 #   - systemd unit invokes `cronjobs-py serve`
 #
-# Default: install but DO NOT enable. Set MPOS_PYTHON_CRONJOBS_ACTIVE=1
-# in the deploy environment to opt in. Running PHP cronjobs and
-# cronjobs-py against the same DB is an idempotency hazard.
+# Default: enable cronjobs-py as the scheduler, matching mainnet. Set
+# MPOS_PYTHON_CRONJOBS_ACTIVE=0 to install it disabled for ad-hoc tests.
+# Running PHP cronjobs and cronjobs-py against the same DB is an
+# idempotency hazard.
 set -euo pipefail
 
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
@@ -69,19 +70,17 @@ EOF
 
 systemctl daemon-reload
 
-if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-0}" = "1" ]; then
+if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
     systemctl enable --now blakestream-mpos-cronjobs.service
-    say "cronjobs-py started (MPOS_PYTHON_CRONJOBS_ACTIVE=1)"
+    say "cronjobs-py started (MPOS_PYTHON_CRONJOBS_ACTIVE=${MPOS_PYTHON_CRONJOBS_ACTIVE:-1})"
 else
-    # Make sure a previously-enabled unit (e.g. from a prior deploy
-    # run before this default flip) gets stopped so we don't ghost-run
-    # cronjobs-py against the DB while the operator thinks PHP cron
-    # is the only writer.
+    # Make sure a previously-enabled unit gets stopped when the operator
+    # explicitly chooses to stage cronjobs-py disabled.
     if systemctl is-active --quiet blakestream-mpos-cronjobs.service; then
         systemctl disable --now blakestream-mpos-cronjobs.service
-        say "cronjobs-py was active — stopped + disabled (set MPOS_PYTHON_CRONJOBS_ACTIVE=1 to opt in)"
+        say "cronjobs-py was active — stopped + disabled (MPOS_PYTHON_CRONJOBS_ACTIVE=0)"
     else
-        say "cronjobs-py installed but NOT enabled (set MPOS_PYTHON_CRONJOBS_ACTIVE=1 to opt in)"
+        say "cronjobs-py installed but NOT enabled (MPOS_PYTHON_CRONJOBS_ACTIVE=0)"
     fi
 fi
 

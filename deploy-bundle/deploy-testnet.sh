@@ -64,6 +64,8 @@ Tunable via env vars:
   MPOS_ADMIN_USER      seeded admin account (default: admin)
   MPOS_ADMIN_PASS      seeded admin password (default: random 32 hex)
   MPOS_ADMIN_PIN       seeded admin payout PIN (default: 0000)
+  MPOS_PYTHON_CRONJOBS_ACTIVE
+                       1 starts cronjobs-py like mainnet (default); 0 installs disabled
 EOF
 }
 
@@ -134,6 +136,7 @@ export MPOS_SALT="${MPOS_SALT:-$(random_hex 8)}"
 export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 8)}"
 export MPOS_API_TOKEN="${MPOS_API_TOKEN:-$(random_hex 16)}"
 
+export MPOS_PYTHON_CRONJOBS_ACTIVE="${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}"
 export MPOS_SKIP_POOL="$SKIP_POOL"
 export MPOS_WIPE="$WIPE"
 
@@ -185,6 +188,7 @@ require_pattern MPOS_HTTP_PORT "${MPOS_HTTP_PORT}" '[1-9][0-9]{0,4}'
 require_pattern MPOS_STRATUM_PORT "${MPOS_STRATUM_PORT}" '[1-9][0-9]{0,4}'
 require_pattern MPOS_DOCKER_HUB "${MPOS_DOCKER_HUB}" '[A-Za-z0-9._/-]{1,253}'
 require_pattern MPOS_IMAGE_TAG  "${MPOS_IMAGE_TAG}"  '[A-Za-z0-9._-]{1,128}'
+require_pattern MPOS_PYTHON_CRONJOBS_ACTIVE "${MPOS_PYTHON_CRONJOBS_ACTIVE}" '[01]'
 
 # Filesystem roots — disallow whitespace and shell metas.
 require_pattern MPOS_INSTALL_ROOT "${MPOS_INSTALL_ROOT}" '/[A-Za-z0-9._/-]+'
@@ -232,7 +236,7 @@ ENVRC="${MPOS_INSTALL_ROOT}/.deploy.env"
                MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_PIN \
                MPOS_RUN_USER MPOS_RUN_GROUP \
                MPOS_SALT MPOS_SALTY MPOS_API_TOKEN \
-               MPOS_SKIP_POOL MPOS_WIPE; do
+               MPOS_PYTHON_CRONJOBS_ACTIVE MPOS_SKIP_POOL MPOS_WIPE; do
         printf 'export %s=%q\n' "$var" "${!var}"
     done
 } > "$ENVRC"
