@@ -15,6 +15,7 @@ CRON_DEST="${INSTALL_ROOT}/cronjobs-py"
 VENV="${CRON_DEST}/.venv"
 SSE_BIND="${SSE_BIND:-127.0.0.1}"
 SSE_PORT="${SSE_PORT:-8090}"
+SSE_SCRIPT_SRC="/site_assets/mpos/js/sse-live.js?v=252go-sse2"
 
 # 1. Ensure the SSE module is in the deployed cronjobs-py tree
 #    (it's part of the same package; rsync covered this).
@@ -32,16 +33,18 @@ install -m 644 -o www-data -g www-data \
 #    forks may have moved it. We grep for the file rather than hard-
 #    coding so re-runs and forks both work.
 LAYOUT_TPL=$(grep -lE "</body>" "${WEB_ROOT}/templates/mpos"/*.tpl 2>/dev/null | head -1)
-if [ -n "${LAYOUT_TPL}" ] && ! grep -q "sse-live.js" "${LAYOUT_TPL}"; then
+if [ -n "${LAYOUT_TPL}" ] && grep -q "sse-live.js" "${LAYOUT_TPL}"; then
+    say "refreshing sse-live.js <script> tag in ${LAYOUT_TPL}"
+    sed -i -E "s|<script src=\"/site_assets/mpos/js/sse-live\\.js[^\"]*\"></script>|<script src=\"${SSE_SCRIPT_SRC}\"></script>|" \
+        "${LAYOUT_TPL}"
+elif [ -n "${LAYOUT_TPL}" ]; then
     say "injecting sse-live.js <script> tag into ${LAYOUT_TPL}"
-    sed -i 's|</body>|<script src="/site_assets/mpos/js/sse-live.js"></script>\n</body>|' \
+    sed -i "s|</body>|<script src=\"${SSE_SCRIPT_SRC}\"></script>\n</body>|" \
         "${LAYOUT_TPL}"
 elif [ -z "${LAYOUT_TPL}" ]; then
     say "no template with </body> found in ${WEB_ROOT}/templates/mpos; " \
-        "add <script src=\"/site_assets/mpos/js/sse-live.js\"></script> " \
+        "add <script src=\"${SSE_SCRIPT_SRC}\"></script> " \
         "manually if you want live updates"
-else
-    say "${LAYOUT_TPL} already references sse-live.js"
 fi
 
 # Smarty caches compiled templates — drop them so the new <script>

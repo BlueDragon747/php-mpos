@@ -214,7 +214,7 @@
     // unaffected. The pills sit in the .pool-blocks-card table.
     document.querySelectorAll('.pool-blocks-card .chain-pill').forEach(function (p) {
       p.style.cursor = 'pointer';
-      p.title = 'Show ' + (p.textContent || '').trim() + ' statistics';
+      p.removeAttribute('title');
       p.addEventListener('click', function () {
         setCoin((p.textContent || '').trim());
         // Scroll the General Statistics card into view so the user

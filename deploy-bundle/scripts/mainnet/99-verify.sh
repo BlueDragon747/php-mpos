@@ -42,7 +42,7 @@ for port in 3334 19335 19334 "${MPOS_HTTP_PORT}"; do
         sleep 3
     done
 done
-for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer; do
+for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer blakestream-mpos-system-status-cache; do
     wait_unit_active "$unit" || true
 done
 
@@ -61,7 +61,7 @@ for sym in blc pho bbtc elt lit umo; do
 done
 
 say "pool services"
-for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer; do
+for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-cronjobs blakestream-mpos-sharelog-importer blakestream-mpos-system-status-cache; do
     if wait_unit_active "$unit"; then
         pass "${unit} active"
     else

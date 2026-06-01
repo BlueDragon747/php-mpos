@@ -8,18 +8,59 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   // right per-coin tables. Empty suffix = parent (BLC). Unknown or
   // missing tickers fall back to the parent.
   $sRoundCoin = isset($_REQUEST['coin']) ? strtoupper(trim($_REQUEST['coin'])) : '';
+  $bRoundCoinRequested = ($sRoundCoin !== '');
+  $bRoundBlockRequested = !empty($_REQUEST['height']) || !empty($_REQUEST['search'])
+    || !empty($_REQUEST['next']) || !empty($_REQUEST['prev']);
   $aSlotMap = array('' => $config['currency']);
   foreach (array('mm','mm1','mm2','mm3','mm4','mm5','mm6') as $s) {
     $tk = isset($config['currency_' . $s]) ? $config['currency_' . $s] : '';
     if ($tk !== '' && stripos($tk, 'unused') === false) $aSlotMap[$s] = $tk;
   }
   $aTickerToSlot = array_flip($aSlotMap);
+
+  $fetchLatestBlockForSlot = function($sSlot) use ($mysqli) {
+    $sTable = $sSlot === '' ? 'blocks' : ('blocks_' . $sSlot);
+    $rowOut = null;
+    if ($stmt = $mysqli->prepare("SELECT height, time FROM $sTable ORDER BY time DESC, height DESC LIMIT 1")) {
+      if ($stmt->execute() && ($r = $stmt->get_result())) {
+        $rowOut = $r->fetch_assoc() ?: null;
+      }
+      $stmt->close();
+    }
+    return $rowOut;
+  };
+
   if ($sRoundCoin === '' || !isset($aTickerToSlot[$sRoundCoin])) {
     $sRoundCoin = $config['currency'];
     $sCoinSlot  = '';
   } else {
     $sCoinSlot = $aTickerToSlot[$sRoundCoin];
   }
+
+  // The top-level Round page should show useful data even before the
+  // parent chain finds its first block. If no coin/height was requested,
+  // land on the newest found block across all active parent/aux slots.
+  if (!$bRoundCoinRequested && !$bRoundBlockRequested) {
+    $aLatestRound = null;
+    foreach ($aSlotMap as $sSlot => $sTicker) {
+      $aCandidate = $fetchLatestBlockForSlot($sSlot);
+      if (!$aCandidate) continue;
+      $aCandidate['slot'] = $sSlot;
+      $aCandidate['ticker'] = $sTicker;
+      if (!$aLatestRound
+          || (int)$aCandidate['time'] > (int)$aLatestRound['time']
+          || ((int)$aCandidate['time'] === (int)$aLatestRound['time']
+              && (int)$aCandidate['height'] > (int)$aLatestRound['height'])) {
+        $aLatestRound = $aCandidate;
+      }
+    }
+    if ($aLatestRound) {
+      $sCoinSlot = $aLatestRound['slot'];
+      $sRoundCoin = $aLatestRound['ticker'];
+      $_REQUEST['height'] = (int)$aLatestRound['height'];
+    }
+  }
+
   $sRoundConfirmKey = ($sCoinSlot === '') ? 'confirmations' : ('confirmations_' . $sCoinSlot);
   $iRoundConfirmations = isset($config[$sRoundConfirmKey])
     ? (int)$config[$sRoundConfirmKey]
@@ -112,6 +153,10 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   if (is_array($aDetailsForBlockHeight)) {
     $aDetailsForBlockHeight['confirmations_required'] = $iRoundConfirmations;
   }
+  if (!is_array($aDetailsForBlockHeight) || !isset($aDetailsForBlockHeight['height'])) {
+    $aDetailsForBlockHeight = array();
+  }
+  $bRoundHasBlock = !empty($aDetailsForBlockHeight);
 
   // Per-account round shares come from `shares_archive` (per-share
   // detail rows that already have block_id stamped on them) rather
@@ -199,9 +244,10 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       ? $iParentBlockId
       : (isset($aDetailsForBlockHeight['id']) ? (int)$aDetailsForBlockHeight['id'] : 0);
     $aPPLNSRoundShares = array();
+    $aPPLNSRoundSharesByUid = array();
     if ($iSlotBlockId > 0) {
       if ($stmt = $mysqli->prepare(
-        "SELECT a.username, a.is_anonymous,
+        "SELECT a.id AS uid, a.username, a.is_anonymous,
                 ps.pplns_valid, ps.pplns_invalid
            FROM pplns_shares AS ps
            INNER JOIN accounts AS a ON a.id = ps.account_id
@@ -210,8 +256,19 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
         $stmt->bind_param('si', $sCoinSlot, $iSlotBlockId);
         if ($stmt->execute() && ($r = $stmt->get_result())) {
           while ($row = $r->fetch_assoc()) {
+            $iUid = (int)$row['uid'];
             $aPPLNSRoundShares[] = $row;
+            $aPPLNSRoundSharesByUid[$iUid] = $row;
             $iPPLNSShares += (float)$row['pplns_valid'];
+            if (!isset($aRoundShareStats[$iUid])) {
+              $aRoundShareStats[$iUid] = array(
+                'id' => $iUid,
+                'username' => $row['username'],
+                'is_anonymous' => $row['is_anonymous'],
+                'valid' => $row['pplns_valid'],
+                'invalid' => $row['pplns_invalid'],
+              );
+            }
           }
         }
         $stmt->close();
@@ -223,12 +280,15 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       ? $block->getAvgBlockShares($iHeight, $config['pplns']['blockavg']['blockcount'])
       : 0;
     $smarty->assign('PPLNSROUNDSHARES', $aPPLNSRoundShares);
+    $smarty->assign('PPLNSROUNDSHARES_BY_UID', $aPPLNSRoundSharesByUid);
     $smarty->assign("PPLNSSHARES", $iPPLNSShares);
     $smarty->assign("BLOCKAVGCOUNT", $config['pplns']['blockavg']['blockcount']);
     $smarty->assign("BLOCKAVERAGE", $block_avg);
   }
 
   $smarty->assign('BLOCKDETAILS', $aDetailsForBlockHeight);
+  $smarty->assign("ROUND_HAS_BLOCK", $bRoundHasBlock);
+  $smarty->assign("ROUND_EMPTY_MESSAGE", "No found blocks for " . $sRoundCoin . " yet.");
   $smarty->assign("ROUND_CONFIRMATIONS", $iRoundConfirmations);
   $smarty->assign('ROUNDSHARES', $aRoundShareStats);
   $smarty->assign("ROUNDTRANSACTIONS", $aUserRoundTransactions);

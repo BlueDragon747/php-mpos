@@ -35,7 +35,7 @@
             <td class="td-rank">{$rank++}</td>
             <td class="td-name">{if $BLOCKSSOLVEDBYACCOUNT[block].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}<span class="anon">anonymous</span>{else}{$BLOCKSSOLVEDBYACCOUNT[block].finder|default:"unknown"|escape}{/if}</td>
             <td class="center num">{$BLOCKSSOLVEDBYACCOUNT[block].solvedblocks}</td>
-            <td class="right num">{$BLOCKSSOLVEDBYACCOUNT[block].generatedcoins|number_format}</td>
+            <td class="right num">{$BLOCKSSOLVEDBYACCOUNT[block].generatedcoins|number_format:"8"}</td>
           </tr>
 {sectionelse}
           <tr><td colspan="4" class="finder-empty">No blocks found yet.</td></tr>
@@ -68,7 +68,7 @@
             <td class="td-rank">{$rank++}</td>
             <td class="td-name">{$BLOCKSSOLVEDBYWORKER[block].finder|default:"unknown/deleted"|escape}</td>
             <td class="center num">{$BLOCKSSOLVEDBYWORKER[block].solvedblocks}</td>
-            <td class="right num">{$BLOCKSSOLVEDBYWORKER[block].generatedcoins|number_format}</td>
+            <td class="right num">{$BLOCKSSOLVEDBYWORKER[block].generatedcoins|number_format:"8"}</td>
           </tr>
 {sectionelse}
           <tr><td colspan="4" class="finder-empty">None of your workers have found a block yet.</td></tr>

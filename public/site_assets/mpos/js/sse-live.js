@@ -29,6 +29,9 @@
     var SSE_URL = '/sse/pool';
     var RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
     var reconnectIdx = 0;
+    var eventSource = null;
+    var reconnectTimer = null;
+    var closing = false;
 
     // Lightweight rolling counters so the dashboard can show a
     // recent-share rate without re-querying the DB.
@@ -187,8 +190,37 @@
         });
     }
 
+    function pageNeedsSse() {
+        return !!document.querySelector('[data-sse], [data-sse-worker], #sse-toasts');
+    }
+
+    function closeEventSource() {
+        closing = true;
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+    }
+
+    if (window.__BSX_SSE_LIVE__ && typeof window.__BSX_SSE_LIVE__.close === 'function') {
+        window.__BSX_SSE_LIVE__.close();
+    }
+    window.__BSX_SSE_LIVE__ = { close: closeEventSource };
+
+    window.addEventListener('pagehide', closeEventSource);
+    window.addEventListener('beforeunload', closeEventSource);
+
     function connect() {
+        if (closing) return;
+        if (eventSource) eventSource.close();
+
         var es = new EventSource(SSE_URL);
+        eventSource = es;
+
         es.onopen = function () {
             reconnectIdx = 0;
             console.log('[sse-live] connected');
@@ -206,18 +238,30 @@
         };
         es.onerror = function () {
             es.close();
+            if (eventSource === es) eventSource = null;
+            if (closing) return;
+
             var delay = RECONNECT_BACKOFF_MS[Math.min(reconnectIdx, RECONNECT_BACKOFF_MS.length - 1)];
             reconnectIdx++;
             console.warn('[sse-live] disconnected; reconnect in', delay, 'ms');
-            setTimeout(connect, delay);
+            reconnectTimer = setTimeout(function () {
+                reconnectTimer = null;
+                connect();
+            }, delay);
         };
     }
 
-    // Wait until DOMContentLoaded to be safe — most MPOS pages put
-    // the dashboard cells after the <script> tag.
+    function startIfNeeded() {
+        if (pageNeedsSse()) connect();
+    }
+
+    // Wait until DOMContentLoaded to be safe — pages that still use
+    // legacy SSE markers put those cells after the script tag. Vue v2
+    // pages manage their own EventSource, so this global helper stays
+    // idle unless legacy `data-sse` markup is present.
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', connect);
+        document.addEventListener('DOMContentLoaded', startIfNeeded);
     } else {
-        connect();
+        startIfNeeded();
     }
 })();

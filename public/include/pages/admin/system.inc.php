@@ -1,8 +1,10 @@
 <?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
+$system_status_collector_mode = defined('BSX_SYSTEM_STATUS_COLLECTOR') && BSX_SYSTEM_STATUS_COLLECTOR;
 
 // Admin-only.
-if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
+if (!$system_status_collector_mode &&
+    (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id']))) {
   header("HTTP/1.1 404 Page not found");
   die("404 Page not found");
 }
@@ -11,12 +13,130 @@ if (!$user->isAuthenticated() || !$user->isAdmin($_SESSION['USERDATA']['id'])) {
 // for plain GET, which is the partial-poll + page render path.
 require_once dirname(__FILE__) . '/../../admin_csrf.inc.php';
 require_once __DIR__ . '/_daemon_rule_status.inc.php';
-_require_admin_csrf($csrftoken);
+if (!$system_status_collector_mode) _require_admin_csrf($csrftoken);
+
+$system_status_cache_key = 'ADMIN_SYSTEM_STATUS_V1';
+$system_status_cache_fresh_ttl = 10;
+$system_status_cache_stale_ttl = 60;
+
+function _system_status_cache_full_key($key) {
+  global $config;
+  return (isset($config['memcache']['keyprefix']) ? $config['memcache']['keyprefix'] : '') . $key;
+}
+
+function _system_status_cache_enabled() {
+  global $config, $memcache;
+  return isset($memcache) && is_object($memcache) && !empty($config['memcache']['enabled']);
+}
+
+function _system_status_cache_get($key) {
+  global $memcache;
+  if (!_system_status_cache_enabled()) return false;
+  if (method_exists($memcache, 'getStatic')) return $memcache->getStatic($key);
+  if (method_exists($memcache, 'get')) return $memcache->get(_system_status_cache_full_key($key));
+  return false;
+}
+
+function _system_status_cache_set($key, $value, $expiration) {
+  global $memcache;
+  if (!_system_status_cache_enabled()) return false;
+  if (method_exists($memcache, 'setStaticCache')) return $memcache->setStaticCache($key, $value, $expiration);
+  if (method_exists($memcache, 'set')) return $memcache->set(_system_status_cache_full_key($key), $value, $expiration);
+  return false;
+}
+
+function _system_status_cache_delete($key) {
+  global $memcache;
+  if (!_system_status_cache_enabled()) return false;
+  if (method_exists($memcache, 'delete') || is_callable(array($memcache, 'delete'))) {
+    return @$memcache->delete(_system_status_cache_full_key($key));
+  }
+  return false;
+}
+
+function _system_status_empty_payload($state = 'warming', $message = 'System status warming up') {
+  global $system_status_cache_fresh_ttl, $system_status_cache_stale_ttl;
+  return array(
+    'ts'               => time(),
+    'cache'            => array(
+      'hit' => false,
+      'state' => $state,
+      'age' => 0,
+      'ttl' => $system_status_cache_fresh_ttl,
+      'stale_ttl' => $system_status_cache_stale_ttl,
+      'message' => $message,
+    ),
+    'users'            => array('total' => 0, 'active' => 0, 'locked' => 0, 'admins' => 0, 'nofees' => 0),
+    'logins'           => array('24hours' => 0, '7days' => 0, '1month' => 0, '6month' => 0, '1year' => 0),
+    'invitations'      => null,
+    'versions'         => array(),
+    'services'         => array(),
+    'backup'           => array(
+      'enabled' => 0, 'last_mtime' => 0, 'last_size' => 0, 'next_run' => 0,
+      'next_day_label' => '', 'retention_days' => 0, 'schedule_time' => '',
+      'schedule_hour' => 0, 'schedule_minute' => 0, 'wallets' => array(),
+      'tarball_path' => '', 'database' => '', 'database_size' => 0,
+    ),
+    'cpu'              => array(),
+    'swap'             => array(),
+    'swap_available'   => '—',
+    'swap_configured'  => 0,
+    'memory'           => array(),
+    'memory_available' => '—',
+    'disk'             => array(),
+    'disk_available'   => '—',
+    'network'          => array(),
+    'network_miners'   => '—',
+    'network_iface'    => '—',
+    'daemons'          => array(),
+    'wallets'          => array(),
+    'procs'            => array(),
+    'outbox'           => array(),
+    'outbox_open'      => 0,
+    'outbox_counts'    => array('pending' => 0, 'broadcast' => 0, 'reconciled' => 0, 'other' => 0),
+  );
+}
+
+function _system_status_cached_payload($key) {
+  global $system_status_cache_fresh_ttl, $system_status_cache_stale_ttl;
+  $cached_payload = _system_status_cache_get($key);
+  if (!is_array($cached_payload) ||
+      !isset($cached_payload['ts'], $cached_payload['payload']) ||
+      !is_array($cached_payload['payload'])) {
+    return false;
+  }
+
+  $age = max(0, time() - (int)$cached_payload['ts']);
+  if ($age > $system_status_cache_stale_ttl) return false;
+
+  $payload = $cached_payload['payload'];
+  $state = $age <= $system_status_cache_fresh_ttl ? 'fresh' : 'stale';
+  $payload['cache'] = array(
+    'hit' => true,
+    'state' => $state,
+    'age' => $age,
+    'ttl' => $system_status_cache_fresh_ttl,
+    'stale_ttl' => $system_status_cache_stale_ttl,
+    'message' => $state === 'stale' ? 'System status stale' : 'System status fresh',
+  );
+  return $payload;
+}
+
+function _system_status_respond_payload($payload) {
+  while (ob_get_level() > 0) ob_end_clean();
+  if (defined('BSX_SYSTEM_STATUS_QUIET') && BSX_SYSTEM_STATUS_QUIET) {
+    exit;
+  }
+  header('Content-Type: application/json; charset=utf-8');
+  header('Cache-Control: no-store');
+  echo json_encode($payload, JSON_UNESCAPED_SLASHES);
+  exit;
+}
 
 // Single mutation supported here: toggle backups_enabled. Reuses the
 // same settings table the admin Settings page writes to, so flipping
 // it here = flipping it there.
-if (@$_POST['do'] === 'update_backup_settings') {
+if (!$system_status_collector_mode && @$_POST['do'] === 'update_backup_settings') {
   $msgs = array();
 
   // Enabled toggle (unchecked = absent → write 0).
@@ -41,6 +161,8 @@ if (@$_POST['do'] === 'update_backup_settings') {
     $setting->setValue('backup_retention_days', (string)$days);
     $msgs[] = "retention {$days}d";
   }
+
+  _system_status_cache_delete($system_status_cache_key);
 
   $log->log("warn", @$_SESSION['USERDATA']['username']
             . ' updated backup settings via System Status: ' . implode(', ', $msgs));
@@ -461,6 +583,25 @@ function _system_cpu_busy_pct() {
   return _system_cpu_busy_pct_from_samples($now, $later);
 }
 
+$system_status_payload = _system_status_cached_payload($system_status_cache_key);
+if (!$system_status_collector_mode) {
+  if (!is_array($system_status_payload)) {
+    $system_status_payload = _system_status_empty_payload();
+  }
+} else {
+  $lock_file = sys_get_temp_dir() . '/blakestream-mpos-system-status-cache.lock';
+  $lock_fp = @fopen($lock_file, 'c');
+  if (!$lock_fp || !@flock($lock_fp, LOCK_EX | LOCK_NB)) {
+    if (is_array($system_status_payload)) {
+      $system_status_payload['cache']['state'] = 'refreshing';
+      $system_status_payload['cache']['message'] = 'System status refresh already running';
+      _system_status_respond_payload($system_status_payload);
+    }
+    _system_status_respond_payload(_system_status_empty_payload('warming', 'System status refresh already running'));
+  }
+}
+
+if ($system_status_collector_mode) {
 // ---- Users / Invitations / Logins (migrated from admin Dashboard) --
 $users_info = array(
   'total'  => (int)$user->getCount(),
@@ -508,6 +649,7 @@ $services = array(
   'web'            => array('user:mpos25-web.service', 'system:nginx.service'),
   'mariadb'        => array('user:mpos25-mariadb.service', 'system:mariadb.service'),
   'memcached'      => 'system:memcached.service',
+  'system-status'  => 'system:blakestream-mpos-system-status-cache.service',
   'backup-timer'   => array('user:mpos25-backup.timer', 'system:blakestream-mpos-backup.timer'),
 );
 $service_rows = array();
@@ -1062,38 +1204,80 @@ $sys_backup = array(
                           : 0,
 );
 
+$system_status_payload = array(
+  'ts'               => time(),
+  'cache'            => array(
+    'hit' => false,
+    'state' => 'fresh',
+    'age' => 0,
+    'ttl' => $system_status_cache_fresh_ttl,
+    'stale_ttl' => $system_status_cache_stale_ttl,
+    'message' => 'System status refreshed',
+  ),
+  'users'            => $users_info,
+  'logins'           => $logins_info,
+  'invitations'      => $invitations_info,
+  'versions'         => $mpos_versions,
+  'services'         => $service_rows,
+  'backup'           => $sys_backup,
+  'cpu'              => $cpu_rows,
+  'swap'             => $swap_rows,
+  'swap_available'   => $swap_available_str,
+  'swap_configured'  => $swap_configured,
+  'memory'           => $memory_rows,
+  'memory_available' => $memory_available_str,
+  'disk'             => $disk_rows,
+  'disk_available'   => $disk_available_str,
+  'network'          => $network_rows,
+  'network_miners'   => $network_miners_str,
+  'network_iface'    => $network_iface,
+  'daemons'          => $daemon_rows,
+  'wallets'          => $wallet_panel_rows,
+  'procs'            => $proc_rows,
+  'outbox'           => $outbox_rows,
+  'outbox_open'      => $outbox_open_count,
+  'outbox_counts'    => $outbox_counts,
+);
+
+_system_status_cache_set(
+  $system_status_cache_key,
+  array('ts' => time(), 'payload' => $system_status_payload),
+  $system_status_cache_stale_ttl + $system_status_cache_fresh_ttl
+);
+  if (isset($lock_fp) && is_resource($lock_fp)) {
+    @flock($lock_fp, LOCK_UN);
+    @fclose($lock_fp);
+  }
+  _system_status_respond_payload($system_status_payload);
+}
+
+$users_info           = $system_status_payload['users'];
+$logins_info          = $system_status_payload['logins'];
+$invitations_info     = $system_status_payload['invitations'];
+$mpos_versions        = $system_status_payload['versions'];
+$service_rows         = $system_status_payload['services'];
+$sys_backup           = $system_status_payload['backup'];
+$cpu_rows             = $system_status_payload['cpu'];
+$swap_rows            = $system_status_payload['swap'];
+$swap_available_str   = $system_status_payload['swap_available'];
+$swap_configured      = $system_status_payload['swap_configured'];
+$memory_rows          = $system_status_payload['memory'];
+$memory_available_str = $system_status_payload['memory_available'];
+$disk_rows            = $system_status_payload['disk'];
+$disk_available_str   = $system_status_payload['disk_available'];
+$network_rows         = $system_status_payload['network'];
+$network_miners_str   = $system_status_payload['network_miners'];
+$network_iface        = $system_status_payload['network_iface'];
+$daemon_rows          = $system_status_payload['daemons'];
+$wallet_panel_rows    = $system_status_payload['wallets'];
+$proc_rows            = $system_status_payload['procs'];
+$outbox_rows          = $system_status_payload['outbox'];
+$outbox_open_count    = $system_status_payload['outbox_open'];
+$outbox_counts        = $system_status_payload['outbox_counts'];
+
 // ---- _partial=1: JSON for the live-poll endpoint -------------------
 if (!empty($_GET['_partial'])) {
-  while (ob_get_level() > 0) ob_end_clean();
-  header('Content-Type: application/json; charset=utf-8');
-  header('Cache-Control: no-store');
-  echo json_encode(array(
-    'ts'          => time(),
-    'users'       => $users_info,
-    'logins'      => $logins_info,
-    'invitations' => $invitations_info,
-    'versions'    => $mpos_versions,
-    'services'    => $service_rows,
-    'backup'      => $sys_backup,
-    'cpu'         => $cpu_rows,
-    'swap'             => $swap_rows,
-    'swap_available'   => $swap_available_str,
-    'swap_configured'  => $swap_configured,
-    'memory'           => $memory_rows,
-    'memory_available' => $memory_available_str,
-    'disk'             => $disk_rows,
-    'disk_available'   => $disk_available_str,
-    'network'         => $network_rows,
-    'network_miners'  => $network_miners_str,
-    'network_iface'   => $network_iface,
-    'daemons'     => $daemon_rows,
-    'wallets'     => $wallet_panel_rows,
-    'procs'       => $proc_rows,
-    'outbox'      => $outbox_rows,
-    'outbox_open' => $outbox_open_count,
-    'outbox_counts' => $outbox_counts,
-  ), JSON_UNESCAPED_SLASHES);
-  exit;
+  _system_status_respond_payload($system_status_payload);
 }
 
 $smarty->assign('SYS_USERS',       $users_info);
@@ -1119,6 +1303,7 @@ $smarty->assign('SYS_PROCS',    $proc_rows);
 $smarty->assign('SYS_OUTBOX',   $outbox_rows);
 $smarty->assign('SYS_OUTBOX_OPEN', $outbox_open_count);
 $smarty->assign('SYS_OUTBOX_COUNTS', $outbox_counts);
+$smarty->assign('SYS_STATUS_CACHE', $system_status_payload['cache']);
 
 $smarty->assign('CONTENT', 'default.tpl');
 ?>

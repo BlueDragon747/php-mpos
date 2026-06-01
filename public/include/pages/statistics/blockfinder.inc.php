@@ -10,17 +10,52 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
   // Empty suffix = parent (BLC); unknown / 'unused*' tickers fall back
   // to the parent.
   $sFinderCoin = isset($_REQUEST['coin']) ? strtoupper(trim($_REQUEST['coin'])) : '';
+  $bFinderCoinRequested = ($sFinderCoin !== '');
   $aSlotMap = array('' => $config['currency']);
   foreach (array('mm','mm1','mm2','mm3','mm4','mm5','mm6') as $s) {
     $tk = isset($config['currency_' . $s]) ? $config['currency_' . $s] : '';
     if ($tk !== '' && stripos($tk, 'unused') === false) $aSlotMap[$s] = $tk;
   }
   $aTickerToSlot = array_flip($aSlotMap);
+
+  $fetchLatestBlockForSlot = function($sSlot) use ($mysqli) {
+    $sTable = ($sSlot === '') ? 'blocks' : ('blocks_' . $sSlot);
+    $aBlock = null;
+    if ($stmt = $mysqli->prepare("SELECT height, time FROM $sTable ORDER BY time DESC, height DESC LIMIT 1")) {
+      if ($stmt->execute() && ($result = $stmt->get_result())) {
+        $aBlock = $result->fetch_assoc() ?: null;
+      }
+      $stmt->close();
+    }
+    return $aBlock;
+  };
+
   if ($sFinderCoin === '' || !isset($aTickerToSlot[$sFinderCoin])) {
     $sFinderCoin = $config['currency'];
     $sCoinSlot   = '';
   } else {
     $sCoinSlot = $aTickerToSlot[$sFinderCoin];
+  }
+
+  if (!$bFinderCoinRequested) {
+    $aLatestBlock = null;
+    foreach ($aSlotMap as $sSlot => $sTicker) {
+      $aCandidate = $fetchLatestBlockForSlot($sSlot);
+      if (!$aCandidate) continue;
+      $aCandidate['slot'] = $sSlot;
+      $aCandidate['ticker'] = $sTicker;
+      if (
+        !$aLatestBlock ||
+        (int)$aCandidate['time'] > (int)$aLatestBlock['time'] ||
+        ((int)$aCandidate['time'] === (int)$aLatestBlock['time'] && (int)$aCandidate['height'] > (int)$aLatestBlock['height'])
+      ) {
+        $aLatestBlock = $aCandidate;
+      }
+    }
+    if ($aLatestBlock) {
+      $sFinderCoin = $aLatestBlock['ticker'];
+      $sCoinSlot = $aLatestBlock['slot'];
+    }
   }
 
   // Pick the right Statistics instance for the resolved slot. Each

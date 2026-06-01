@@ -258,12 +258,12 @@ backup_local_wallets() {
 }
 
 backup_docker_wallet() {
-    local sym="$1" cli="$2" container="$3" inner_path="$4"
+    local sym="$1" cli="$2" container="$3" datadir="$4" inner_path="$5"
     if ! command -v docker >/dev/null 2>&1 \
         || ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
         return 1
     fi
-    if docker exec "$container" "$cli" backupwallet "$inner_path" >/dev/null 2>&1; then
+    if docker exec "$container" "$cli" -datadir="$datadir" backupwallet "$inner_path" >/dev/null 2>&1; then
         if docker cp "${container}:${inner_path}" "${WORK}/wallets/${sym}.dat" 2>/dev/null; then
             echo "    [$sym] Docker wallet backed up ($(du -h "${WORK}/wallets/${sym}.dat" | cut -f1))"
             WALLETS+=("${sym}/default")
@@ -293,7 +293,7 @@ for sym in blc pho bbtc elt umo lit; do
     fi
 
     inner_path="${DAEMON_DATADIR[$sym]}/${sym}-wallet-${STAMP}.dat"
-    if backup_docker_wallet "$sym" "$cli" "$container" "$inner_path"; then
+    if backup_docker_wallet "$sym" "$cli" "$container" "${DAEMON_DATADIR[$sym]}" "$inner_path"; then
         continue
     else
         echo "    [$sym] WARN: no working local or Docker wallet backup path"

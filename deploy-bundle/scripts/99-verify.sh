@@ -51,7 +51,7 @@ for entry in \
 done
 
 say "pool services"
-for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer; do
+for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mpos-system-status-cache; do
     wait_unit_active "$unit" || true
 done
 if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
@@ -59,6 +59,7 @@ if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
 fi
 wait_unit_active blakestream-mpos-eloipool && pass "eloipool active" || fail "eloipool not active"
 wait_unit_active blakestream-mpos-mergeminer && pass "mergeminer active" || fail "mergeminer not active"
+wait_unit_active blakestream-mpos-system-status-cache && pass "system status cache active" || fail "system status cache not active"
 # cronjobs-py is the default scheduler, matching mainnet. Operators may
 # set MPOS_PYTHON_CRONJOBS_ACTIVE=0 to install it disabled for ad-hoc tests.
 if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
