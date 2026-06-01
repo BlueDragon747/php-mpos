@@ -128,7 +128,7 @@ req = urllib.request.Request(
     headers={"Content-Type": "application/json"},
 )
 last = "no response"
-for _ in range(120):
+for _ in range(300):
     try:
         with urllib.request.urlopen(req, timeout=8) as resp:
             body = json.loads(resp.read())
@@ -391,7 +391,7 @@ StandardOutput=append:${LOG_POOL}/mergeminer.stdout
 StandardError=append:${LOG_POOL}/mergeminer.stderr
 Restart=always
 RestartSec=5
-TimeoutStartSec=240
+TimeoutStartSec=360
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

@@ -11,6 +11,15 @@ say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-blakestream-testnet}"
 
+wait_unit_active() {
+    local unit="$1" deadline=$(( $(date +%s) + 180 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        systemctl is-active --quiet "${unit}.service" && return 0
+        sleep 3
+    done
+    return 1
+}
+
 say "daemon RPCs"
 for entry in \
     "blakecoin:29332" \
@@ -33,12 +42,18 @@ for entry in \
 done
 
 say "pool services"
-systemctl is-active --quiet blakestream-mpos-eloipool.service && pass "eloipool active" || fail "eloipool not active"
-systemctl is-active --quiet blakestream-mpos-mergeminer.service && pass "mergeminer active" || fail "mergeminer not active"
+for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer; do
+    wait_unit_active "$unit" || true
+done
+if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
+    wait_unit_active blakestream-mpos-cronjobs || true
+fi
+wait_unit_active blakestream-mpos-eloipool && pass "eloipool active" || fail "eloipool not active"
+wait_unit_active blakestream-mpos-mergeminer && pass "mergeminer active" || fail "mergeminer not active"
 # cronjobs-py is the default scheduler, matching mainnet. Operators may
 # set MPOS_PYTHON_CRONJOBS_ACTIVE=0 to install it disabled for ad-hoc tests.
 if [ "${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}" = "1" ]; then
-    systemctl is-active --quiet blakestream-mpos-cronjobs.service && pass "cronjobs-py active" || fail "cronjobs-py not active"
+    wait_unit_active blakestream-mpos-cronjobs && pass "cronjobs-py active" || fail "cronjobs-py not active"
 else
     pass "cronjobs-py installed but disabled by MPOS_PYTHON_CRONJOBS_ACTIVE=0"
 fi
