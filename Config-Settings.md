@@ -82,7 +82,8 @@ source ref to `master` after live cutover.
 | Variable | Default | Notes |
 |---|---|---|
 | `MPOS_ADMIN_USER` | `admin` | First-login admin username. |
-| `MPOS_ADMIN_PASS` | random 32 hex | First-login password. Printed at the end of deploy unless overridden. |
+| `MPOS_ADMIN_PASS` | random 32 hex | First-login password. Saved in `/root/.mpos-deploy.env`. |
+| `MPOS_ADMIN_PIN` | `0000` | First-login payout PIN. Saved in `/root/.mpos-deploy.env` with the other deploy secrets. |
 | `MPOS_ADMIN_EMAIL` | `admin@blakestream.local` | Notification address (worker alerts, etc.). |
 
 ---

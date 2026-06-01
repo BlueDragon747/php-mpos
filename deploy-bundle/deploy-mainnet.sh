@@ -155,6 +155,7 @@ Tunables (env):
   MPOS_DB_PASS         DB password (default: random 32 hex)
   MPOS_ADMIN_USER      Admin login (default: admin)
   MPOS_ADMIN_PASS      Admin password (default: random 32 hex)
+  MPOS_ADMIN_PIN       Admin payout PIN (default: 0000)
   MPOS_NODE_RPC_USER   Pool's RPC user across daemons (default: blakestream)
   MPOS_NODE_RPC_PASS   Pool's RPC pass (default: random)
   BOOTSTRAP_IMPORT_TIMEOUT_S
@@ -406,6 +407,7 @@ export MPOS_DB_HOST="${MPOS_DB_HOST:-127.0.0.1}"
 export MPOS_DB_PORT="${MPOS_DB_PORT:-3306}"
 export MPOS_ADMIN_USER="${MPOS_ADMIN_USER:-admin}"
 export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 32)}"
+export MPOS_ADMIN_PIN="${MPOS_ADMIN_PIN:-0000}"
 export MPOS_ADMIN_EMAIL="${MPOS_ADMIN_EMAIL:-admin@blakestream.local}"
 export MPOS_SALT="${MPOS_SALT:-$(random_hex 32)}"
 export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 32)}"
@@ -466,6 +468,7 @@ require_pattern MPOS_DB_HOST      "${MPOS_DB_HOST}"      '[A-Za-z0-9._-]{1,253}'
 require_pattern MPOS_DB_PORT      "${MPOS_DB_PORT}"      '[1-9][0-9]{0,4}'
 require_pattern MPOS_ADMIN_USER   "${MPOS_ADMIN_USER}"   '[A-Za-z0-9_]{1,32}'
 require_pattern MPOS_ADMIN_PASS   "${MPOS_ADMIN_PASS}"   '[A-Za-z0-9_+=:,.@%/-]{8,128}'
+require_pattern MPOS_ADMIN_PIN    "${MPOS_ADMIN_PIN}"    '[0-9]{4}'
 require_pattern MPOS_ADMIN_EMAIL  "${MPOS_ADMIN_EMAIL}"  '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+'
 require_pattern MPOS_SALT         "${MPOS_SALT}"         '[A-Fa-f0-9]{8,128}'
 require_pattern MPOS_SALTY        "${MPOS_SALTY}"        '[A-Fa-f0-9]{8,128}'
@@ -518,7 +521,7 @@ ENVRC=$(mktemp)
     for var in MPOS_INSTALL_ROOT MPOS_WEB_ROOT MPOS_LOG_ROOT \
                MPOS_DOMAIN MPOS_HTTP_PORT MPOS_STRATUM_PORT MPOS_SSH_PORT \
                MPOS_DB_NAME MPOS_DB_USER MPOS_DB_PASS MPOS_DB_HOST MPOS_DB_PORT \
-               MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_EMAIL \
+               MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_PIN MPOS_ADMIN_EMAIL \
                MPOS_SALT MPOS_SALTY MPOS_API_TOKEN \
                MPOS_NODE_RPC_USER MPOS_NODE_RPC_PASS \
                MPOS_DOCKER_HUB MPOS_IMAGE_TAG MPOS_PULL_DAEMON_IMAGES \
