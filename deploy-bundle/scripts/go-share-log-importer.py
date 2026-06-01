@@ -312,7 +312,10 @@ def main() -> int:
                     skipped_unknown,
                 )
         except pymysql.MySQLError as exc:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except pymysql.MySQLError:
+                pass
             logging.error("database error: %s; reconnecting", exc)
             try:
                 conn.close()

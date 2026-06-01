@@ -40,10 +40,7 @@ write_conf() {
 testnet=1
 rpcuser=${NODE_RPC_USER}
 rpcpassword=${NODE_RPC_PASS}
-rpcbind=127.0.0.1
 rpcallowip=127.0.0.1
-rpcport=${rpcport}
-port=${p2pport}
 listen=1
 server=1
 daemon=0
@@ -55,6 +52,11 @@ upnp=0
 maxtipage=3153600000
 dnsseed=0
 fixedseeds=0
+
+[test]
+rpcbind=127.0.0.1
+rpcport=${rpcport}
+port=${p2pport}
 addnode=127.0.0.1:${peer_p2p}
 EOF
     chmod 640 "$conf_path"

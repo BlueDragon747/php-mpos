@@ -114,6 +114,14 @@ declare -A COIN_CLI=(
     [umo]="universalmolecule-cli"
     [lit]="lithium-cli"
 )
+declare -A COIN_RPC_PORT=(
+    [blc]="8772"
+    [pho]="8984"
+    [bbtc]="8243"
+    [elt]="6852"
+    [umo]="5921"
+    [lit]="12000"
+)
 declare -A COIN_IMAGE_NAME=(
     [blc]="blakecoin"
     [pho]="photon"
@@ -166,9 +174,9 @@ OS_HEADROOM_MB="${OS_HEADROOM_MB:-2048}"
 BOOTSTRAP_DBCACHE_MIN_MB="${BOOTSTRAP_DBCACHE_MIN_MB:-500}"
 BOOTSTRAP_DBCACHE_MAX_MB="${BOOTSTRAP_DBCACHE_MAX_MB:-8000}"
 BOOTSTRAP_DBCACHE_MB="${BOOTSTRAP_DBCACHE_MB:-}"
-STEADY_DBCACHE_MB="${STEADY_DBCACHE_MB:-400}"
+STEADY_DBCACHE_MB="${STEADY_DBCACHE_MB:-200}"
 DBCACHE_MB="${DBCACHE_MB:-${STEADY_DBCACHE_MB}}"
-MAXMEMPOOL_MB="${MAXMEMPOOL_MB:-50}"
+MAXMEMPOOL_MB="${MAXMEMPOOL_MB:-25}"
 PEERS_ON_MAXCONN="${PEERS_ON_MAXCONN:-32}"
 BOOTSTRAP_IMPORT_TIMEOUT_S="${BOOTSTRAP_IMPORT_TIMEOUT_S:-21600}" # 6h max per coin
 BOOTSTRAP_IMPORT_SLEEP_S="${BOOTSTRAP_IMPORT_SLEEP_S:-60}"
@@ -186,6 +194,8 @@ BOOTSTRAP_MIRROR_HOST="${BOOTSTRAP_MIRROR_HOST:-}"
 TIP_CATCH_TIMEOUT_S="${TIP_CATCH_TIMEOUT_S:-7200}"  # 2h max waiting for tip catch-up
 TIP_CATCH_LAG="${TIP_CATCH_LAG:-5}"
 START_AFTER="${START_AFTER:-1}"
+STEADY_START_RPC_TIMEOUT_S="${STEADY_START_RPC_TIMEOUT_S:-900}"
+STEADY_START_SETTLE_S="${STEADY_START_SETTLE_S:-15}"
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
 MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
 DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
@@ -298,7 +308,7 @@ ensure_caps() {
     # Always SET dbcache/maxmempool to the currently-effective values.
     # Old behaviour was append-if-missing only — now we update existing
     # lines too, so bootstrap_one can flip dbcache between a boosted
-    # value for fresh-import (4000) and steady-state (400).
+    # value for fresh-import and steady-state.
     local conf="$1"
     if grep -q "^dbcache=" "$conf"; then
         sed -i "s/^dbcache=.*/dbcache=${DBCACHE_MB}/" "$conf"
@@ -760,6 +770,96 @@ rpc_height() {
         || true
 }
 
+container_restart_count() {
+    docker inspect "$1" --format '{{.RestartCount}}' 2>/dev/null || echo 0
+}
+
+host_usage_line() {
+    free -h | awk '/^Mem:/ {printf "    host avail=%s  ", $7} /^Swap:/ {printf "swap used=%s\n", $3}'
+}
+
+refresh_swap_if_used() {
+    local used_kb
+    used_kb=$(awk 'NR > 1 {used += $4} END {print used + 0}' /proc/swaps 2>/dev/null || echo 0)
+    if [ "$used_kb" -le 0 ]; then
+        return 0
+    fi
+    say "  clearing stale swap before steady daemon start"
+    if swapoff -a; then
+        swapon -a || warn "  swapon -a failed after swap refresh"
+    else
+        warn "  swapoff -a failed; continuing with existing swap state"
+        swapon -a >/dev/null 2>&1 || true
+    fi
+}
+
+wait_steady_rpc() {
+    local coin="$1"
+    local datadir="${COIN_DATADIR[$coin]}"
+    local cli="${COIN_CLI[$coin]}"
+    local port="${COIN_RPC_PORT[$coin]}"
+    local end=$(( $(date +%s) + STEADY_START_RPC_TIMEOUT_S ))
+    local initial_restarts current_restarts last_msg msg height
+
+    initial_restarts="$(container_restart_count "$coin")"
+    say "  waiting for ${coin} steady RPC on 127.0.0.1:${port}"
+    while :; do
+        if ! docker ps --format '{{.Names}}' | grep -qx "$coin"; then
+            warn "  ${coin}: container exited before steady RPC became ready"
+            docker logs "$coin" --tail 30 2>&1 | sed 's/^/      /' >&2 || true
+            return 1
+        fi
+
+        current_restarts="$(container_restart_count "$coin")"
+        if [ "$current_restarts" != "$initial_restarts" ]; then
+            warn "  ${coin}: container restarted before steady RPC became ready (${initial_restarts} -> ${current_restarts})"
+            docker logs "$coin" --tail 30 2>&1 | sed 's/^/      /' >&2 || true
+            return 1
+        fi
+
+        if height=$(docker exec "$coin" "/usr/local/bin/${cli}" -datadir="$datadir" getblockcount 2>/dev/null | tail -1 | tr -cd '0-9'); then
+            if [ -n "$height" ]; then
+                ok "  ${coin}: RPC OK; height=${height}"
+                return 0
+            fi
+        fi
+
+        if [ "$(date +%s)" -ge "$end" ]; then
+            warn "  ${coin}: steady RPC did not become ready within ${STEADY_START_RPC_TIMEOUT_S}s"
+            docker logs "$coin" --tail 30 2>&1 | sed 's/^/      /' >&2 || true
+            return 1
+        fi
+
+        msg="$(docker logs --tail 1 "$coin" 2>/dev/null | head -c 120 || true)"
+        if [ "${msg:-}" != "${last_msg:-}" ]; then
+            last_msg="${msg:-}"
+            say "    ${coin}: ${msg:-(no log yet)}"
+        fi
+        sleep 5
+    done
+}
+
+start_steady_daemons() {
+    say "rotation done — starting steady daemons one at a time"
+    stop_all
+    refresh_swap_if_used
+    for coin in "${DEFAULT_ORDER[@]}"; do
+        DBCACHE_MB="${STEADY_DBCACHE_MB}" ensure_caps "${COIN_DATADIR[$coin]}/${COIN_CONF[$coin]}"
+        set_peers "${COIN_DATADIR[$coin]}/${COIN_CONF[$coin]}" on
+        say "  starting ${coin}"
+        start_one "$coin"
+        if docker ps --filter name="^${coin}\$" --format '{{.Status}}' | grep -q '^Up'; then
+            ok "  ${coin}: $(docker ps --filter "name=^${coin}\$" --format '{{.Status}}')"
+        else
+            warn "  ${coin}: not running — check 'docker logs ${coin}'"
+            return 1
+        fi
+        wait_steady_rpc "$coin"
+        sleep "$STEADY_START_SETTLE_S"
+        host_usage_line
+    done
+}
+
 rpc_peer_tip() {
     local coin="$1" datadir="$2"
     local cli="${COIN_CLI[$coin]}"
@@ -1019,8 +1119,10 @@ bootstrap_group() {
 
 # ---- main -------------------------------------------------------------------
 PREFETCH_ONLY=0
+START_ONLY=0
 case "${1:-}" in
     --prefetch|--download-only) PREFETCH_ONLY=1; shift ;;
+    --start-only) START_ONLY=1; shift ;;
 esac
 
 ROTATION=("$@")
@@ -1028,6 +1130,8 @@ ROTATION=("$@")
 
 if [ "$PREFETCH_ONLY" = "1" ]; then
     say "bootstrap prefetch (Phase A only): ${ROTATION[*]}"
+elif [ "$START_ONLY" = "1" ]; then
+    say "steady daemon start only"
 else
     say "bootstrap rotation: ${ROTATION[*]}"
 fi
@@ -1048,6 +1152,12 @@ if [ -z "${BOOTSTRAP_DBCACHE_MB:-}" ]; then
         BOOTSTRAP_DBCACHE_MB=4000
         say "[dbcache] static fallback: bootstrap=${BOOTSTRAP_DBCACHE_MB}MB, steady=${STEADY_DBCACHE_MB}MB"
     fi
+fi
+
+if [ "$START_ONLY" = "1" ]; then
+    start_steady_daemons
+    ok "21-bootstrap-coins.sh start-only complete"
+    exit 0
 fi
 
 # Dashboard: seed status files for every coin so the live-view tool
@@ -1275,22 +1385,7 @@ while [ ${#QUEUE[@]} -gt 0 ] || [ "$POOL_COUNT" -gt 0 ]; do
 done
 
 if [ "$START_AFTER" = "1" ]; then
-    say "rotation done — ensuring all 6 daemons are running"
-    for coin in "${DEFAULT_ORDER[@]}"; do
-        if docker ps --format '{{.Names}}' | grep -qx "$coin"; then
-            ok "  ${coin}: already up ($(docker ps --filter "name=^${coin}\$" --format '{{.Status}}'))"
-        else
-            say "  starting ${coin}"
-            start_one "$coin"
-            sleep 8
-            if docker ps --filter name="^${coin}\$" --format '{{.Status}}' | grep -q '^Up'; then
-                ok "  ${coin}: $(docker ps --filter "name=^${coin}\$" --format '{{.Status}}')"
-            else
-                warn "  ${coin}: not running — check 'docker logs ${coin}'"
-            fi
-        fi
-        free -h | awk '/^Mem:/ {printf "    host avail=%s  ", $7} /^Swap:/ {printf "swap used=%s\n", $3}'
-    done
+    start_steady_daemons
 fi
 
 ok "21-bootstrap-coins.sh complete"

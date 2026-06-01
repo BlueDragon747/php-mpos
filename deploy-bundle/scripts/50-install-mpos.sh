@@ -42,6 +42,18 @@ INSERT IGNORE INTO settings (name, value)
 VALUES ('backups_enabled', '1');
 SQL
 
+CRONJOBS_WAVE1_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/01-cronjobs-py-wave1.sql"
+if [ -f "$CRONJOBS_WAVE1_SQL" ]; then
+    say "ensuring cronjobs-py outbox/accounting tables exist (from $CRONJOBS_WAVE1_SQL)"
+    mariadb "${MPOS_DB_NAME}" < "$CRONJOBS_WAVE1_SQL"
+fi
+
+CRONJOBS_WAVE5_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/02-cronjobs-py-wave5.sql"
+if [ -f "$CRONJOBS_WAVE5_SQL" ]; then
+    say "ensuring cronjobs-py accounting mode column exists (from $CRONJOBS_WAVE5_SQL)"
+    mariadb "${MPOS_DB_NAME}" < "$CRONJOBS_WAVE5_SQL"
+fi
+
 # pplns_shares — slot-aware persisted PPLNS breakdown (replaces the legacy
 # statistics_shares writer that the cronjobs-py rewrite stopped populating).
 # Schema is shared with the cronjobs-py replay-test fixture loader
@@ -108,8 +120,8 @@ NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-blakestream-testnet}"
 
 # Salts
-sed -i "s|^\\\$config\\['SALT'\\] = '[^']*';|\\\$config['SALT'] = '${MPOS_SALT}';|" "$GLOBAL"
-sed -i "s|^\\\$config\\['SALTY'\\] = '[^']*';|\\\$config['SALTY'] = '${MPOS_SALTY}';|" "$GLOBAL"
+sed -i -E "s|^\\\$config\\['SALT'\\][[:space:]]*=[[:space:]]*'[^']*';|\\\$config['SALT'] = '${MPOS_SALT}';|" "$GLOBAL"
+sed -i -E "s|^\\\$config\\['SALTY'\\][[:space:]]*=[[:space:]]*'[^']*';|\\\$config['SALTY'] = '${MPOS_SALTY}';|" "$GLOBAL"
 
 # DB
 sed -i "s|^\\\$config\\['db'\\]\\['host'\\] = '[^']*';|\\\$config['db']['host'] = '${MPOS_DB_HOST}';|" "$GLOBAL"

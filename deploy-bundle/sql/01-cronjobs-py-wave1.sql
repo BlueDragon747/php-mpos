@@ -67,12 +67,14 @@ CREATE TABLE IF NOT EXISTS cronjobs_py_accounting (
   block_id BIGINT UNSIGNED NOT NULL,
   account_id INT UNSIGNED NOT NULL,
   tx_type VARCHAR(32) NOT NULL,
+  mode ENUM('live','shadow') NOT NULL DEFAULT 'live',
   amount DECIMAL(20,8) NOT NULL,
   txn_id BIGINT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uniq_block_account_type (slot, block_id, account_id, tx_type),
-  KEY idx_block (slot, block_id)
+  KEY idx_block (slot, block_id),
+  KEY idx_mode_created (mode, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------

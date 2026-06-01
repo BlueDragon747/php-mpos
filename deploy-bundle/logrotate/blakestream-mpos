@@ -34,7 +34,9 @@
 }
 
 # --- Go Eloipool share audit log ----------------------------------------
-/var/log/blakestream-eliopool-25.2-go/shares.log {
+/var/log/blakestream-eliopool-25.2-go/shares.log
+/var/log/blakestream-mpos/pool/shares.log
+{
     daily
     rotate 7
     maxage 7

@@ -25,10 +25,10 @@ for unit in "${MPOS_UNITS[@]:-}"; do
 done
 systemctl daemon-reload
 
-say "wiping web root and install root"
+say "wiping web, install, and daemon data roots"
 rm -rf "${MPOS_WEB_ROOT}"
-rm -rf "${MPOS_INSTALL_ROOT}/cronjobs-py"
-rm -rf "${MPOS_INSTALL_ROOT}/.deploy.env"
+rm -rf "${MPOS_INSTALL_ROOT}"
+rm -rf "${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}"
 
 say "removing nginx vhost"
 rm -f /etc/nginx/sites-available/blakestream-mpos
