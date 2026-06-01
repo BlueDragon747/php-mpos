@@ -63,6 +63,7 @@ Tunable via env vars:
   MPOS_STRATUM_PORT    default: 3334
   MPOS_ADMIN_USER      seeded admin account (default: admin)
   MPOS_ADMIN_PASS      seeded admin password (default: random 32 hex)
+  MPOS_ADMIN_PIN       seeded admin payout PIN (default: 0000)
 EOF
 }
 
@@ -128,6 +129,7 @@ export MPOS_RUN_GROUP="${MPOS_RUN_GROUP:-www-data}"
 random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$1"; }
 export MPOS_DB_PASS="${MPOS_DB_PASS:-$(random_hex 32)}"
 export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 32)}"
+export MPOS_ADMIN_PIN="${MPOS_ADMIN_PIN:-0000}"
 export MPOS_SALT="${MPOS_SALT:-$(random_hex 8)}"
 export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 8)}"
 export MPOS_API_TOKEN="${MPOS_API_TOKEN:-$(random_hex 16)}"
@@ -175,6 +177,7 @@ require_pattern MPOS_API_TOKEN "${MPOS_API_TOKEN}" '[A-Fa-f0-9]{8,128}'
 # constraint as DB pass.
 require_pattern MPOS_ADMIN_USER "${MPOS_ADMIN_USER}" '[A-Za-z0-9_]{1,32}'
 require_pattern MPOS_ADMIN_PASS "${MPOS_ADMIN_PASS}" '[A-Za-z0-9_\-]{8,128}'
+require_pattern MPOS_ADMIN_PIN  "${MPOS_ADMIN_PIN}"  '[0-9]{4}'
 
 # nginx config. server_name accepts wildcards but not `;` `"` etc.
 require_pattern MPOS_DOMAIN    "${MPOS_DOMAIN}"    '[A-Za-z0-9._\-\*_]{1,253}|_'
@@ -226,7 +229,7 @@ ENVRC="${MPOS_INSTALL_ROOT}/.deploy.env"
                MPOS_INSTALL_ROOT MPOS_WEB_ROOT MPOS_DATA_ROOT MPOS_LOG_ROOT \
                MPOS_DOMAIN MPOS_HTTP_PORT MPOS_STRATUM_PORT MPOS_DOCKER_HUB MPOS_IMAGE_TAG \
                MPOS_DB_NAME MPOS_DB_USER MPOS_DB_HOST MPOS_DB_PORT MPOS_DB_PASS \
-               MPOS_ADMIN_USER MPOS_ADMIN_PASS \
+               MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_PIN \
                MPOS_RUN_USER MPOS_RUN_GROUP \
                MPOS_SALT MPOS_SALTY MPOS_API_TOKEN \
                MPOS_SKIP_POOL MPOS_WIPE; do
@@ -260,3 +263,4 @@ echo "  Stratum:        stratum+tcp://$(hostname -I | awk '{print $1}'):${MPOS_S
 echo "  DB password:    ${MPOS_DB_PASS}  (also stored in ${ENVRC})"
 echo "  Admin user:     ${MPOS_ADMIN_USER}"
 echo "  Admin password: ${MPOS_ADMIN_PASS}"
+echo "  Admin PIN:      ${MPOS_ADMIN_PIN}"

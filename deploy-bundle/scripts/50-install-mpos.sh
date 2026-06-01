@@ -235,7 +235,7 @@ say "seeding admin account '${MPOS_ADMIN_USER}'"
 # Email must be a valid format with TLD or the login form's "must be
 # email" filter rejects it.
 ADMIN_HASH=$(php -r "echo hash('sha256', '${MPOS_ADMIN_PASS}' . '${MPOS_SALT}');")
-PIN_HASH=$(php -r "echo hash('sha256', '0000' . '${MPOS_SALT}');")
+PIN_HASH=$(php -r "echo hash('sha256', '${MPOS_ADMIN_PIN}' . '${MPOS_SALT}');")
 # api_key matches MPOS's register-time formula: sha256(username . SALT).
 # Without this, every API endpoint (dashboard live updates, navbar refresh,
 # v2/dashboard, etc.) returns 401 because checkApiKey() fails on NULL.

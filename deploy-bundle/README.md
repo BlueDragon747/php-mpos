@@ -163,6 +163,11 @@ mpos-25.2-go-deploy-<utc>.log
 Override it with `MPOS_DEPLOY_LOG=/path/to/deploy.log`, or set
 `MPOS_DEPLOY_LOG=0` to disable transcript logging.
 
+The deploy creates the first admin account from `MPOS_ADMIN_USER`,
+`MPOS_ADMIN_PASS`, `MPOS_ADMIN_EMAIL`, and `MPOS_ADMIN_PIN`. If
+`MPOS_ADMIN_PIN` is not set, the default payout PIN is `0000`. The selected
+PIN is saved with the other deploy secrets.
+
 ### Deploy on the VPS — pull pre-built daemon containers (recommended)
 
 Pulls `sidgrip/<coin>:25.2` from Docker Hub. Fastest clean install.

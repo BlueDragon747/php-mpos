@@ -222,7 +222,7 @@ systemctl restart "php${PHP_VER}-fpm"
 # ---- admin seed ----
 say "seeding admin '${MPOS_ADMIN_USER}'"
 ADMIN_HASH=$(php -r "echo hash('sha256', '${MPOS_ADMIN_PASS}' . '${MPOS_SALT}');")
-PIN_HASH=$(php -r "echo hash('sha256', '0000' . '${MPOS_SALT}');")
+PIN_HASH=$(php -r "echo hash('sha256', '${MPOS_ADMIN_PIN}' . '${MPOS_SALT}');")
 # api_key matches MPOS's own register-time formula: sha256(username . SALT).
 # Without this, every API endpoint (dashboard live updates, navbar refresh,
 # v2/dashboard, etc.) returns 401 because checkApiKey() fails on NULL.
