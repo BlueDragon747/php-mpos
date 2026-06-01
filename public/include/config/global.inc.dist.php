@@ -123,11 +123,10 @@ $config['gettingstarted']['stratumport'] = '3334';
 
 /**
  * Ticker API
- *  Fetch exchange rates via an API
- *   https://github.com/MPOS/php-mpos/wiki/Config-Setup#wiki-ticker-api
+ *  Optional exchange-rate API. Leave url blank to disable price polling.
  **/
-$config['price']['url'] = 'https://btc-e.com';
-$config['price']['target'] = '/api/2/ltc_usd/ticker';
+$config['price']['url'] = '';
+$config['price']['target'] = '';
 $config['price']['currency'] = null;
 
 /**
@@ -141,7 +140,7 @@ $config['ap_threshold']['max'] = 2500;
 $config['ap_threshold_mm']['min'] = 1;
 $config['ap_threshold_mm']['max'] = 999999;
 
-$config['ap_threshold_mm1']['min'] = 1;
+$config['ap_threshold_mm1']['min'] = 0.05;
 $config['ap_threshold_mm1']['max'] = 9999;
 
 $config['ap_threshold_mm2']['min'] = 0.1;

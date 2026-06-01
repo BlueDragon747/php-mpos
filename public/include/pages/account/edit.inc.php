@@ -522,7 +522,7 @@ if (empty($_userdata) && isset($_SESSION['USERDATA']) && is_array($_SESSION['USE
 $ae_threshold_ranges = array(
   'BLC'  => array('min' => 1.0,    'max' => 2500.0),
   'PHO'  => array('min' => 1.0,    'max' => 999999.0),
-  'BBTC' => array('min' => 1.0,    'max' => 25.0),
+  'BBTC' => array('min' => 0.05,   'max' => 25.0),
   'ELT'  => array('min' => 1.0,    'max' => 1000.0),
   'UMO'  => array('min' => 0.1,    'max' => 9999.0),
   'LIT'  => array('min' => 1.0,    'max' => 9999.0),

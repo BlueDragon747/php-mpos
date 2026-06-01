@@ -105,7 +105,7 @@
         <dt>Target Variance</dt>
         <dd>
 {assign var=variance value=0}
-{if $PPLNSSHARES > 0}{math assign=variance equation=(($BLOCKDETAILS.estshares / $PPLNSSHARES) * 100)}{/if}
+{if $PPLNSSHARES > 0 && $BLOCKDETAILS.estshares|default:0 > 0}{assign var=variance value=($BLOCKDETAILS.estshares / $PPLNSSHARES * 100)}{/if}
           <span class="pct {if $variance >= 100}is-good{else}is-bad{/if}">{$variance|number_format:"2"}%</span>
         </dd>
 

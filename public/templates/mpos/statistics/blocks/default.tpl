@@ -271,8 +271,13 @@
           {assign var="totalshares" value=$totalshares+$BLOCKSFOUND[block].shares}
           {assign var="count" value=$count+1}
           {if $GLOBAL.config.payout_system == 'pplns'}{assign var="pplnsshares" value=$pplnsshares+$BLOCKSFOUND[block].pplns_shares}{/if}
-          {assign var="totalexpectedshares" value=$totalexpectedshares+$BLOCKSFOUND[block].estshares}
-          {math assign="percentage" equation="shares / estshares * 100" shares=$BLOCKSFOUND[block].shares|default:"0" estshares=$BLOCKSFOUND[block].estshares|default:"1"}
+          {assign var="block_estshares" value=$BLOCKSFOUND[block].estshares|default:0}
+          {assign var="totalexpectedshares" value=$totalexpectedshares+$block_estshares}
+          {if $block_estshares > 0}
+            {math assign="percentage" equation="shares / estshares * 100" shares=$BLOCKSFOUND[block].shares|default:"0" estshares=$block_estshares}
+          {else}
+            {assign var="percentage" value=0}
+          {/if}
           <tr>
 {if $SELECTED_COIN|default:"ALL" == "ALL"}
             <td class="center"><span class="chain-pill chain-{$BLOCKSFOUND[block].chain|escape|lower}" data-tooltip="{$COIN_NAMES[$BLOCKSFOUND[block].chain]|default:$BLOCKSFOUND[block].chain|escape}">{$BLOCKSFOUND[block].chain|escape}</span></td>

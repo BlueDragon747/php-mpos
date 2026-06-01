@@ -96,7 +96,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
       "SELECT b.id, b.height, b.blockhash, b.amount, b.confirmations,
               b.difficulty, FROM_UNIXTIME(b.time) AS time, b.shares,
               IF(a.is_anonymous, 'anonymous', a.username) AS finder,
-              ROUND((b.difficulty * 65535) / POW(2, ($iDifficulty - 16)), 0) AS estshares,
+              GREATEST(1, ROUND((b.difficulty * 65535) / POW(2, ($iDifficulty - 16)), 0)) AS estshares,
               (b.time - (SELECT time FROM $sBlocksTable WHERE height < ? ORDER BY height DESC LIMIT 1)) AS round_time
          FROM $sBlocksTable AS b
          LEFT JOIN accounts AS a ON b.account_id = a.id

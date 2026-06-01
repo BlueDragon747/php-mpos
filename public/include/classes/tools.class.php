@@ -16,7 +16,6 @@ class Tools extends Base {
    **/
   public function getApi($url, $target, $auth=NULL) {
     static $ch = null;
-    static $ch = null;
     if (is_null($ch)) {
       $ch = curl_init();
       curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
@@ -51,8 +50,6 @@ class Tools extends Base {
   private function getApiType($url) {
     if (preg_match('/coinchoose.com/', $url)) {
       return 'coinchose';
-    } else if (preg_match('/btc-e.com/', $url)) {
-      return 'btce';
     } else if (preg_match('/cryptsy.com/', $url)) {
       return 'cryptsy';
     }
@@ -77,9 +74,6 @@ class Tools extends Base {
       	    if($strCurrency == $aItem[0])
       	      return $aItem['price'];
       	  }
-      	  break;
-      	case 'btce':
-      	  return $aData['ticker']['last'];
       	  break;
       	case 'cryptsy':
       	  return @$aData['return']['markets'][$strCurrency]['lasttradeprice'];

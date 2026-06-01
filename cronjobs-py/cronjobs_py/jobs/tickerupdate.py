@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import requests
 
@@ -29,6 +30,13 @@ from ..logger import get
 from ..scheduler import JobContext
 
 log = get(__name__)
+
+LEGACY_PRICE_HOSTS = {"btc-e.com", "www.btc-e.com", "btce.com", "www.btce.com"}
+
+
+def _is_legacy_price_url(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return host in LEGACY_PRICE_HOSTS
 
 
 @dataclass
@@ -51,6 +59,9 @@ class TickerUpdate:
 
         if not url:
             log.debug("[%s] no price.url configured; skipping", self.name)
+            return
+        if _is_legacy_price_url(str(url)):
+            log.debug("[%s] legacy price.url configured; skipping", self.name)
             return
 
         try:

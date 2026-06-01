@@ -20,6 +20,15 @@ wait_unit_active() {
     return 1
 }
 
+wait_port_listening() {
+    local port="$1" deadline=$(( $(date +%s) + 90 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        ss -tln | awk '{print $4}' | grep -qE ":(${port})\$" && return 0
+        sleep 3
+    done
+    return 1
+}
+
 say "daemon RPCs"
 for entry in \
     "blakecoin:29332" \
@@ -61,7 +70,7 @@ fi
 say "ports"
 for entry in "stratum:3334" "mmproxy:19335" "pool-jsonrpc:19334" "http:${MPOS_HTTP_PORT}"; do
     name=${entry%:*}; port=${entry#*:}
-    if ss -tln | awk '{print $4}' | grep -qE ":(${port})\$"; then
+    if wait_port_listening "$port"; then
         pass "${name} listening on :${port}"
     else
         fail "nothing listening on :${port}"

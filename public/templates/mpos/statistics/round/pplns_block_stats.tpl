@@ -43,7 +43,7 @@
 {assign var=percentage value=0}
 {assign var=percentage1 value=0}
 {assign var=percentage2 value=0}
-        <td>{if $PPLNSSHARES > 0}{math assign="percentage" equation=(($BLOCKDETAILS.estshares / $PPLNSSHARES) * 100)}{/if}<font color="{if ($percentage >= 100)}green{else}red{/if}">{$percentage|number_format:"2"} %</font></td>
+        <td>{if $PPLNSSHARES > 0 && $BLOCKDETAILS.estshares|default:0 > 0}{assign var="percentage" value=($BLOCKDETAILS.estshares / $PPLNSSHARES * 100)}{/if}<font color="{if ($percentage >= 100)}green{else}red{/if}">{$percentage|number_format:"2"} %</font></td>
       </tr>
       <tr class="even">
         <td>Confirmations</td>
@@ -60,7 +60,7 @@
         <td>Difficulty</td>
         <td>{$BLOCKDETAILS.difficulty|default:"0"}</td>
         <td>Average Efficiency</td>
-        <td>{if $BLOCKAVERAGE > 0 && $BLOCKDETAILS.estshares > 0}{math assign="percentage2" equation=(($BLOCKDETAILS.estshares / $BLOCKAVERAGE) * 100)}{/if}<font color="{if ($percentage2 >= 100)}green{else}red{/if}">{$percentage2|number_format:"2"} %</font></td>
+        <td>{if $BLOCKAVERAGE > 0 && $BLOCKDETAILS.estshares > 0}{assign var="percentage2" value=($BLOCKDETAILS.estshares / $BLOCKAVERAGE * 100)}{/if}<font color="{if ($percentage2 >= 100)}green{else}red{/if}">{$percentage2|number_format:"2"} %</font></td>
       </tr>
       <tr class="even">
         <td>Time</td>
@@ -78,7 +78,7 @@
         <td>Finder</td>
         <td>{$BLOCKDETAILS.finder|default:"unknown"}</td>
         <td>Round Variance</td>
-        <td>{if $PPLNSSHARES > 0}{math assign="percentage1" equation=(($BLOCKDETAILS.shares / $PPLNSSHARES) * 100)}{/if}<font color="{if ($percentage1 >= 100)}green{else}red{/if}">{$percentage1|number_format:"2"} %</font></td>
+        <td>{if $PPLNSSHARES > 0}{assign var="percentage1" value=($BLOCKDETAILS.shares / $PPLNSSHARES * 100)}{/if}<font color="{if ($percentage1 >= 100)}green{else}red{/if}">{$percentage1|number_format:"2"} %</font></td>
       </tr>
     </tbody>
   </table>

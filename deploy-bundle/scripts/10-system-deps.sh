@@ -38,7 +38,7 @@ PKGS=(
     memcached
     python3 python3-venv python3-pip
     golang-go
-    rsync unzip xz-utils xxd curl jq
+    rsync unzip xz-utils xxd curl jq logrotate
     libzmq5
     docker.io
     sudo
@@ -87,5 +87,17 @@ set_fpm_pool_value pm.max_spare_servers 35
 set_fpm_pool_value pm.max_requests 500
 set_fpm_pool_value request_terminate_timeout 60s
 systemctl restart "php${PHP_VER}-fpm"
+
+# bun is used by deploy-testnet.sh to build the Vue v2 assets before
+# the MPOS web tree is synced to a clean web root.
+if ! command -v bun >/dev/null 2>&1; then
+    say "installing bun system-wide"
+    BUN_INSTALL=/usr/local bash -c 'curl -fsSL https://bun.sh/install | bash' \
+        >/tmp/bun-install.log 2>&1 \
+        || { cat /tmp/bun-install.log >&2; exit 1; }
+    say "bun installed: $(/usr/local/bin/bun --version)"
+else
+    say "bun already installed: $(bun --version)"
+fi
 
 say "system deps OK"

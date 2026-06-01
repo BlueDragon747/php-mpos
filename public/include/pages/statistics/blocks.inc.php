@@ -100,7 +100,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
              b.accounted, b.account_id, b.worker_name, b.shares, b.share_id,
              a.username      AS finder,
              a.is_anonymous  AS is_anonymous,
-             ROUND((b.difficulty * POW(2, 32 - {$iTargetBits})) / POW(2, ({$iDifficultyConst} - 16)), 0) AS estshares,
+             GREATEST(1, ROUND((b.difficulty * POW(2, 32 - {$iTargetBits})) / POW(2, ({$iDifficultyConst} - 16)), 0)) AS estshares,
              '{$sTickerSql}' AS chain,
              '{$sSuffix}'    AS slot
       FROM {$sBlocksTbl} AS b
