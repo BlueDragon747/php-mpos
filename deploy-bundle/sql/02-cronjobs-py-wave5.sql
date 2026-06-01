@@ -22,9 +22,9 @@
 -- authoritative.
 
 ALTER TABLE cronjobs_py_accounting
-    ADD COLUMN mode ENUM('live','shadow') NOT NULL DEFAULT 'live'
+    ADD COLUMN IF NOT EXISTS mode ENUM('live','shadow') NOT NULL DEFAULT 'live'
     AFTER tx_type;
 
 -- Index on (mode, created_at) so the drift-check CLI can scan
 -- shadow rows efficiently without a full table scan.
-CREATE INDEX idx_mode_created ON cronjobs_py_accounting (mode, created_at);
+CREATE INDEX IF NOT EXISTS idx_mode_created ON cronjobs_py_accounting (mode, created_at);

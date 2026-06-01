@@ -21,6 +21,7 @@ SWAP_ACTION="${MPOS_SWAP_ACTION:-prompt}" # prompt, auto, skip
 SWAP_SIZE_MB="${MPOS_SWAP_SIZE_MB:-}"
 PROMPT_TIMEOUT_S="${MPOS_SWAP_PROMPT_TIMEOUT_S:-120}"
 DISK_RESERVE_MB="${MPOS_SWAP_DISK_RESERVE_MB:-4096}"
+SWAP_SIZE_TOLERANCE_MB="${MPOS_SWAP_SIZE_TOLERANCE_MB:-64}"
 KNOWN_SWAP_FILES="/swapfile /swap.img /blake_swap.img"
 
 human_mb() {
@@ -60,20 +61,32 @@ load_1m() {
 
 recommended_swap_mb() {
     local ram_mb="$1"
-    if [ "$ram_mb" -lt 6144 ]; then
+    # The full 25.2 mainnet pool runs six wallet daemons. ELT can spike
+    # during block-index reload even after bootstrap import, so 16 GiB
+    # VPSes need more than the distro default 4 GiB swap.
+    if [ "$ram_mb" -lt 24576 ]; then
         echo 12288
-    elif [ "$ram_mb" -lt 12288 ]; then
+    elif [ "$ram_mb" -lt 65536 ]; then
         echo 8192
-    elif [ "$ram_mb" -lt 24576 ]; then
-        echo 4096
     else
-        echo 2048
+        echo 4096
     fi
 }
 
 active_swapfile_mb() {
-    swapon --show --bytes --noheadings --output NAME,SIZE 2>/dev/null \
-        | awk -v path="$SWAP_FILE" '$1 == path {print int($2 / 1048576); found=1} END {if (!found) print 0}'
+    swapon --show --bytes --noheadings 2>/dev/null \
+        | awk -v path="$SWAP_FILE" '
+            $1 == path {
+                for (i = 2; i <= NF; i++) {
+                    if ($i ~ /^[0-9]+$/) {
+                        print int($i / 1048576)
+                        found = 1
+                        exit
+                    }
+                }
+            }
+            END {if (!found) print 0}
+        '
 }
 
 fstab_add_swapfile() {
@@ -378,7 +391,8 @@ fi
 configure_sysctl
 
 ACTIVE_FILE_MB="$(active_swapfile_mb)"
-if [ "$CURRENT_SWAP_MB" -ge "$RECOMMENDED_MB" ] && [ "$ACTIVE_FILE_MB" -ge "$RECOMMENDED_MB" ]; then
+if [ $((CURRENT_SWAP_MB + SWAP_SIZE_TOLERANCE_MB)) -ge "$RECOMMENDED_MB" ] \
+    && [ $((ACTIVE_FILE_MB + SWAP_SIZE_TOLERANCE_MB)) -ge "$RECOMMENDED_MB" ]; then
     say "existing ${SWAP_FILE} is already at or above recommendation"
     configure_sysctl
     exit 0
@@ -415,6 +429,12 @@ esac
 
 if [ "$TARGET_SWAP_MB" -lt 1024 ]; then
     say "leaving swap unchanged"
+    exit 0
+fi
+
+if [ "$CURRENT_SWAP_USED_MB" -gt 0 ] && [ "$ACTIVE_FILE_MB" -gt 0 ] && [ "$TARGET_SWAP_MB" -gt "$ACTIVE_FILE_MB" ]; then
+    warn "${SWAP_FILE} has $(human_mb "$CURRENT_SWAP_USED_MB") in use; not resizing live swap"
+    warn "rerun before daemon startup or set MPOS_SWAP_SIZE_MB explicitly on a fresh deploy"
     exit 0
 fi
 

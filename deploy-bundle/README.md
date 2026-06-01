@@ -28,7 +28,8 @@ What it installs:
 
 ```
 deploy-bundle/
-├── deploy.sh                 # main entry — orchestrates the steps
+├── deploy-testnet.sh         # testnet entry — orchestrates testnet steps
+├── deploy-mainnet.sh         # mainnet entry — orchestrates mainnet steps
 ├── scripts/
 │   ├── 05-wipe.sh            # purge prior MPOS install (--wipe)
 │   ├── 10-system-deps.sh     # apt: nginx, php-fpm, mariadb, memcached, python, docker
@@ -41,7 +42,7 @@ deploy-bundle/
 │   ├── mainnet/
 │   │   ├── 11-configure-swap.sh  # show current swap and apply operator choice
 │   │   ├── 19-build-daemon-images.sh  # optional source-build runtime images
-│   │   ├── 21-bootstrap-coins.sh  # sequential solo daemon bootstrap (see below)
+│   │   ├── 21-bootstrap-coins.sh  # rolling bootstrap download/import scheduler
 │   │   └── ...
 │   └── 99-verify.sh
 ├── sudoers/
@@ -51,42 +52,50 @@ deploy-bundle/
 └── README.md
 ```
 
-## Bootstrapping daemons sequentially (mainnet)
+## Bootstrapping Daemons (Mainnet)
 
-> ⚠️ **ELT and UMO MUST bootstrap with every other daemon stopped.**
-> On a 16 GB host, replaying their `bootstrap.dat` files (4-5 GB each,
-> chains at 6 M+ blocks) while other daemons are also running causes
-> deterministic OOM during the loadblk → validation transition. Solo,
-> ELT bootstraps cleanly in ~30 minutes with RSS plateauing at ~10 GB
-> and swap usage under 500 MB. Concurrent, the kernel OOM-kills it
-> within ~5 minutes at <10% sync.
+`scripts/mainnet/21-bootstrap-coins.sh` now runs in two phases:
 
-`scripts/mainnet/21-bootstrap-coins.sh` automates the rotation: it
-stops all 6 containers, then for each coin in turn it sets peering
-off, downloads `bootstrap.dat` atomically, starts the daemon solo, waits
-for the daemon's external-file import completion log, and treats
-`bootstrap.dat.old` as already consumed on reruns. It then flips peering
-on and requires local height to be within `TIP_CATCH_LAG` blocks of the
-peer tip before moving on. A peer tip a few blocks below local height is
-allowed, but a stale peer tip far below local height is rejected. A
-timed-out catch-up fails the deploy instead of silently continuing. After
-all 6 have bootstrapped, it brings them back online one at a time with a
-short health peek between each.
+- Phase A downloads and verifies every selected 25.2 bootstrap in a rolling
+  pool. `DOWNLOAD_CONCURRENCY` defaults to `3`, so completed downloads free a
+  slot for the next coin without waiting for a fixed batch.
+- Phase B imports and catches up bootstraps in a rolling daemon pool.
+  `SYNC_CONCURRENCY` defaults to `2`; the scheduler starts the next eligible
+  coin as soon as a running coin finishes.
+
+ELT and UMO are the heavy import pair. The scheduler will not run them at the
+same time, but either one may run beside a smaller chain when host resources
+allow it. On smaller VPSes, set `SYNC_CONCURRENCY=1` to force a fully serial
+import.
+
+For each coin, the script stages `/root/.<coin>/bootstrap.dat`, starts the
+daemon with `-loadblock=<datadir>/bootstrap.dat`, waits for the external-file
+import to finish, verifies the daemon height reached the bootstrap filename
+height, then moves the file to `bootstrap.dat.old` so reruns do not import it
+again. It then flips peering on and requires local height to be within
+`TIP_CATCH_LAG` blocks of the peer tip. A peer tip a few blocks below local
+height is allowed, but a stale peer tip far below local height is rejected. A
+timed-out catch-up fails the deploy instead of silently continuing. After the
+rolling import pool finishes, it brings all six daemons online one at a time.
 
 ```bash
-# Default rotation: ELT → UMO → PHO → LIT → BBTC → BLC, then start all
+# Default: rolling downloads, then rolling import/sync with ELT/UMO mutex
 sudo bash deploy-bundle/scripts/mainnet/21-bootstrap-coins.sh
 
 # Subset (e.g. just ELT and UMO if the smaller chains are already synced):
 sudo bash deploy-bundle/scripts/mainnet/21-bootstrap-coins.sh elt umo
 
+# Fully serial import/sync for smaller hosts:
+SYNC_CONCURRENCY=1 sudo bash deploy-bundle/scripts/mainnet/21-bootstrap-coins.sh
+
 # Skip the final start-all phase (operator wants to launch each daemon manually):
 START_AFTER=0 sudo bash deploy-bundle/scripts/mainnet/21-bootstrap-coins.sh
 ```
 
-The script also ensures `dbcache=200` and `maxmempool=50` are set in
-each `<coin>.conf`, which keeps post-bootstrap steady-state RAM well
-within budget when all 6 daemons run concurrently.
+The script also restores steady-state cache settings after import:
+`STEADY_DBCACHE_MB` defaults to `400` and `MAXMEMPOOL_MB` defaults to `50`.
+That keeps post-bootstrap RAM within budget when all six daemons run
+concurrently.
 
 ## Swapfile prompt
 
@@ -259,20 +268,20 @@ git clone -b 25.2-GO https://github.com/BlueDragon747/eloipool_Blakecoin.git Bla
 export ELIOPOOL_TREE="$(cd Blakestream-Eliopool-25.2-GO && pwd)"
 ```
 
-## Legacy Local/Testnet Usage
+## Testnet Usage
 
 ```bash
 # All-in-one install on the local host:
-sudo bash deploy-bundle/deploy.sh -local
+sudo bash deploy-bundle/deploy-testnet.sh -local
 
 # Wipe a prior install before deploying:
-sudo bash deploy-bundle/deploy.sh -local --wipe
+sudo bash deploy-bundle/deploy-testnet.sh -local --wipe
 
 # Skip the daemon + pool layer if already deployed:
-sudo bash deploy-bundle/deploy.sh -local --skip-pool
+sudo bash deploy-bundle/deploy-testnet.sh -local --skip-pool
 ```
 
-`deploy.sh` writes its rendered env to
+`deploy-testnet.sh` writes its rendered env to
 `${MPOS_INSTALL_ROOT}/.deploy.env` so each individual step script can be
 re-run without re-deriving values:
 
@@ -283,7 +292,7 @@ sudo -E bash deploy-bundle/scripts/50-install-mpos.sh
 
 ## Tunable env vars
 
-See the comment block at the top of `deploy.sh`. Most operators only
+See the comment block at the top of `deploy-testnet.sh`. Most operators only
 need to change `MPOS_DOMAIN` (for non-catch-all nginx vhosts) and
 `MPOS_HTTP_PORT`.
 

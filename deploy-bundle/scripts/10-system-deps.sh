@@ -8,10 +8,13 @@
 set -euo pipefail
 
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib-apt.sh"
 
 export DEBIAN_FRONTEND=noninteractive
 
 say "apt-get update"
+wait_for_apt_locks
 apt-get update -qq
 
 # PHP version varies by Ubuntu release. Detect.
@@ -34,12 +37,15 @@ PKGS=(
     mariadb-server mariadb-client
     memcached
     python3 python3-venv python3-pip
+    golang-go
     rsync unzip xz-utils xxd curl jq
+    libzmq5
     docker.io
     sudo
 )
 
 say "installing: ${PKGS[*]}"
+wait_for_apt_locks
 apt-get install -y -qq --no-install-recommends "${PKGS[@]}"
 
 say "stopping any prior apache2 (port 80 squatter)"

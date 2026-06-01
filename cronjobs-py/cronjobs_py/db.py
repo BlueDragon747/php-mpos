@@ -80,24 +80,44 @@ class Db:
 
     @contextmanager
     def cursor(self) -> Iterator[pymysql.cursors.DictCursor]:
-        """Cursor with retry on transient connection errors only.
+        """Yield one cursor without swallowing exceptions from the caller.
 
-        Schema-level errors (DataError, ProgrammingError) bubble up
-        immediately so the caller can decide. Connection errors retry
-        with exponential backoff and reopen the connection.
+        Retry lives in fetchone/fetchall/execute. A contextmanager cannot
+        safely yield a second cursor after an exception is thrown from the
+        caller body; doing that masks the real database error with
+        "generator didn't stop after throw()".
         """
+        conn = self._connect()
+        with conn.cursor() as cur:
+            yield cur
+
+    def _is_retryable_db_error(self, exc: Exception) -> bool:
+        if isinstance(exc, pymysql.err.InterfaceError):
+            return True
+        if not isinstance(exc, pymysql.err.OperationalError):
+            return False
+        code = exc.args[0] if exc.args else None
+        return code in {
+            1040,  # too many connections
+            1042,  # unable to connect to host
+            1043,  # bad handshake
+            1053,  # server shutdown
+            1205,  # lock wait timeout
+            1213,  # deadlock
+            2003,  # cannot connect
+            2006,  # server has gone away
+            2013,  # lost connection
+            2014,  # commands out of sync
+        }
+
+    def _run_with_retry(self, op):
         last_exc: Exception | None = None
         for attempt in range(1, self.max_attempts + 1):
             try:
-                conn = self._connect()
-                with conn.cursor() as cur:
-                    yield cur
-                return
-            except (
-                pymysql.err.OperationalError,
-                pymysql.err.InterfaceError,
-            ) as exc:
-                # Treat as a connection-level transient and retry.
+                return op()
+            except (pymysql.err.OperationalError, pymysql.err.InterfaceError) as exc:
+                if not self._is_retryable_db_error(exc):
+                    raise
                 last_exc = exc
                 self.close()
                 if attempt < self.max_attempts:
@@ -107,33 +127,32 @@ class Db:
                         exc, attempt, self.max_attempts, delay,
                     )
                     time.sleep(delay)
-                continue
-            except (
-                pymysql.err.ProgrammingError,
-                pymysql.err.DataError,
-                pymysql.err.IntegrityError,
-                pymysql.err.NotSupportedError,
-            ):
-                # Schema/data bugs — caller's job to handle. Don't retry.
-                raise
+                    continue
+                break
         raise Transient(f"db unavailable after {self.max_attempts} attempts: {last_exc}")
 
     # ---- query helpers used by jobs ----
 
     def fetchone(self, sql: str, params: tuple[Any, ...] = ()) -> dict | None:
-        with self.cursor() as cur:
-            cur.execute(sql, params)
-            return cur.fetchone()
+        def op() -> dict | None:
+            with self.cursor() as cur:
+                cur.execute(sql, params)
+                return cur.fetchone()
+        return self._run_with_retry(op)
 
     def fetchall(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict]:
-        with self.cursor() as cur:
-            cur.execute(sql, params)
-            return list(cur.fetchall())
+        def op() -> list[dict]:
+            with self.cursor() as cur:
+                cur.execute(sql, params)
+                return list(cur.fetchall())
+        return self._run_with_retry(op)
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> int:
-        with self.cursor() as cur:
-            cur.execute(sql, params)
-            return cur.rowcount
+        def op() -> int:
+            with self.cursor() as cur:
+                cur.execute(sql, params)
+                return cur.rowcount
+        return self._run_with_retry(op)
 
     def get_setting_int(self, name: str, *, default: int, floor: int = 0) -> int:
         """Read an integer-valued row from the MPOS `settings` table.
