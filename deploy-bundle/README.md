@@ -126,13 +126,13 @@ MPOS_SWAP_ACTION=skip sudo -E bash deploy-bundle/deploy-mainnet.sh
 
 ## Log rotation
 
-`deploy-mainnet.sh` installs `deploy-bundle/logrotate/blakestream-mpos`
-as `/etc/logrotate.d/blakestream-mpos`. The policy rotates and compresses
-the direct pool logs so `shares.log`, `mmp.log`, `eloipool-go.log`,
-systemd stdout/stderr captures, nginx logs, backup logs, and cron logs do
-not grow unbounded. Pool-facing logs keep 7 daily rotations and rotate
-early at 100 MB. PHP cron per-job logs keep 4 weekly rotations with a
-30-day max age.
+`deploy-mainnet.sh` and `deploy-testnet.sh` install
+`deploy-bundle/logrotate/blakestream-mpos` as
+`/etc/logrotate.d/blakestream-mpos`. The policy rotates and compresses the
+direct pool logs so `shares.log`, `mmp.log`, `eloipool-go.log`, systemd
+stdout/stderr captures, nginx logs, backup logs, and cron logs do not grow
+unbounded. Pool-facing logs keep 7 daily rotations and rotate early at
+100 MB. PHP cron per-job logs keep 4 weekly rotations with a 30-day max age.
 
 Validate the active policy with:
 

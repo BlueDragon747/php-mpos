@@ -684,10 +684,10 @@ foreach ($daemons as $sym => $btc) {
     : bsx_daemon_rule_status($btc, array(), $netinfo, $info, $sym, array());
   $row = array(
     'sym'          => $sym,
-    'chain'        => $chain ?: '?',
-    'version'      => $version ?: '—',
-    'blocks'       => $blocks ?: '—',
-    'headers'      => $headers ?: '—',
+    'chain'        => $chain !== '' ? $chain : '?',
+    'version'      => $version !== '' ? $version : '—',
+    'blocks'       => $blocks !== '' ? $blocks : '—',
+    'headers'      => $headers !== '' ? $headers : '—',
     'synced'       => ($blocks !== '' && $headers !== '' && $blocks === $headers),
     'stale'        => false,
     'stale_age'    => 0,

@@ -45,13 +45,18 @@
         <td align="right">{$BLOCKSFOUND[block].difficulty|number_format:"2"}</td>
         <td align="right">{$BLOCKSFOUND[block].amount|number_format:"2"}</td>
         <td align="right">
-{assign var="totalexpectedshares" value=$totalexpectedshares+$BLOCKSFOUND[block].estshares}
+{assign var="block_estshares" value=$BLOCKSFOUND[block].estshares|default:0}
+{assign var="totalexpectedshares" value=$totalexpectedshares+$block_estshares}
           {$BLOCKSFOUND[block].estshares|number_format}
         </td>
 {if $GLOBAL.config.payout_system == 'pplns'}<td align="right">{$BLOCKSFOUND[block].pplns_shares|number_format}</td>{/if}
         <td align="right">{$BLOCKSFOUND[block].shares|number_format}</td>
         <td align="right" style="padding-right: 25px;">
-{math assign="percentage" equation="shares / estshares * 100" shares=$BLOCKSFOUND[block].shares|default:"0" estshares=$BLOCKSFOUND[block].estshares}
+{if $block_estshares > 0}
+{math assign="percentage" equation="shares / estshares * 100" shares=$BLOCKSFOUND[block].shares|default:"0" estshares=$block_estshares}
+{else}
+{assign var="percentage" value=0}
+{/if}
           <font color="{if ($percentage <= 100)}green{else}red{/if}">{$percentage|number_format:"2"}</font>
         </td>
       </tr>
@@ -61,7 +66,7 @@
       <td align="right">{$totalexpectedshares|number_format}</td>
       {if $GLOBAL.config.payout_system == 'pplns'}<td align="right">{$pplnsshares|number_format}</td>{/if}
       <td align="right">{$totalshares|number_format}</td>
-      <td align="right" style="padding-right: 25px;">{if $count > 0}<font color="{if (($totalshares / $totalexpectedshares * 100) <= 100)}green{else}red{/if}">{($totalshares / $totalexpectedshares * 100)|number_format:"2"}</font>{else}0{/if}</td>
+      <td align="right" style="padding-right: 25px;">{if $count > 0 && $totalexpectedshares > 0}<font color="{if (($totalshares / $totalexpectedshares * 100) <= 100)}green{else}red{/if}">{($totalshares / $totalexpectedshares * 100)|number_format:"2"}</font>{else}0{/if}</td>
     </tr>
     </tbody>
   </table>

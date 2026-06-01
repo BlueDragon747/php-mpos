@@ -218,6 +218,17 @@ run_step() {
     bash "$script"
 }
 
+build_frontend() {
+    if [ ! -f "${REPO_ROOT}/frontend/package.json" ]; then
+        return 0
+    fi
+    if ! command -v bun >/dev/null 2>&1; then
+        die "bun missing after 10-system-deps.sh; frontend v2 assets cannot be built"
+    fi
+    say "building Vue v2 frontend"
+    ( cd "${REPO_ROOT}/frontend" && bun install --silent && bun run build:fast )
+}
+
 if [ "$WIPE" = "1" ]; then
     run_step "${SCRIPT_DIR}/scripts/05-wipe.sh"
 fi
@@ -243,6 +254,7 @@ ENVRC="${MPOS_INSTALL_ROOT}/.deploy.env"
 chmod 600 "$ENVRC"
 
 run_step "${SCRIPT_DIR}/scripts/10-system-deps.sh"
+build_frontend
 
 if [ "$SKIP_POOL" = "0" ]; then
     run_step "${SCRIPT_DIR}/scripts/20-pull-daemons.sh"
@@ -258,6 +270,7 @@ if [ "$SKIP_POOL" = "0" ]; then
     run_step "${SCRIPT_DIR}/scripts/76-install-sharelog-importer.sh"
 fi
 run_step "${SCRIPT_DIR}/scripts/80-firewall.sh"
+run_step "${SCRIPT_DIR}/scripts/85-install-logrotate.sh"
 run_step "${SCRIPT_DIR}/scripts/99-verify.sh"
 
 say "deploy complete"

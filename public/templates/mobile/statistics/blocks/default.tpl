@@ -56,9 +56,10 @@ target and network difficulty and assuming a zero variance scenario.
         <td>{if $BLOCKSFOUND[block].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}anonymous{else}{$BLOCKSFOUND[block].finder|default:"unknown"|escape}{/if}</td>
         <td class="center">{$BLOCKSFOUND[block].time|date_format:"%d/%m %H:%M:%S"}</td>
         <td class="right">{$BLOCKSFOUND[block].difficulty|number_format:"2"}</td>
-        <td class="right">{(65536 * $BLOCKSFOUND[block].difficulty)|number_format}</td>
+        {assign var="mobile_estshares" value=(65536 * $BLOCKSFOUND[block].difficulty)}
+        <td class="right">{$mobile_estshares|number_format}</td>
         <td class="right">{$BLOCKSFOUND[block].shares|number_format}</td>
-        <td class="right">{($BLOCKSFOUND[block].shares / (65536 * $BLOCKSFOUND[block].difficulty) * 100)|number_format:"2"}</td>
+        <td class="right">{if $mobile_estshares > 0}{($BLOCKSFOUND[block].shares / $mobile_estshares * 100)|number_format:"2"}{else}0.00{/if}</td>
       </tr>
 {/section}
     </tbody>
