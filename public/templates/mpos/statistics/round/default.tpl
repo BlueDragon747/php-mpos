@@ -29,13 +29,20 @@
                aria-label="Search by block height">
         <button type="submit" class="bsx-btn bsx-btn-small">Search</button>
       </form>
+      {if $ROUND_HAS_BLOCK|default:false}
       <div class="round-pager">
         <a class="bsx-btn bsx-btn-small"
            href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$ROUND_COIN|default:''|escape}&height={$BLOCKDETAILS.height}&prev=1">‹ Older</a>
         <a class="bsx-btn bsx-btn-small"
            href="{$smarty.server.SCRIPT_NAME}?page={$smarty.request.page|escape}&action={$smarty.request.action|escape}&coin={$ROUND_COIN|default:''|escape}&height={$BLOCKDETAILS.height}&next=1">Newer ›</a>
       </div>
+      {/if}
     </header>
+    {if !$ROUND_HAS_BLOCK|default:false}
+    <div class="bsx-card-body round-empty-state">
+      {$ROUND_EMPTY_MESSAGE|default:"No round data is available yet."|escape}
+    </div>
+    {else}
     <div class="bsx-card-body">
       <dl class="round-kv">
         <dt>ID</dt>
@@ -116,8 +123,10 @@
         {/if}
       </dl>
     </div>
+    {/if}
   </article>
 
+  {if $ROUND_HAS_BLOCK|default:false}
   {if $GLOBAL.config.payout_system != 'pps'}
   <!-- ROW 2: Round Transactions -->
   <article class="bsx-card round-tx-card">
@@ -143,17 +152,21 @@
         </thead>
         <tbody>
 {section name=txs loop=$ROUNDTRANSACTIONS}
+          {assign var=txUid value=$ROUNDTRANSACTIONS[txs].uid}
+          {assign var=roundValid value=$ROUNDSHARES[$txUid].valid|default:0}
+          {assign var=pplnsValid value=$PPLNSROUNDSHARES_BY_UID[$txUid].pplns_valid|default:0}
+          {assign var=pplnsInvalid value=$PPLNSROUNDSHARES_BY_UID[$txUid].pplns_invalid|default:0}
           <tr{if $GLOBAL.userdata.username|default:"" == $ROUNDTRANSACTIONS[txs].username} class="is-me"{/if}>
             <td class="td-name">{if $ROUNDTRANSACTIONS[txs].is_anonymous|default:"0" == 1 && $GLOBAL.userdata.is_admin|default:"0" == 0}<span class="anon">anonymous</span>{else}{$ROUNDTRANSACTIONS[txs].username|default:"unknown"|escape}{/if}</td>
             {if $GLOBAL.config.payout_system != 'pplns'}<td class="center">{$ROUNDTRANSACTIONS[txs].type|default:""|escape}</td>{/if}
-            <td class="right num">{$ROUNDSHARES[$ROUNDTRANSACTIONS[txs].uid].valid|number_format}</td>
-            <td class="right num">{if $ROUNDSHARES[$ROUNDTRANSACTIONS[txs].uid].valid > 0 && $BLOCKDETAILS.shares > 0}{((100 / $BLOCKDETAILS.shares) * $ROUNDSHARES[$ROUNDTRANSACTIONS[txs].uid].valid)|number_format:"2"}{else}0.00{/if}</td>
+            <td class="right num">{$roundValid|number_format}</td>
+            <td class="right num">{if $roundValid > 0 && $BLOCKDETAILS.shares > 0}{((100 / $BLOCKDETAILS.shares) * $roundValid)|number_format:"2"}{else}0.00{/if}</td>
             {if $GLOBAL.config.payout_system == 'pplns'}
-              <td class="right num">{$PPLNSROUNDSHARES[txs].pplns_valid|number_format|default:"0"}</td>
-              <td class="right num">{if $PPLNSROUNDSHARES[txs].pplns_valid > 0 && $PPLNSSHARES > 0}{((100 / $PPLNSSHARES) * $PPLNSROUNDSHARES[txs].pplns_valid)|number_format:"2"}{else}0.00{/if}</td>
+              <td class="right num">{$pplnsValid|number_format}</td>
+              <td class="right num">{if $pplnsValid > 0 && $PPLNSSHARES > 0}{((100 / $PPLNSSHARES) * $pplnsValid)|number_format:"2"}{else}0.00{/if}</td>
               <td class="right num">
 {assign var=variance1 value=0}
-{if $ROUNDSHARES[$ROUNDTRANSACTIONS[txs].uid].valid > 0 && $PPLNSROUNDSHARES[txs].pplns_valid > 0 && $BLOCKDETAILS.shares > 0 && $PPLNSSHARES > 0}{math assign=variance1 equation=(100 / (((100 / $BLOCKDETAILS.shares) * $ROUNDSHARES[$ROUNDTRANSACTIONS[txs].uid].valid) / ((100 / $PPLNSSHARES) * $PPLNSROUNDSHARES[txs].pplns_valid)))}{else if $PPLNSROUNDSHARES[txs].pplns_valid == 0}{assign var=variance1 value=0}{else}{assign var=variance1 value=100}{/if}
+{if $roundValid > 0 && $pplnsValid > 0 && $BLOCKDETAILS.shares > 0 && $PPLNSSHARES > 0}{math assign=variance1 equation=(100 / (((100 / $BLOCKDETAILS.shares) * $roundValid) / ((100 / $PPLNSSHARES) * $pplnsValid)))}{else if $pplnsValid == 0}{assign var=variance1 value=0}{else}{assign var=variance1 value=100}{/if}
                 <span class="pct {if $variance1 >= 100}is-good{else}is-bad{/if}">{$variance1|number_format:"2"}</span>
               </td>
             {/if}
@@ -240,6 +253,7 @@
     </article>
     {/if}
   </div>
+  {/if}
 
 </div>
 
@@ -342,6 +356,14 @@
     margin-left: auto;
   }
   .stats-round-v2 .bsx-card-body { padding: 0; }
+  .stats-round-v2 .round-empty-state {
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aab3c2;
+    font-weight: 700;
+  }
 
   .stats-round-v2 .round-search-form {
     display: inline-flex;

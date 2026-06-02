@@ -1,4 +1,4 @@
-{if is_array($YOURHASHRATES)}
+{if $GRAPH_HAS_MINE|default:false}
   <div class="tab_content" id="mine">
     <table class="visualize" rel="area">
       <caption>Your Hashrate</caption>

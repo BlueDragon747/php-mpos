@@ -165,6 +165,29 @@ if ($config['csrf']['enabled'] && isset($_POST['ctoken']) && !empty($_POST['ctok
 }
 if ($config['csrf']['enabled']) $smarty->assign('CTOKEN', $csrftoken->getBasic($user->getCurrentIP(), $arrPages[$page]));
 
+$bsxPagePopups = array();
+$bsxSessionUserData = array();
+$bsxAuthenticated = false;
+$bsxSessionClosedBeforeRender = false;
+$bsxRequestMethod = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string)$_SERVER['REQUEST_METHOD']) : 'GET';
+$bsxReadOnlyUnlockPages = array(
+  'admin:system' => true,
+);
+$bsxPageActionKey = $page . ':' . $action;
+if (
+  $bsxRequestMethod === 'GET' &&
+  $page != 'api' &&
+  isset($bsxReadOnlyUnlockPages[$bsxPageActionKey]) &&
+  session_status() === PHP_SESSION_ACTIVE
+) {
+  $bsxPagePopups = isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : array();
+  $bsxSessionUserData = isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array();
+  $bsxAuthenticated = !empty($_SESSION['AUTHENTICATED']);
+  unset($_SESSION['POPUP']);
+  session_write_close();
+  $bsxSessionClosedBeforeRender = true;
+}
+
 // Load the page code setting the content for the page OR the page action instead if set
 $bsxTiming['controller_start'] = microtime(true);
 if (!empty($action)) {
@@ -179,11 +202,7 @@ $bsxTiming['controller_end'] = microtime(true);
 define('PAGE', $page);
 define('ACTION', $action);
 
-$bsxPagePopups = array();
-$bsxSessionUserData = array();
-$bsxAuthenticated = false;
-$bsxSessionClosedBeforeRender = false;
-if ($page != 'api' && session_id()) {
+if ($page != 'api' && session_status() === PHP_SESSION_ACTIVE) {
   $bsxPagePopups = isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : array();
   $bsxSessionUserData = isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array();
   $bsxAuthenticated = !empty($_SESSION['AUTHENTICATED']);
@@ -251,7 +270,7 @@ if ($page != 'api') {
     $bsxPagePopups = array_merge($bsxPagePopups, $_SESSION['POPUP']);
     unset($_SESSION['POPUP']);
   }
-  if (!$bsxSessionClosedBeforeRender && session_id()) {
+  if (!$bsxSessionClosedBeforeRender && session_status() === PHP_SESSION_ACTIVE) {
     $bsxPagePopups = isset($_SESSION['POPUP']) && is_array($_SESSION['POPUP']) ? $_SESSION['POPUP'] : $bsxPagePopups;
     $bsxSessionUserData = isset($_SESSION['USERDATA']) && is_array($_SESSION['USERDATA']) ? $_SESSION['USERDATA'] : array();
     $bsxAuthenticated = !empty($_SESSION['AUTHENTICATED']);

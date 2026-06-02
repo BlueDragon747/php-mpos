@@ -18,6 +18,8 @@
 /var/log/blakestream-mpos/sharelog-importer.stderr
 /var/log/blakestream-mpos/sse.stdout
 /var/log/blakestream-mpos/sse.stderr
+/var/log/blakestream-mpos/system-status-cache.stdout
+/var/log/blakestream-mpos/system-status-cache.stderr
 /var/log/blakestream-mpos/nginx-access.log
 /var/log/blakestream-mpos/nginx-error.log
 /var/log/blakestream-mpos/backup.log

@@ -1,4 +1,4 @@
-{if is_array($POOLHASHRATES)}
+{if $GRAPH_HAS_POOL|default:false}
     <div class="tab_content" id="pool">
       <table class="visualize" rel="area">
         <caption>Pool Hashrate</caption>

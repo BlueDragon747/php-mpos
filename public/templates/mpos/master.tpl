@@ -70,7 +70,6 @@
     {/nocache}
     <script>
       (function () {
-        var pendingSidebarNavTimer = null;
         document.addEventListener('click', function (event) {
           var link = event.target && event.target.closest ? event.target.closest('#sidebar a') : null;
           var url;
@@ -86,11 +85,7 @@
             return;
           }
           if (url.origin !== window.location.origin) return;
-          event.preventDefault();
-          if (pendingSidebarNavTimer) clearTimeout(pendingSidebarNavTimer);
-          pendingSidebarNavTimer = setTimeout(function () {
-            window.location.assign(url.href);
-          }, 120);
+          link.classList.add('is-pending');
         }, true);
 
         function ensureContainer() {
@@ -172,6 +167,7 @@
       .bsx-toast-warning { background: rgba(245, 124, 0, 0.95); border-color: rgba(255, 214, 110, 0.55); color: #ffffff; }
       .bsx-toast-errormsg,
       .bsx-toast-error   { background: rgba(198, 40, 40, 0.95); border-color: rgba(229, 115, 115, 0.55); color: #ffffff; }
+      #sidebar a.is-pending { opacity: 0.65; }
 
       /* MotD banner — pinned across the top in "Always show" mode. */
       .bsx-motd-banner {

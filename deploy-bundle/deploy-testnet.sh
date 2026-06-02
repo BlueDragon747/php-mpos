@@ -269,6 +269,7 @@ run_step "${SCRIPT_DIR}/scripts/60-install-cronjobs-py.sh"
 if [ "$SKIP_POOL" = "0" ]; then
     run_step "${SCRIPT_DIR}/scripts/76-install-sharelog-importer.sh"
 fi
+run_step "${SCRIPT_DIR}/scripts/77-install-system-status-cache.sh"
 run_step "${SCRIPT_DIR}/scripts/80-firewall.sh"
 run_step "${SCRIPT_DIR}/scripts/85-install-logrotate.sh"
 run_step "${SCRIPT_DIR}/scripts/99-verify.sh"

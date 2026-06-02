@@ -6,15 +6,24 @@
          the tabs themselves carry the labels. *}
       <h3 class="tabs_involved sr-only">Stats</h3>
       <ul class="tabs">
+        {if $GRAPH_HAS_MINE|default:false}
         <li><a href="#mine">Mine</a></li>
+        {/if}
+        {if $GRAPH_HAS_POOL|default:false}
         <li><a href="#pool">Pool</a></li>
+        {/if}
+        {if $GRAPH_HAS_MINE|default:false && $GRAPH_HAS_POOL|default:false}
         <li><a href="#both">Both</a></li>
+        {/if}
       </ul>
     </header>
     <div class="bsx-card-body tab_container">
 {include file="{$smarty.request.page|escape}/{$smarty.request.action|escape}/mine.tpl"}
 {include file="{$smarty.request.page|escape}/{$smarty.request.action|escape}/pool.tpl"}
 {include file="{$smarty.request.page|escape}/{$smarty.request.action|escape}/both.tpl"}
+{if ($GRAPH_HAS_MINE|default:false) == false && ($GRAPH_HAS_POOL|default:false) == false}
+      <p class="graph-empty">No hashrate graph data yet.</p>
+{/if}
     </div>
   </article>
 </div>
@@ -130,6 +139,13 @@
     padding: 0 0 8px;
     font-weight: 700;
   }
+  .stats-graphs-v2 .graph-empty {
+    margin: 0;
+    padding: 30px 0;
+    text-align: center;
+    color: #aab2bd;
+    font-weight: 700;
+  }
 
   /* Light mode */
   [data-theme="light"] .stats-graphs-v2 .bsx-card {
@@ -152,4 +168,5 @@
     box-shadow: 0 1px 0 0 #1565c0 inset;
   }
   [data-theme="light"] .stats-graphs-v2 .tab_content table.visualize caption { color: #4a5568; }
+  [data-theme="light"] .stats-graphs-v2 .graph-empty { color: #4a5568; }
 </style>

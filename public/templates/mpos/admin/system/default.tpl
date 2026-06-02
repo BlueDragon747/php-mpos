@@ -729,7 +729,15 @@
         </span>
       {/section}
     </div>
-    <span class="live-indicator" id="sys-live"></span>
+    <span class="live-indicator{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} is-stale{/if}" id="sys-live">
+      {if $SYS_STATUS_CACHE.state|default:"" == "warming"}
+        warming up
+      {elseif $SYS_STATUS_CACHE.state|default:"" == "stale"}
+        stale · {$SYS_STATUS_CACHE.age|default:0|escape}s old
+      {else}
+        live · cached
+      {/if}
+    </span>
   </header>
   <div class="bsx-card-body">
     <table>
@@ -1154,6 +1162,34 @@
 
   function setText(el, txt) { if (el) el.textContent = txt; }
 
+  function updateIndicator(cache) {
+    if (!indicator) return;
+    cache = cache || {};
+    indicator.classList.remove('is-stale');
+    var state = cache.state || 'fresh';
+    var age = Number(cache.age || 0);
+    if (state === 'warming') {
+      indicator.classList.add('is-stale');
+      indicator.textContent = cache.message || 'warming up';
+      return;
+    }
+    if (state === 'stale') {
+      indicator.classList.add('is-stale');
+      indicator.textContent = 'stale · ' + age + 's old';
+      return;
+    }
+    if (state === 'refreshing') {
+      indicator.classList.add('is-stale');
+      indicator.textContent = 'refreshing · ' + age + 's old';
+      return;
+    }
+    var d = new Date();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    var ss = String(d.getSeconds()).padStart(2, '0');
+    indicator.textContent = 'live · updated ' + hh + ':' + mm + ':' + ss;
+  }
+
   function render(data) {
     // Users / Invitations / Logins live in single-row tables — just
     // poke the <td> cells in place. Robust against the Invitations
@@ -1282,12 +1318,7 @@
       applyOutboxFilter(outboxCounts);
     }
 
-    indicator.classList.remove('is-stale');
-    var d = new Date();
-    var hh = String(d.getHours()).padStart(2, '0');
-    var mm = String(d.getMinutes()).padStart(2, '0');
-    var ss = String(d.getSeconds()).padStart(2, '0');
-    indicator.textContent = 'live · updated ' + hh + ':' + mm + ':' + ss;
+    updateIndicator(data.cache);
   }
 
   document.querySelectorAll('[data-outbox-filter]').forEach(function (btn) {

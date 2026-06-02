@@ -17,6 +17,7 @@ export function useSse(url: string) {
 
   function connect() {
     if (stopped) return;
+    es?.close();
     es = new EventSource(url);
     es.onopen = () => {
       connected.value = true;
@@ -41,11 +42,29 @@ export function useSse(url: string) {
     };
   }
 
+  function stop() {
+    stopped = true;
+    connected.value = false;
+    es?.close();
+    es = null;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', stop);
+    window.addEventListener('beforeunload', stop);
+  }
+
   connect();
   onUnmounted(() => {
-    stopped = true;
-    es?.close();
-    if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', stop);
+      window.removeEventListener('beforeunload', stop);
+    }
+    stop();
   });
 
   return { connected, lastEvent };

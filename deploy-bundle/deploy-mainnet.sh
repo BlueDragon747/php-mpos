@@ -765,6 +765,11 @@ deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/75-install-sse.sh"
 deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/76-install-sharelog-importer.sh"
 
 # ---------------------------------------------------------------
+# Step 7.7: Keep System Status warm in memcached
+# ---------------------------------------------------------------
+deploy_step_timed "${SCRIPT_DIR}/scripts/77-install-system-status-cache.sh"
+
+# ---------------------------------------------------------------
 # Step 8: Open firewall, install logrotate, install daily backup,
 #          run final verify pass.
 # ---------------------------------------------------------------
