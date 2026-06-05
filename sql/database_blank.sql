@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS `accounts` (
   KEY `coin_address` (`coin_address`) USING BTREE,
   KEY `coin_address_mm` (`coin_address_mm`) USING BTREE,
   KEY `coin_address_mm1` (`coin_address_mm1`,`coin_address_mm2`,`coin_address_mm3`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=5013 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS `blocks` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=913340 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1009104 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm1` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1205384 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm3` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=2861649 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm4` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=2067162 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm5` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=954799 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -242,7 +242,7 @@ CREATE TABLE IF NOT EXISTS `invitations` (
   `is_activated` tinyint(1) NOT NULL DEFAULT '0',
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -254,7 +254,7 @@ CREATE TABLE IF NOT EXISTS `monitoring` (
   `value` varchar(255) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=8047727 DEFAULT CHARSET=utf8 COMMENT='Monitoring events from cronjobs';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Monitoring events from cronjobs';
 
 -- Data exporting was unselected.
 
@@ -268,7 +268,7 @@ CREATE TABLE IF NOT EXISTS `news` (
   `active` tinyint(1) NOT NULL DEFAULT '0',
   `show_on` enum('home','dashboard','both') NOT NULL DEFAULT 'home',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -281,7 +281,7 @@ CREATE TABLE IF NOT EXISTS `notification_settings` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `account_id_type` (`account_id`,`type`),
   KEY `account_id` (`account_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=221 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -309,7 +309,7 @@ CREATE TABLE IF NOT EXISTS `payouts` (
   `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `account_id` (`account_id`,`completed`)
-) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -321,7 +321,7 @@ CREATE TABLE IF NOT EXISTS `payouts_mm` (
   `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -333,7 +333,7 @@ CREATE TABLE IF NOT EXISTS `payouts_mm1` (
   `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -409,7 +409,7 @@ CREATE TABLE IF NOT EXISTS `pool_worker` (
   UNIQUE KEY `username` (`username`),
   KEY `account_id` (`account_id`),
   KEY `pool_worker_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=7909 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -454,7 +454,7 @@ CREATE TABLE IF NOT EXISTS `shares` (
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1283992873 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -473,7 +473,7 @@ CREATE TABLE IF NOT EXISTS `shares_archive` (
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=1334788133 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -492,7 +492,7 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm` (
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=59013920 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -511,7 +511,7 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm1` (
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=58910015 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -549,7 +549,7 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm3` (
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=58840340 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -568,7 +568,7 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm4` (
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=59003630 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -587,7 +587,7 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm5` (
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=58933569 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -627,7 +627,7 @@ CREATE TABLE IF NOT EXISTS `shares_mm` (
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1280212719 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -648,7 +648,7 @@ CREATE TABLE IF NOT EXISTS `shares_mm1` (
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1278647341 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -690,7 +690,7 @@ CREATE TABLE IF NOT EXISTS `shares_mm3` (
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1272029501 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -711,7 +711,7 @@ CREATE TABLE IF NOT EXISTS `shares_mm4` (
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1251752263 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -732,7 +732,7 @@ CREATE TABLE IF NOT EXISTS `shares_mm5` (
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1230347454 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -769,7 +769,7 @@ CREATE TABLE IF NOT EXISTS `statistics_shares` (
   PRIMARY KEY (`id`),
   KEY `account_id` (`account_id`),
   KEY `block_id` (`block_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=12676266 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -813,7 +813,7 @@ CREATE TABLE IF NOT EXISTS `tokens` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `token` (`token`),
   KEY `account_id` (`account_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1201 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -833,7 +833,7 @@ CREATE TABLE IF NOT EXISTS `transactions` (
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=18949982 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -853,7 +853,7 @@ CREATE TABLE IF NOT EXISTS `transactions_mm` (
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=20141200 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -873,7 +873,7 @@ CREATE TABLE IF NOT EXISTS `transactions_mm1` (
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=24843299 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -913,7 +913,7 @@ CREATE TABLE IF NOT EXISTS `transactions_mm3` (
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=50955381 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -933,7 +933,7 @@ CREATE TABLE IF NOT EXISTS `transactions_mm4` (
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=35389332 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -953,7 +953,7 @@ CREATE TABLE IF NOT EXISTS `transactions_mm5` (
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=18071954 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
