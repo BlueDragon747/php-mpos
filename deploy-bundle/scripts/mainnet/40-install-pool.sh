@@ -25,6 +25,7 @@ VENV="${INSTALL_ROOT}/venv"
 LOG_POOL="${LOG_ROOT}/pool"
 CONFIG_DIR="${INSTALL_ROOT}/config"
 GO_SHARE_LOG_PATH="${GO_SHARE_LOG_PATH:-/var/log/blakestream-eliopool-25.2-go/shares.log}"
+MPOS_BASE_DIFFICULTY="${MPOS_BASE_DIFFICULTY:-32}"
 mkdir -p "$LOG_POOL" "${INSTALL_ROOT}/bin" "$CONFIG_DIR"
 chown -R blakestream-mpos:blakestream-mpos "$LOG_POOL"
 chown root:blakestream-mpos "$CONFIG_DIR"
@@ -362,7 +363,7 @@ Group=blakestream-mpos
 WorkingDirectory=${POOL_ROOT}
 Environment=ELIOPOOL_PARENT_RPC_URL=http://${MPOS_NODE_RPC_USER}:${MPOS_NODE_RPC_PASS}@127.0.0.1:8772/
 ExecStartPre=/bin/sh -c 'for i in \$(seq 1 30); do mysqladmin ping -h ${MPOS_DB_HOST} --silent && exit 0; sleep 1; done; echo "mariadb never came ready" >&2; exit 1'
-ExecStart=${INSTALL_ROOT}/bin/eloipool-go -start-proxy=false -stratum 0.0.0.0:${MPOS_STRATUM_PORT} -rpc 127.0.0.1:19334 -proxy 127.0.0.1:19335 -tracker-address ${MPOS_TRACKER_ADDR} -share-log ${GO_SHARE_LOG_PATH} -pool-log ${LOG_POOL}/eloipool-go.log
+ExecStart=${INSTALL_ROOT}/bin/eloipool-go -start-proxy=false -stratum 0.0.0.0:${MPOS_STRATUM_PORT} -rpc 127.0.0.1:19334 -proxy 127.0.0.1:19335 -tracker-address ${MPOS_TRACKER_ADDR} -share-log ${GO_SHARE_LOG_PATH} -pool-log ${LOG_POOL}/eloipool-go.log -base-difficulty ${MPOS_BASE_DIFFICULTY}
 StandardOutput=append:${LOG_POOL}/eloipool.stdout
 StandardError=append:${LOG_POOL}/eloipool.stderr
 Restart=always

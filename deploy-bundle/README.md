@@ -34,7 +34,7 @@ deploy-bundle/
 │   ├── 05-wipe.sh            # purge prior MPOS install (--wipe)
 │   ├── 10-system-deps.sh     # apt: nginx, php-fpm, mariadb, memcached, python, docker
 │   ├── system-disk-stats.sh  # read-only allowlisted disk stats helper
-│   ├── 20-pull-daemons.sh    # docker pull + binary extract + libboost ldconfig
+│   ├── 20-pull-daemons.sh    # daemon image extract or upstream source build
 │   ├── 30-init-daemons.sh    # write configs, systemd units, start 12 daemons
 │   ├── 40-install-pool.sh    # eloipool + MPOS auth + MMP, render config
 │   ├── 50-install-mpos.sh    # MariaDB DB, web tree, render global.inc.php, nginx vhost
@@ -200,6 +200,31 @@ Source repos used: `BlueDragon747/Blakecoin`, `BlueDragon747/photon`,
 `BlueDragon747/universalmol`, `BlueDragon747/lithium` — all at branch
 `0.25.2` unless overridden via `MPOS_DAEMON_SOURCE_REF`. Change the source
 ref to `master` after live cutover once master carries the 25.2 wallet updates.
+
+### Testnet deploy — build daemon binaries from upstream source
+
+The testnet deploy uses the same source refs when
+`MPOS_PULL_DAEMON_IMAGES=0`, but installs the native Ubuntu 24 daemon binaries
+directly instead of packaging runtime Docker images:
+
+```bash
+export MPOS_PULL_DAEMON_IMAGES=0
+export MPOS_DAEMON_SOURCE_REF=0.25.2
+
+sudo -E bash deploy-bundle/deploy-testnet.sh -local --wipe
+```
+
+Source repos used by both source-build paths:
+
+| Coin | Repo | Ref |
+| --- | --- | --- |
+| BLC | `https://github.com/BlueDragon747/Blakecoin.git` | `0.25.2` |
+| BBTC | `https://github.com/BlakeBitcoin/BlakeBitcoin.git` | `0.25.2` |
+| ELT | `https://github.com/BlueDragon747/Electron-ELT.git` | `0.25.2` |
+| LIT | `https://github.com/BlueDragon747/lithium.git` | `0.25.2` |
+| PHO | `https://github.com/BlueDragon747/photon.git` | `0.25.2` |
+| UMO | `https://github.com/BlueDragon747/universalmol.git` | `0.25.2` |
+| Eloipool Go | `https://github.com/BlueDragon747/eloipool_Blakecoin.git` | `25.2-GO` |
 
 ### Deploy over SSH from a workstation — pull pre-built containers
 

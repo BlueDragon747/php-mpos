@@ -118,6 +118,7 @@ if [ ! -f "$GLOBAL" ]; then
 fi
 NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-blakestream-testnet}"
+MPOS_DIFFICULTY_BITS="${MPOS_DIFFICULTY_BITS:-21}"
 
 # Salts
 sed -i -E "s|^\\\$config\\['SALT'\\][[:space:]]*=[[:space:]]*'[^']*';|\\\$config['SALT'] = '${MPOS_SALT}';|" "$GLOBAL"
@@ -130,9 +131,11 @@ sed -i "s|^\\\$config\\['db'\\]\\['pass'\\] = '[^']*';|\\\$config['db']['pass'] 
 sed -i "s|^\\\$config\\['db'\\]\\['port'\\] = [0-9]*;|\\\$config['db']['port'] = ${MPOS_DB_PORT};|" "$GLOBAL"
 sed -i "s|^\\\$config\\['db'\\]\\['name'\\] = '[^']*';|\\\$config['db']['name'] = '${MPOS_DB_NAME}';|" "$GLOBAL"
 sed -i "s|^\\\$config\\['system'\\]\\['load'\\]\\['max'\\] = [0-9.]*;|\\\$config['system']['load']['max'] = 100.0;|" "$GLOBAL"
+sed -i "s|^\\\$config\\['difficulty'\\][[:space:]]*=[[:space:]]*[0-9]*;|\\\$config['difficulty'] = ${MPOS_DIFFICULTY_BITS};|" "$GLOBAL"
 
-# Stratum URL displayed on the Getting Started page
-sed -i "s|^\\\$config\\['gettingstarted'\\]\\['stratumurl'\\] = '[^']*';|\\\$config['gettingstarted']['stratumurl'] = 'stratum+tcp://${HOST_IP}/';|" "$GLOBAL"
+# Stratum host displayed on the Getting Started page. Templates add the
+# stratum+tcp:// scheme and configured port.
+sed -i "s|^\\\$config\\['gettingstarted'\\]\\['stratumurl'\\] = '[^']*';|\\\$config['gettingstarted']['stratumurl'] = '${HOST_IP}';|" "$GLOBAL"
 
 # Re-point wallet slots at the running testnet daemons. Use a Python
 # in-place edit to handle the multi-line $config['wallet_*'] blocks safely.

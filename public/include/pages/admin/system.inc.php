@@ -16,8 +16,8 @@ require_once __DIR__ . '/_daemon_rule_status.inc.php';
 if (!$system_status_collector_mode) _require_admin_csrf($csrftoken);
 
 $system_status_cache_key = 'ADMIN_SYSTEM_STATUS_V1';
-$system_status_cache_fresh_ttl = 10;
-$system_status_cache_stale_ttl = 60;
+$system_status_cache_fresh_ttl = 60;
+$system_status_cache_stale_ttl = 180;
 
 function _system_status_cache_full_key($key) {
   global $config;

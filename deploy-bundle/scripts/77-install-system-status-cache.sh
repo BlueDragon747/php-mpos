@@ -35,7 +35,7 @@ Type=simple
 User=${RUN_USER}
 Group=${RUN_GROUP}
 WorkingDirectory=${WEB_ROOT}
-ExecStart=${PHP_BIN} ${COLLECTOR} --loop --interval 10 --quiet
+ExecStart=${PHP_BIN} ${COLLECTOR} --loop --interval 60 --quiet
 StandardOutput=append:${LOG_ROOT}/system-status-cache.stdout
 StandardError=append:${LOG_ROOT}/system-status-cache.stderr
 Restart=always
@@ -51,4 +51,4 @@ systemctl restart blakestream-mpos-system-status-cache.service
 sleep 2
 systemctl is-active --quiet blakestream-mpos-system-status-cache.service
 
-say "step 77 done - System Status cache refreshes every 10 seconds"
+say "step 77 done - System Status cache refreshes every 60 seconds"
