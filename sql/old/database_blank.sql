@@ -1,7 +1,7 @@
 -- --------------------------------------------------------
 -- Host:                         127.0.0.1
--- Server version:               10.11.14-MariaDB-0ubuntu0.24.04.1 - Ubuntu 24.04
--- Server OS:                    debian-linux-gnu
+-- Server version:               5.7.37-0ubuntu0.18.04.1 - (Ubuntu)
+-- Server OS:                    Linux
 -- HeidiSQL Version:             12.16.0.7229
 -- --------------------------------------------------------
 
@@ -16,52 +16,52 @@
 
 
 -- Dumping database structure for mpos
-CREATE DATABASE IF NOT EXISTS `mpos` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */;
+CREATE DATABASE IF NOT EXISTS `mpos` /*!40100 DEFAULT CHARACTER SET latin1 */;
 USE `mpos`;
 
 -- Dumping structure for table mpos.accounts
 CREATE TABLE IF NOT EXISTS `accounts` (
   `id` int(255) NOT NULL AUTO_INCREMENT,
-  `is_admin` tinyint(1) NOT NULL DEFAULT 0,
-  `is_anonymous` tinyint(1) NOT NULL DEFAULT 0,
-  `no_fees` tinyint(1) NOT NULL DEFAULT 0,
+  `is_admin` tinyint(1) NOT NULL DEFAULT '0',
+  `is_anonymous` tinyint(1) NOT NULL DEFAULT '0',
+  `no_fees` tinyint(1) NOT NULL DEFAULT '0',
   `username` varchar(40) NOT NULL,
   `pass` varchar(255) NOT NULL,
   `email` varchar(255) DEFAULT NULL COMMENT 'Assocaited email: used for validating users, and re-setting passwords',
   `notify_email` varchar(255) DEFAULT NULL,
   `loggedIp` varchar(255) DEFAULT NULL,
-  `is_locked` tinyint(1) NOT NULL DEFAULT 0,
-  `failed_logins` int(5) unsigned DEFAULT 0,
-  `failed_pins` int(5) unsigned DEFAULT 0,
-  `signup_timestamp` int(10) DEFAULT 0,
+  `is_locked` tinyint(1) NOT NULL DEFAULT '0',
+  `failed_logins` int(5) unsigned DEFAULT '0',
+  `failed_pins` int(5) unsigned DEFAULT '0',
+  `signup_timestamp` int(10) DEFAULT '0',
   `last_login` int(10) DEFAULT NULL,
   `pin` varchar(255) NOT NULL COMMENT 'four digit pin to allow account changes',
   `api_key` varchar(255) DEFAULT NULL,
   `token` varchar(65) DEFAULT NULL,
-  `donate_percent` float DEFAULT 0,
-  `ap_threshold` float DEFAULT 0,
+  `donate_percent` float DEFAULT '0',
+  `ap_threshold` float DEFAULT '0',
   `coin_address` varchar(255) DEFAULT NULL,
   `coin_address_mm` varchar(255) DEFAULT NULL,
-  `ap_threshold_mm` float DEFAULT 0,
+  `ap_threshold_mm` float DEFAULT '0',
   `coin_address_mm1` varchar(255) DEFAULT NULL,
-  `ap_threshold_mm1` float DEFAULT 0,
+  `ap_threshold_mm1` float DEFAULT '0',
   `coin_address_mm2` varchar(255) DEFAULT NULL,
-  `ap_threshold_mm2` float DEFAULT 0,
+  `ap_threshold_mm2` float DEFAULT '0',
   `coin_address_mm3` varchar(255) DEFAULT NULL,
-  `ap_threshold_mm3` float DEFAULT 0,
+  `ap_threshold_mm3` float DEFAULT '0',
   `coin_address_mm4` varchar(255) DEFAULT NULL,
-  `ap_threshold_mm4` float DEFAULT 0,
+  `ap_threshold_mm4` float DEFAULT '0',
   `coin_address_mm5` varchar(255) DEFAULT '',
-  `ap_threshold_mm5` float DEFAULT 0,
+  `ap_threshold_mm5` float DEFAULT '0',
   `coin_address_mm6` varchar(255) DEFAULT '',
-  `ap_threshold_mm6` float DEFAULT 0,
+  `ap_threshold_mm6` float DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`),
   UNIQUE KEY `email` (`email`),
   KEY `coin_address` (`coin_address`) USING BTREE,
   KEY `coin_address_mm` (`coin_address_mm`) USING BTREE,
   KEY `coin_address_mm1` (`coin_address_mm1`,`coin_address_mm2`,`coin_address_mm3`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -74,15 +74,15 @@ CREATE TABLE IF NOT EXISTS `blocks` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
-  `account_id` int(255) unsigned DEFAULT 1,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
+  `account_id` int(255) unsigned DEFAULT '1',
   `worker_name` varchar(50) DEFAULT 'BlueDragon747.1',
   `shares` int(255) unsigned DEFAULT NULL,
   `share_id` int(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
   `account_id` int(255) unsigned DEFAULT NULL,
   `worker_name` varchar(50) DEFAULT 'unknown',
   `shares` int(255) unsigned DEFAULT NULL,
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -116,15 +116,15 @@ CREATE TABLE IF NOT EXISTS `blocks_mm1` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
-  `account_id` int(255) unsigned DEFAULT 1,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
+  `account_id` int(255) unsigned DEFAULT '1',
   `worker_name` varchar(50) DEFAULT 'BlueDragon747.1',
   `shares` int(255) unsigned DEFAULT NULL,
   `share_id` int(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm2` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
   `account_id` int(255) unsigned DEFAULT NULL,
   `worker_name` varchar(50) DEFAULT 'unknown',
   `shares` int(255) unsigned DEFAULT NULL,
@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm2` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -158,15 +158,15 @@ CREATE TABLE IF NOT EXISTS `blocks_mm3` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
   `account_id` int(255) unsigned DEFAULT NULL,
   `worker_name` varchar(50) DEFAULT 'unknown',
-  `shares` int(255) unsigned DEFAULT 1,
+  `shares` int(255) unsigned DEFAULT '1',
   `share_id` bigint(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm4` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
   `account_id` int(255) unsigned DEFAULT NULL,
   `worker_name` varchar(50) DEFAULT 'unknown',
   `shares` int(255) unsigned DEFAULT NULL,
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm4` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm5` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
   `account_id` int(255) unsigned DEFAULT NULL,
   `worker_name` varchar(50) DEFAULT 'unknown',
   `shares` int(255) unsigned DEFAULT NULL,
@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm5` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm6` (
   `amount` double NOT NULL,
   `difficulty` double NOT NULL,
   `time` int(11) NOT NULL,
-  `accounted` tinyint(1) NOT NULL DEFAULT 0,
+  `accounted` tinyint(1) NOT NULL DEFAULT '0',
   `account_id` int(255) unsigned DEFAULT NULL,
   `worker_name` varchar(50) DEFAULT 'unknown',
   `shares` int(255) unsigned DEFAULT NULL,
@@ -229,37 +229,7 @@ CREATE TABLE IF NOT EXISTS `blocks_mm6` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `height` (`height`,`blockhash`),
   KEY `time` (`time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Discovered blocks persisted from Litecoin Service';
-
--- Data exporting was unselected.
-
--- Dumping structure for table mpos.cronjobs_py_accounting
-CREATE TABLE IF NOT EXISTS `cronjobs_py_accounting` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `slot` varchar(8) NOT NULL DEFAULT '',
-  `block_id` bigint(20) unsigned NOT NULL,
-  `account_id` int(10) unsigned NOT NULL,
-  `tx_type` varchar(32) NOT NULL,
-  `mode` enum('live','shadow') NOT NULL DEFAULT 'live',
-  `amount` decimal(20,8) NOT NULL,
-  `txn_id` bigint(20) unsigned DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_block_account_type` (`slot`,`block_id`,`account_id`,`tx_type`),
-  KEY `idx_block` (`slot`,`block_id`),
-  KEY `idx_mode_created` (`mode`,`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Data exporting was unselected.
-
--- Dumping structure for table mpos.cronjobs_py_disabled
-CREATE TABLE IF NOT EXISTS `cronjobs_py_disabled` (
-  `scope` varchar(64) NOT NULL,
-  `reason` text NOT NULL,
-  `set_by` varchar(64) NOT NULL DEFAULT 'cronjobs-py',
-  `set_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`scope`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Discovered blocks persisted from Litecoin Service';
 
 -- Data exporting was unselected.
 
@@ -269,10 +239,10 @@ CREATE TABLE IF NOT EXISTS `invitations` (
   `account_id` int(11) unsigned NOT NULL,
   `email` varchar(50) NOT NULL,
   `token_id` int(11) NOT NULL,
-  `is_activated` tinyint(1) NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `is_activated` tinyint(1) NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -284,7 +254,7 @@ CREATE TABLE IF NOT EXISTS `monitoring` (
   `value` varchar(255) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Monitoring events from cronjobs';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Monitoring events from cronjobs';
 
 -- Data exporting was unselected.
 
@@ -294,11 +264,11 @@ CREATE TABLE IF NOT EXISTS `news` (
   `account_id` int(10) unsigned NOT NULL,
   `header` varchar(255) NOT NULL,
   `content` text NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `active` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `active` tinyint(1) NOT NULL DEFAULT '0',
   `show_on` enum('home','dashboard','both') NOT NULL DEFAULT 'home',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -307,11 +277,11 @@ CREATE TABLE IF NOT EXISTS `notification_settings` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `type` varchar(15) NOT NULL,
   `account_id` int(11) NOT NULL,
-  `active` tinyint(1) NOT NULL DEFAULT 0,
+  `active` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `account_id_type` (`account_id`,`type`),
   KEY `account_id` (`account_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -320,14 +290,14 @@ CREATE TABLE IF NOT EXISTS `notifications` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `type` varchar(25) NOT NULL,
   `data` varchar(255) NOT NULL,
-  `active` tinyint(1) NOT NULL DEFAULT 1,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `account_id` int(10) unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `active` (`active`),
   KEY `data` (`data`),
   KEY `account_id` (`account_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -335,11 +305,11 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 CREATE TABLE IF NOT EXISTS `payouts` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `account_id` (`account_id`,`completed`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -347,11 +317,11 @@ CREATE TABLE IF NOT EXISTS `payouts` (
 CREATE TABLE IF NOT EXISTS `payouts_mm` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -359,11 +329,11 @@ CREATE TABLE IF NOT EXISTS `payouts_mm` (
 CREATE TABLE IF NOT EXISTS `payouts_mm1` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -371,11 +341,11 @@ CREATE TABLE IF NOT EXISTS `payouts_mm1` (
 CREATE TABLE IF NOT EXISTS `payouts_mm2` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -383,11 +353,11 @@ CREATE TABLE IF NOT EXISTS `payouts_mm2` (
 CREATE TABLE IF NOT EXISTS `payouts_mm3` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -395,11 +365,11 @@ CREATE TABLE IF NOT EXISTS `payouts_mm3` (
 CREATE TABLE IF NOT EXISTS `payouts_mm4` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -407,11 +377,11 @@ CREATE TABLE IF NOT EXISTS `payouts_mm4` (
 CREATE TABLE IF NOT EXISTS `payouts_mm5` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -419,11 +389,11 @@ CREATE TABLE IF NOT EXISTS `payouts_mm5` (
 CREATE TABLE IF NOT EXISTS `payouts_mm6` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `account_id` int(11) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed` tinyint(1) NOT NULL DEFAULT 0,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `completed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `id` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- Data exporting was unselected.
 
@@ -433,42 +403,24 @@ CREATE TABLE IF NOT EXISTS `pool_worker` (
   `account_id` int(255) NOT NULL,
   `username` char(50) DEFAULT NULL,
   `password` char(255) DEFAULT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `monitor` tinyint(1) NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
+  `monitor` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`),
   KEY `account_id` (`account_id`),
   KEY `pool_worker_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
-
--- Data exporting was unselected.
-
--- Dumping structure for table mpos.pplns_shares
-CREATE TABLE IF NOT EXISTS `pplns_shares` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `slot` varchar(8) NOT NULL DEFAULT '',
-  `block_id` int(10) unsigned NOT NULL,
-  `account_id` int(10) unsigned NOT NULL,
-  `pplns_valid` double NOT NULL DEFAULT 0,
-  `pplns_invalid` double NOT NULL DEFAULT 0,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_slot_block_account` (`slot`,`block_id`,`account_id`),
-  KEY `idx_block` (`block_id`),
-  KEY `idx_account` (`account_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
 -- Dumping structure for table mpos.settings
 CREATE TABLE IF NOT EXISTS `settings` (
   `name` varchar(255) NOT NULL,
-  `value` text DEFAULT NULL,
+  `value` text,
   PRIMARY KEY (`name`),
   UNIQUE KEY `setting` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
--- Data exporting was unselected.
 -- Seed settings rows needed by a fresh automated install. DB_VERSION keeps
 -- the cronjobs' shared.inc.php gate
 -- (DB_VERSION constant from public/include/version.inc.php)
@@ -479,7 +431,7 @@ INSERT INTO `settings` (`name`, `value`) VALUES ('DB_VERSION', '0.0.5')
   ON DUPLICATE KEY UPDATE `value` = '0.0.5';
 INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('backups_enabled', '1');
 -- Fresh installs ship with payouts + contact form OFF by default.
--- Operator opts in via Admin ? Settings once they've configured wallet
+-- Operator opts in via Admin → Settings once they've configured wallet
 -- credentials / SMTP. Prevents auto-payouts from firing on a half-
 -- configured deploy.
 INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('disable_manual_payouts', '1');
@@ -494,20 +446,15 @@ CREATE TABLE IF NOT EXISTS `shares` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
-  `username_base` varchar(120) GENERATED ALWAYS AS (substring_index(`username`,'.',1)) STORED,
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
-  KEY `shares_username` (`username`(10)),
-  KEY `idx_time_result` (`time`,`our_result`),
-  KEY `idx_id_result` (`id`,`our_result`),
-  KEY `idx_username_time` (`username`,`time`),
-  KEY `idx_username_base_result_time` (`username_base`,`our_result`,`time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+  KEY `shares_username` (`username`(10))
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -519,17 +466,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
-  `username_base` varchar(120) GENERATED ALWAYS AS (substring_index(`username`,'.',1)) VIRTUAL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
-  KEY `username` (`username`),
-  KEY `idx_username_base_result_time` (`username_base`,`our_result`,`time`),
-  KEY `idx_share_id_result` (`share_id`,`our_result`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+  KEY `username` (`username`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -541,14 +485,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -560,14 +504,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm1` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -579,14 +523,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm2` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -598,14 +542,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm3` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -617,14 +561,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm4` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -636,14 +580,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm5` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -655,14 +599,14 @@ CREATE TABLE IF NOT EXISTS `shares_archive_mm6` (
   `our_result` enum('Y','N') DEFAULT NULL,
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `block_id` int(10) unsigned NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
+  `difficulty` float NOT NULL DEFAULT '0',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `share_id` (`share_id`),
   KEY `time` (`time`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci COMMENT='Archive shares for potential later debugging purposes';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Archive shares for potential later debugging purposes';
 
 -- Data exporting was unselected.
 
@@ -675,15 +619,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -696,15 +640,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm1` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -717,15 +661,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm2` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -738,15 +682,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm3` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -759,15 +703,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm4` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -780,15 +724,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm5` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -801,15 +745,15 @@ CREATE TABLE IF NOT EXISTS `shares_mm6` (
   `upstream_result` enum('Y','N') DEFAULT NULL,
   `reason` varchar(50) DEFAULT NULL,
   `solution` varchar(257) CHARACTER SET ucs2 COLLATE ucs2_unicode_ci NOT NULL,
-  `difficulty` float NOT NULL DEFAULT 0,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `difficulty` float NOT NULL DEFAULT '0',
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `time` (`time`),
   KEY `upstream_result` (`upstream_result`),
   KEY `our_result` (`our_result`),
   KEY `username` (`username`),
   KEY `shares_username` (`username`(10))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -819,24 +763,24 @@ CREATE TABLE IF NOT EXISTS `statistics_shares` (
   `account_id` int(10) unsigned NOT NULL,
   `block_id` int(10) unsigned NOT NULL,
   `valid` int(11) NOT NULL,
-  `invalid` int(11) NOT NULL DEFAULT 0,
+  `invalid` int(11) NOT NULL DEFAULT '0',
   `pplns_valid` int(11) NOT NULL,
-  `pplns_invalid` int(11) NOT NULL DEFAULT 0,
+  `pplns_invalid` int(11) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `account_id` (`account_id`),
   KEY `block_id` (`block_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
 -- Dumping structure for table mpos.templates
 CREATE TABLE IF NOT EXISTS `templates` (
   `template` varchar(255) NOT NULL,
-  `active` tinyint(1) NOT NULL DEFAULT 0,
-  `content` mediumtext DEFAULT NULL,
-  `modified_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `active` tinyint(1) NOT NULL DEFAULT '0',
+  `content` mediumtext,
+  `modified_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`template`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -844,12 +788,20 @@ CREATE TABLE IF NOT EXISTS `templates` (
 CREATE TABLE IF NOT EXISTS `token_types` (
   `id` tinyint(4) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(25) NOT NULL,
-  `expiration` int(11) DEFAULT 0,
+  `expiration` int(11) DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8;
 
--- Data exporting was unselected.
+INSERT INTO `token_types` (`id`, `name`, `expiration`) VALUES
+  (1, 'password_reset', 3600),
+  (2, 'confirm_email', 0),
+  (3, 'invitation', 0),
+  (4, 'account_unlock', 0),
+  (5, 'account_edit', 3600),
+  (6, 'change_pw', 3600),
+  (7, 'withdraw_funds', 3600)
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `expiration`=VALUES(`expiration`);
 
 -- Dumping structure for table mpos.tokens
 CREATE TABLE IF NOT EXISTS `tokens` (
@@ -857,11 +809,11 @@ CREATE TABLE IF NOT EXISTS `tokens` (
   `account_id` int(11) NOT NULL,
   `token` varchar(65) NOT NULL,
   `type` tinyint(4) NOT NULL,
-  `time` timestamp NOT NULL DEFAULT current_timestamp(),
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `token` (`token`),
   KEY `account_id` (`account_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -871,17 +823,17 @@ CREATE TABLE IF NOT EXISTS `transactions` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -891,17 +843,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -911,17 +863,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm1` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -931,17 +883,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm2` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -951,17 +903,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm3` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -971,17 +923,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm4` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -991,17 +943,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm5` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -1011,38 +963,17 @@ CREATE TABLE IF NOT EXISTS `transactions_mm6` (
   `account_id` int(255) unsigned NOT NULL,
   `type` varchar(25) DEFAULT NULL,
   `coin_address` varchar(255) DEFAULT NULL,
-  `amount` double DEFAULT 0,
+  `amount` double DEFAULT '0',
   `block_id` int(255) DEFAULT NULL,
-  `timestamp` timestamp NOT NULL DEFAULT current_timestamp(),
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `txid` varchar(256) DEFAULT NULL,
-  `archived` tinyint(1) NOT NULL DEFAULT 0,
+  `archived` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `block_id` (`block_id`),
   KEY `account_id` (`account_id`),
   KEY `type` (`type`),
   KEY `archived` (`archived`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
-
--- Data exporting was unselected.
-
--- Dumping structure for table mpos.transactions_outbox
-CREATE TABLE IF NOT EXISTS `transactions_outbox` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `slot` varchar(8) NOT NULL DEFAULT '',
-  `account_id` int(10) unsigned NOT NULL,
-  `coin_address` varchar(255) NOT NULL,
-  `amount` decimal(20,8) NOT NULL,
-  `wallet_comment` varchar(64) NOT NULL,
-  `status` enum('pending','broadcast','indeterminate','reconciled','abandoned') NOT NULL DEFAULT 'pending',
-  `txid` varchar(80) DEFAULT NULL,
-  `rpc_error` text DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_wallet_comment` (`wallet_comment`),
-  KEY `idx_status` (`status`,`created_at`),
-  KEY `idx_slot_account` (`slot`,`account_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 

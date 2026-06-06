@@ -387,6 +387,23 @@ class Db:
         )
         return int(row["n"]) if row else 0
 
+    def get_round_shares_diff(self, prev_share_id: int, current_share_id: int,
+                                *, difficulty_const: int) -> float:
+        """Diff-normalized valid shares in ``(prev, current]``.
+
+        Mirrors PHP ``Share::getRoundShares`` — sums
+        ``difficulty / 2^(difficulty_const - 16)`` for every valid share
+        in the window so the block's ``shares`` column reflects vardiff
+        weight.
+        """
+        baseline = 2.0 ** (difficulty_const - 16)
+        row = self.fetchone(
+            "SELECT IFNULL(SUM(IF(difficulty=0, %s, difficulty)), 0) AS total "
+            "FROM shares WHERE id > %s AND id <= %s AND our_result = 'Y'",
+            (baseline, prev_share_id, current_share_id),
+        )
+        return float(row["total"]) / baseline if row else 0.0
+
     def get_user_id(self, username: str) -> int | None:
         # Strip worker suffix `user.worker` → `user`
         username = username.split(".", 1)[0] if username else username
@@ -516,8 +533,8 @@ class Db:
         return int(row["id"])
 
     def round_share_breakdown_diff(self, prev_share_id: int,
-                                   current_share_id: int, *,
-                                   difficulty_const: int) -> list[dict]:
+                                    current_share_id: int, *,
+                                    difficulty_const: int) -> list[dict]:
         """Diff-normalized counterpart of `round_share_breakdown`.
 
         Each share contributes `difficulty / 2^(difficulty_const - 16)`
@@ -538,14 +555,14 @@ class Db:
             "  ROUND(IFNULL(SUM(IF(u.our_result='N', "
             "        IF(u.difficulty=0, %s, u.difficulty), 0)), 0) / %s, 8) AS invalid "
             "FROM ("
-            "  SELECT id, username, our_result, difficulty FROM shares "
+            "  SELECT id, username_base, our_result, difficulty FROM shares "
             "  WHERE id > %s AND id <= %s "
             "  UNION ALL "
-            "  SELECT share_id AS id, username, our_result, difficulty FROM shares_archive "
+            "  SELECT share_id AS id, username_base, our_result, difficulty FROM shares_archive "
             "  WHERE share_id > %s AND share_id <= %s"
-            ") u "
+            "             ) u "
             "LEFT JOIN accounts a "
-            "  ON a.username = SUBSTRING_INDEX(u.username, '.', 1) "
+            "  ON a.username = u.username_base "
             "GROUP BY a.id, a.username"
         )
         rows = self.fetchall(sql, (
@@ -584,14 +601,14 @@ class Db:
             "  ROUND(IFNULL(SUM(IF(b.our_result='N', "
             "        IF(b.difficulty=0, %s, b.difficulty), 0)), 0) / %s, 8) AS invalid "
             "FROM ("
-            "  SELECT share_id, username, our_result, difficulty, "
+            "  SELECT share_id, username_base, our_result, difficulty, "
             "         @atotal := @atotal + IF(difficulty=0, %s, difficulty) AS total "
             "  FROM shares_archive, (SELECT @atotal := 0) AS x "
             "  WHERE share_id < %s AND @atotal < %s "
             "  ORDER BY share_id DESC"
             ") AS b "
             "LEFT JOIN accounts a "
-            "  ON a.username = SUBSTRING_INDEX(b.username, '.', 1) "
+            "  ON a.username = b.username_base "
             "WHERE b.total <= %s "
             "GROUP BY a.id, a.username"
         )
@@ -602,198 +619,6 @@ class Db:
         for r in rows:
             r["valid"] = float(r.get("valid") or 0.0)
             r["invalid"] = float(r.get("invalid") or 0.0)
-        return rows
-
-    def get_round_shares_diff(self, prev_share_id: int,
-                              current_share_id: int, *,
-                              difficulty_const: int) -> float:
-        """Diff-normalized total valid shares in (prev, current].
-        Mirrors PHP `Share::getRoundShares`.
-        """
-        baseline = 2.0 ** (difficulty_const - 16)
-        row = self.fetchone(
-            "SELECT ROUND(IFNULL(SUM(IF(u.our_result='Y', "
-            "    IF(u.difficulty=0, %s, u.difficulty), 0)), 0) / %s, 8) AS total "
-            "FROM ("
-            "  SELECT id, our_result, difficulty FROM shares "
-            "  WHERE id > %s AND id <= %s "
-            "  UNION ALL "
-            "  SELECT share_id AS id, our_result, difficulty FROM shares_archive "
-            "  WHERE share_id > %s AND share_id <= %s"
-            ") u",
-            (baseline, baseline,
-             prev_share_id, current_share_id,
-             prev_share_id, current_share_id),
-        )
-        return float(row["total"] or 0.0) if row else 0.0
-
-    # ---- Wave 2: manual payout queue ------------------------------------
-
-    def get_manual_payout_queue(self, slot: str = "",
-                                min_confirmations: int = 100,
-                                txfee_manual: float = 0.0) -> list[dict]:
-        """Manual payouts the operator has queued via the web UI.
-
-        Mirrors PHP `Transaction::getMPQueue` (transaction.class.php:435):
-        the `payouts` table only stores `(id, account_id, time, completed)`
-        — there is NO amount column. The "amount" for a manual payout
-        is the user's confirmed balance computed at process time, the
-        same way auto-payouts work.
-
-        Returns rows {payout_id, account_id, username, payout_address,
-        amount}. `amount` is the confirmed balance per the canonical
-        balance SQL.
-        """
-        payouts_table = self._suffixed("payouts", slot)
-        coin_addr_col = "coin_address" if slot == "" else f"coin_address_{slot}"
-        txn_table = self._transactions_table(slot)
-        block_table = self._blocks_table(slot)
-        confirmed = self._confirmed_balance_sql(
-            txn_table=txn_table, block_table=block_table,
-        )
-        sql = (
-            f"SELECT p.id AS payout_id, p.account_id, "
-            f"       a.username, a.{coin_addr_col} AS payout_address, "
-            f"       {confirmed} AS amount "
-            f"FROM {payouts_table} p "
-            f"JOIN accounts a ON a.id = p.account_id "
-            f"JOIN {txn_table} t ON t.account_id = p.account_id "
-            f"LEFT JOIN {block_table} b ON b.id = t.block_id "
-            f"WHERE p.completed = 0 "
-            f"  AND t.archived = 0 "
-            f"  AND a.{coin_addr_col} IS NOT NULL "
-            f"  AND a.{coin_addr_col} <> '' "
-            f"GROUP BY t.account_id, p.id "
-            f"HAVING amount > %s "
-            f"ORDER BY p.id ASC"
-        )
-        try:
-            return self.fetchall(sql, (
-                min_confirmations, min_confirmations, txfee_manual,
-            ))
-        except pymysql.err.ProgrammingError as exc:
-            # 1146 = ER_NO_SUCH_TABLE — aux slots don't have their own
-            # payouts table in many deploys; fall back to empty.
-            if exc.args and exc.args[0] == 1146:
-                return []
-            raise
-
-    def mark_manual_payout_complete(self, slot: str, payout_id: int,
-                                    *, cur: pymysql.cursors.DictCursor) -> bool:
-        payouts_table = self._suffixed("payouts", slot)
-        cur.execute(
-            f"UPDATE {payouts_table} SET completed = 1 WHERE id = %s",
-            (payout_id,),
-        )
-        return cur.rowcount > 0
-
-    # ---- Wave 2: archive-in-payout-cycle (createPayoutDebitRecord) ------
-
-    def set_account_transactions_archived(self, *,
-                                          cur: pymysql.cursors.DictCursor,
-                                          account_id: int,
-                                          insert_id_max: int,
-                                          slot: str = "") -> int:
-        """Mark all of `account_id`'s currently-unarchived transactions
-        with id <= `insert_id_max` as `archived = 1`.
-
-        Mirrors PHP `Transaction::setArchived`. Called inside the
-        payout transaction right after the Debit_AP / TXFee rows have
-        been inserted, so a future tick of the same account doesn't
-        re-net the same Credit / Fee rows into the auto-payout queue
-        candidate set. The Debit_AP itself is NOT archived (since the
-        cron-cycle re-uses the row to compute future balances).
-
-        PHP archives Credit / Bonus / Fee / Donation rows whose
-        block_id is confirmed, plus Credit_PPS / Donation_PPS / Fee_PPS
-        / TXFee unconditionally. The new Debit_AP / Debit_MP rows are
-        NOT archived because they remain in the live ledger as the
-        "pending balance offset". Match that exactly:
-        """
-        txn_table = self._transactions_table(slot)
-        block_table = self._blocks_table(slot)
-        cur.execute(
-            f"UPDATE {txn_table} t "
-            f"LEFT JOIN {block_table} b ON b.id = t.block_id "
-            f"SET t.archived = 1 "
-            f"WHERE t.account_id = %s "
-            f"  AND t.archived = 0 "
-            f"  AND t.id <= %s "
-            f"  AND ( "
-            f"    (t.type IN ('Credit','Bonus','Fee','Donation') "
-            f"      AND b.confirmations >= 0) "
-            f"    OR t.type IN ('Credit_PPS','Donation_PPS','Fee_PPS','TXFee') "
-            f"  )",
-            (account_id, insert_id_max),
-        )
-        return cur.rowcount
-
-    # ---- Wave 2: per-account fee / donation / lock helpers --------------
-
-    def get_account_fee_meta(self, account_id: int) -> dict:
-        """Per-account fee/donation/lock state. Mirrors the columns
-        PHP looks up via User::getNoFee, User::getDonatePercent,
-        User::isLocked.
-
-        Returns {no_fees: bool, donate_percent: float, is_locked: int}.
-        Caller (pplns_payout) uses this to decide whether to charge
-        the pool's `fees` percent and how much of the post-fee credit
-        to redirect as a Donation row.
-        """
-        row = self.fetchone(
-            "SELECT no_fees, donate_percent, is_locked FROM accounts "
-            "WHERE id = %s",
-            (account_id,),
-        )
-        if not row:
-            # Unknown account — caller treats as "no fees, no donation,
-            # not locked" rather than failing. (The same shares would
-            # have been credited under PHP because PHP's join is LEFT.)
-            return {"no_fees": False, "donate_percent": 0.0, "is_locked": 0}
-        return {
-            "no_fees": bool(row["no_fees"]),
-            "donate_percent": float(row["donate_percent"] or 0.0),
-            "is_locked": int(row["is_locked"] or 0),
-        }
-
-    def round_share_breakdown(self, prev_share_id: int,
-                              current_share_id: int) -> list[dict]:
-        """Per-account valid/invalid share counts in the round window.
-
-        Always reads from the PARENT share stream (`shares` + `shares_archive`)
-        because in our merge-mined setup eloipool writes shares to a single
-        table — every aux block is attributed against the same per-miner
-        work the parent block is. Aux slot-specific share tables
-        (`shares_mm`, `shares_mm1` …) stay empty in this deployment;
-        they're a relic of the era when each aux chain ran its own pool.
-
-        UNION over `shares` (live) + `shares_archive` (already moved by
-        parent's pplns) — handles the race where parent's pplns ran for
-        a window first and archived the rows before the aux slot's pplns
-        gets to them.
-
-        Output rows: {account_id, username, valid, invalid}.
-        """
-        sql = (
-            "SELECT a.id AS account_id, a.username AS username, "
-            "  SUM(u.our_result = 'Y') AS valid, "
-            "  SUM(u.our_result = 'N') AS invalid "
-            "FROM ("
-            "  SELECT id, username, our_result FROM shares "
-            "  WHERE id > %s AND id <= %s"
-            "  UNION ALL "
-            "  SELECT share_id AS id, username, our_result FROM shares_archive "
-            "  WHERE share_id > %s AND share_id <= %s"
-            ") u "
-            "LEFT JOIN accounts a "
-            "  ON a.username = SUBSTRING_INDEX(u.username, '.', 1) "
-            "GROUP BY a.id, a.username"
-        )
-        rows = self.fetchall(sql, (prev_share_id, current_share_id,
-                                   prev_share_id, current_share_id))
-        for r in rows:
-            r["valid"] = int(r.get("valid") or 0)
-            r["invalid"] = int(r.get("invalid") or 0)
         return rows
 
     def get_avg_block_shares(self, slot: str, height: int,
@@ -840,7 +665,7 @@ class Db:
             "      WHERE share_id < %s "
             "      ORDER BY id DESC LIMIT %s) sa "
             "LEFT JOIN accounts a "
-            "  ON a.username = SUBSTRING_INDEX(sa.username, '.', 1) "
+            "  ON a.username = sa.username_base "
             "GROUP BY a.id, a.username",
             (exclude_above_id, target_extra),
         )
@@ -1012,6 +837,52 @@ class Db:
 
     # ---- payouts helpers --------------------------------------------------
 
+    def set_account_transactions_archived(self, *,
+                                            cur: pymysql.cursors.DictCursor,
+                                            account_id: int,
+                                            insert_id_max: int,
+                                            slot: str = "",
+                                            min_confirmations: int = 100) -> int:
+        """Mark transactions as archived up to ``insert_id_max``.
+
+        Mirrors PHP ``Transaction::setArchived``.  Sets ``archived = 1``
+        on every row for this account whose ``id <= insert_id_max`` and
+        whose block is confirmed OR whose type does not depend on block
+        confirmations (PPS / Debit / TXFee rows).
+        """
+        txn_table = self._transactions_table(slot)
+        block_table = self._blocks_table(slot)
+        cur.execute(
+            f"UPDATE {txn_table} AS t "
+            f"LEFT JOIN {block_table} AS b ON b.id = t.block_id "
+            f"SET t.archived = 1 "
+            f"WHERE t.archived = 0 "
+            f"  AND t.account_id = %s "
+            f"  AND t.id <= %s "
+            f"  AND ( "
+            f"        (b.confirmations >= %s) "
+            f"     OR (t.type IN ('Credit_PPS', 'Donation_PPS', "
+            f"                    'Fee_PPS', 'TXFee', 'Debit_MP', 'Debit_AP')) "
+            f"      )",
+            (account_id, insert_id_max, min_confirmations),
+        )
+        return cur.rowcount
+
+    def mark_manual_payout_complete(self, slot: str,
+                                     payout_id: int, *,
+                                     cur: pymysql.cursors.DictCursor) -> bool:
+        """Mark a manual-payout request as processed.
+
+        Mirrors PHP ``Payout::setProcessed``.  Sets ``completed = 1`` on
+        the per-slot ``payouts`` table.
+        """
+        payouts_table = self._suffixed("payouts", slot)
+        cur.execute(
+            f"UPDATE {payouts_table} SET completed = 1 WHERE id = %s",
+            (payout_id,),
+        )
+        return cur.rowcount > 0
+
     # ---- statistics queries (used by the statistics job) -----------------
 
     def stats_current_hashrate(self, *, target_bits: int, difficulty_const: int,
@@ -1071,7 +942,7 @@ class Db:
             "  u.is_anonymous AS is_anonymous, "
             "  u.username AS username "
             "FROM shares AS s, accounts AS u "
-            "WHERE u.username = SUBSTRING_INDEX(s.username, '.', 1) "
+            "WHERE u.username = s.username_base "
             "  AND UNIX_TIMESTAMP(s.time) > IFNULL((SELECT MAX(b.time) FROM blocks AS b), 0) "
             "GROUP BY u.id"
         )
@@ -1093,14 +964,14 @@ class Db:
             f"       a.is_anonymous AS is_anonymous, "
             f"       IFNULL(ROUND(SUM(u.difficulty) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate "
             f"FROM ("
-            f"  SELECT id, IFNULL(IF(difficulty=0, POW(2, ({difficulty_const} - 16)), difficulty), 0) AS difficulty, username "
+            f"  SELECT id, IFNULL(IF(difficulty=0, POW(2, ({difficulty_const} - 16)), difficulty), 0) AS difficulty, username_base "
             f"  FROM shares WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) AND our_result = 'Y' "
             f"  UNION "
-            f"  SELECT share_id, IFNULL(IF(difficulty=0, POW(2, ({difficulty_const} - 16)), difficulty), 0) AS difficulty, username "
+            f"  SELECT share_id, IFNULL(IF(difficulty=0, POW(2, ({difficulty_const} - 16)), difficulty), 0) AS difficulty, username_base "
             f"  FROM shares_archive WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) AND our_result = 'Y'"
             f") u "
             f"LEFT JOIN accounts a "
-            f"  ON a.username = SUBSTRING_INDEX(u.username, '.', 1) "
+            f"  ON a.username = u.username_base "
             f"GROUP BY account "
             f"ORDER BY hashrate DESC "
             f"LIMIT %s"
@@ -1159,16 +1030,16 @@ class Db:
             f"       ROUND(COUNT(u.id) / %s, 2) AS sharerate, "
             f"       IFNULL(AVG(IF(u.difficulty=0, POW(2, ({difficulty_const} - 16)), u.difficulty)), 0) AS avgsharediff "
             f"FROM ("
-            f"  SELECT id, IF(difficulty = 0, POW(2, ({difficulty_const} - 16)), difficulty) AS difficulty, username "
+            f"  SELECT id, IF(difficulty = 0, POW(2, ({difficulty_const} - 16)), difficulty) AS difficulty, username_base "
             f"  FROM shares "
             f"  WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) AND our_result = 'Y' "
             f"  UNION "
-            f"  SELECT share_id, IF(difficulty = 0, POW(2, ({difficulty_const} - 16)), difficulty) AS difficulty, username "
+            f"  SELECT share_id, IF(difficulty = 0, POW(2, ({difficulty_const} - 16)), difficulty) AS difficulty, username_base "
             f"  FROM shares_archive "
             f"  WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) AND our_result = 'Y'"
             f") u "
             f"LEFT JOIN accounts a "
-            f"  ON a.username = SUBSTRING_INDEX(u.username, '.', 1) "
+            f"  ON a.username = u.username_base "
             f"WHERE a.id IS NOT NULL "
             f"GROUP BY account "
             f"ORDER BY hashrate DESC"
@@ -1282,11 +1153,14 @@ class Db:
         dashboard cron-error counts. cronjobs-py is authoritative for the
         work now, so it must also keep these rows fresh.
         """
+        value_str = str(value)
+        if len(value_str) > 255:
+            value_str = value_str[:252] + "..."
         self.execute(
             "INSERT INTO monitoring (name, type, value) "
             "VALUES (%s, %s, %s) "
             "ON DUPLICATE KEY UPDATE type = VALUES(type), value = VALUES(value)",
-            (name, type_, str(value)),
+            (name, type_, value_str),
         )
 
     # ---- Wave 1: accounting guard (cronjobs_py_accounting) --------------
@@ -1681,4 +1555,60 @@ class Db:
         )
         return self.fetchall(sql, (
             min_confirmations, min_confirmations, txfee_auto,
+        ))
+
+    # ---- Wave 2: fee meta + manual payout queue (missing stubs) ----
+
+    def get_account_fee_meta(self, account_id: int) -> dict:
+        """Return fee/donation metadata for one account.
+
+        Mirrors PHP's per-account fee lookup used during PPLNS payout.
+        Keys: ``no_fees`` (bool), ``donate_percent`` (float).
+        """
+        row = self.fetchone(
+            "SELECT no_fees, donate_percent FROM accounts WHERE id = %s",
+            (account_id,),
+        )
+        if not row:
+            return {"no_fees": True, "donate_percent": 0.0}
+        return {
+            "no_fees": bool(row.get("no_fees")),
+            "donate_percent": float(row.get("donate_percent") or 0.0),
+        }
+
+    def get_manual_payout_queue(self, slot: str = "",
+                                 min_confirmations: int = 100,
+                                 txfee_manual: float = 0.0) -> list[dict]:
+        """Manual payout queue. Mirror of PHP ``Transaction::getMPQueue``.
+
+        Returns rows for accounts with an active (completed=0) manual
+        payout request whose confirmed balance exceeds ``txfee_manual``.
+
+        Row shape: ``{account_id, username, payout_address, amount, payout_id}``
+        """
+        coin_addr_col = "coin_address" if slot == "" else f"coin_address_{slot}"
+        txn_table = self._transactions_table(slot)
+        block_table = self._blocks_table(slot)
+        payouts_table = self._suffixed("payouts", slot)
+        confirmed = self._confirmed_balance_sql(
+            txn_table=txn_table, block_table=block_table,
+        )
+        sql = (
+            f"SELECT a.id AS account_id, a.username, "
+            f"       a.{coin_addr_col} AS payout_address, "
+            f"       p.id AS payout_id, "
+            f"       {confirmed} AS amount "
+            f"FROM {payouts_table} p "
+            f"JOIN accounts a ON a.id = p.account_id "
+            f"JOIN {txn_table} t ON t.account_id = p.account_id "
+            f"LEFT JOIN {block_table} b ON b.id = t.block_id "
+            f"WHERE p.completed = 0 "
+            f"  AND t.archived = 0 "
+            f"  AND a.{coin_addr_col} IS NOT NULL "
+            f"  AND a.{coin_addr_col} <> '' "
+            f"GROUP BY p.id "
+            f"HAVING amount > %s"
+        )
+        return self.fetchall(sql, (
+            min_confirmations, min_confirmations, txfee_manual,
         ))
