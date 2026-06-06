@@ -1,7 +1,15 @@
 <?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
-$smarty->assign("SITESTRATUMURL", $config['gettingstarted']['stratumurl']);
+// Templates add the stratum scheme and port. Keep this value to a host
+// so configs with stratum+tcp://host/ do not render a duplicate scheme.
+$_stratumUrl = isset($config['gettingstarted']['stratumurl'])
+  ? trim((string)$config['gettingstarted']['stratumurl'])
+  : '';
+$_stratumUrl = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', $_stratumUrl);
+$_stratumUrl = preg_replace('#/.*$#', '', $_stratumUrl);
+$_stratumUrl = preg_replace('#:\d+$#', '', $_stratumUrl);
+$smarty->assign("SITESTRATUMURL", $_stratumUrl);
 $smarty->assign("SITESTRATUMPORT", $config['gettingstarted']['stratumport']);
 $smarty->assign("SITECOINNAME", $config['gettingstarted']['coinname']);
 $smarty->assign("SITECOINURL", $config['gettingstarted']['coinurl']);

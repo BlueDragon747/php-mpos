@@ -121,6 +121,23 @@ function confirmDelete(entry: NewsEntry, ev: Event): void {
   }
 }
 
+function syncEditorBeforeSubmit(ev: Event): void {
+  // CodeMirror owns the visible editor; save it back to the textarea
+  // so the regular PHP form POST receives the current markdown.
+  const textarea = editorTextarea.value as HTMLTextAreaElement | null;
+  if (mdEditor) {
+    fContent.value = mdEditor.value();
+    if (textarea) textarea.value = fContent.value;
+    (mdEditor.codemirror as unknown as { save?: () => void }).save?.();
+  } else if (textarea) {
+    textarea.value = fContent.value;
+  }
+  if (fContent.value.trim() === '') {
+    ev.preventDefault();
+    mdEditor?.codemirror.focus();
+  }
+}
+
 // Per-entry expand/collapse state. List defaults to all-collapsed
 // so admins can scan post titles + actions quickly; individual posts
 // open via the chevron in their header. Set keyed by entry.id.
@@ -145,7 +162,7 @@ function toggleEntry(id: number): void {
         <h3>{{ headingText }}</h3>
         <span class="news-hint">Markdown supported</span>
       </header>
-      <form method="POST" :action="i.formAction">
+      <form method="POST" :action="i.formAction" @submit="syncEditorBeforeSubmit">
         <input type="hidden" name="page" value="admin">
         <input type="hidden" name="action" value="news">
         <input type="hidden" name="ctoken" :value="i.csrfToken">
@@ -198,7 +215,6 @@ function toggleEntry(id: number): void {
                 class="news-textarea"
                 :name="mode === 'add' ? 'data[content]' : 'content'"
                 aria-label="News post content"
-                required
               ></textarea>
             </div>
           </Teleport>

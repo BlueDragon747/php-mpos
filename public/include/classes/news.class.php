@@ -105,7 +105,7 @@ class News extends Base {
   }
 
   /**
-   * Add a new mews entry to the table
+   * Add a new news entry to the table
    * @param type string Type of the notification
    * @return bool
    **/
@@ -113,7 +113,8 @@ class News extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     if (empty($aData['header'])) return false;
     if (empty($aData['content'])) return false;
-    if (!is_int($account_id)) return false;
+    $account_id = (int)$account_id;
+    if ($account_id <= 0) return false;
     $show_on = isset($aData['show_on']) ? (string)$aData['show_on'] : 'home';
     if (!in_array($show_on, array('home','dashboard','both'), true)) $show_on = 'home';
     $iActive = $active ? 1 : 0;

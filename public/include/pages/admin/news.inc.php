@@ -30,7 +30,9 @@ if (@$_REQUEST['do'] == 'set_show_on') {
 }
 
 if (@$_REQUEST['do'] == 'add') {
-  if ($news->addNews($_SESSION['USERDATA']['id'], $_POST['data'])) {
+  $accountId = isset($_SESSION['USERDATA']['id']) ? (int)$_SESSION['USERDATA']['id'] : 0;
+  $payload = (isset($_POST['data']) && is_array($_POST['data'])) ? $_POST['data'] : array();
+  if ($news->addNews($accountId, $payload)) {
     $_SESSION['POPUP'][] = array('CONTENT' => 'News entry added', 'TYPE' => 'success');
   } else {
     $_SESSION['POPUP'][] = array('CONTENT' => 'Failed to add new entry: ' . $news->getError(), 'TYPE' => 'errormsg');

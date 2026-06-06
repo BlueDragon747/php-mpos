@@ -98,6 +98,7 @@ sed -i "s|^\\\$config\\['db'\\]\\['pass'\\] = '[^']*';|\\\$config['db']['pass'] 
 sed -i "s|^\\\$config\\['db'\\]\\['port'\\] = [0-9]*;|\\\$config['db']['port'] = ${MPOS_DB_PORT};|" "$GLOBAL"
 sed -i "s|^\\\$config\\['db'\\]\\['name'\\] = '[^']*';|\\\$config['db']['name'] = '${MPOS_DB_NAME}';|" "$GLOBAL"
 sed -i "s|^\\\$config\\['system'\\]\\['load'\\]\\['max'\\] = [0-9.]*;|\\\$config['system']['load']['max'] = 100.0;|" "$GLOBAL"
+sed -i "s|^\\\$config\\['difficulty'\\][[:space:]]*=[[:space:]]*[0-9]*;|\\\$config['difficulty'] = ${MPOS_DIFFICULTY_BITS:-21};|" "$GLOBAL"
 
 # Stratum URL on the Getting Started page.
 sed -i "s|^\\\$config\\['gettingstarted'\\]\\['stratumurl'\\] = '[^']*';|\\\$config['gettingstarted']['stratumurl'] = '${HOST_IP}';|" "$GLOBAL"
