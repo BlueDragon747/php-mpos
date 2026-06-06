@@ -81,14 +81,16 @@ class _StubRpc:
 
 
 class _QuoteFailureRpc(_StubRpc):
-    def __init__(self, *, fail_addresses: set[str]):
+    def __init__(self, *, fail_addresses: set[str],
+                 failure: Exception | None = None):
         super().__init__()
         self.fail_addresses = fail_addresses
+        self.failure = failure or Fatal("simulated quote failure")
 
     def walletcreatefundedpsbt(self, address, amount):
         self.calls.append(("walletcreatefundedpsbt", (address, amount)))
         if address in self.fail_addresses:
-            raise Fatal("simulated quote failure")
+            raise self.failure
         return {"fee": self.fee, "changepos": 0, "psbt": "stub"}
 
 
@@ -209,6 +211,33 @@ def test_fee_quote_failure_skips_only_bad_row() -> None:
     assert quoted[0]["_send_amount_quote"] == 1.999
 
 
+def test_fee_quote_max_weight_skips_row() -> None:
+    """Fragmented-wallet fee quotes are pre-broadcast failures.
+
+    They must not reserve an outbox row or abort the whole batch.
+    """
+    rpc = _QuoteFailureRpc(
+        fail_addresses={"frag_addr"},
+        failure=Fatal("[-4] The inputs size exceeds the maximum weight"),
+    )
+    ctx = _QuoteOnlyCtx(rpc)
+
+    quoted = Payouts(slot="")._with_fee_quotes(
+        ctx,
+        [{
+            "account_id": 10,
+            "username": "fragmented",
+            "payout_address": "frag_addr",
+            "amount": 1.0,
+        }],
+        slot_label="parent",
+        queue_name="manual",
+        amount_key="amount",
+    )
+
+    assert quoted == []
+
+
 def test_reconcile_gettransaction_failure_skips_only_bad_row() -> None:
     """One missing/pruned wallet tx should not block other reconciles."""
     rpc = _ReconcileRpc()
@@ -326,6 +355,38 @@ def test_daemon_reject_marks_abandoned_no_balance_change(fresh_db: Db) -> None:
     assert rows[0]["status"] == "abandoned"
 
     # No Debit, no TXFee. User's confirmed balance should still be 1.0.
+    bal = db.compute_balance(10, min_confirmations=100)
+    assert abs(bal["confirmed"] - 1.0) < 1e-9, bal
+
+
+@pytest.mark.needs_mariadb
+def test_max_weight_send_reject_marks_abandoned_no_balance_change(
+    fresh_db: Db,
+) -> None:
+    """If the wallet rejects the send for excessive input weight, no debit
+    is written and the outbox is abandoned for operator review.
+    """
+    db = fresh_db
+    _seed_payable_account(db, balance=1.0)
+    rpc = _StubRpc(
+        balance=10.0,
+        sendtoaddress=Fatal(
+            "[-4] The inputs size exceeds the maximum weight"
+        ),
+    )
+    ctx = _ctx(db, rpc, raw={"confirmations": 100, "txfee_auto": 0.001})
+
+    with pytest.raises(Fatal, match="E0092"):
+        Payouts(slot="").run(ctx)
+
+    rows = db.fetchall("SELECT status FROM transactions_outbox")
+    assert len(rows) == 1
+    assert rows[0]["status"] == "abandoned"
+
+    debit = db.fetchall(
+        "SELECT * FROM transactions WHERE type IN ('Debit_AP','TXFee')"
+    )
+    assert len(debit) == 0
     bal = db.compute_balance(10, min_confirmations=100)
     assert abs(bal["confirmed"] - 1.0) < 1e-9, bal
 

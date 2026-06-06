@@ -256,14 +256,11 @@ class _Poller(_StoppableThread):
             log.warning("stats: net hashrate failed: %s", exc)
 
         # Active workers — accounts that submitted a share recently.
-        # Count distinct usernames across the last 5 min of `shares`.
+        # Uses the recent summary cache when warm, with the DB helper
+        # falling back to the live share table during early startup.
         active = 0
         try:
-            row = db.fetchone(
-                "SELECT COUNT(DISTINCT username) AS n FROM shares "
-                "WHERE time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
-            )
-            active = int((row or {}).get("n") or 0)
+            active = db.stats_active_workers(interval=300)
         except Exception as exc:
             log.warning("stats: active workers failed: %s", exc)
 

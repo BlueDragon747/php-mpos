@@ -112,6 +112,37 @@ class Statistics:
         tau = db.get_setting_int(
             "hashrate_ema_tau_seconds", default=300, floor=60
         )
+        # Keep the dashboard/SSE hot path off the large archive tables.
+        # The summary table is recent-window only; PPLNS and block
+        # accounting keep reading the canonical share tables.
+        summary_retention = db.get_setting_int(
+            "share_stats_recent_retention_seconds",
+            default=max(interval, 900, 600, _WORKER_STALE_SECONDS) + 600,
+            floor=600,
+        )
+        summary_batch_size = db.get_setting_int(
+            "share_stats_recent_batch_size",
+            default=100000,
+            floor=1000,
+        )
+        summary_max_batches = db.get_setting_int(
+            "share_stats_recent_max_batches",
+            default=5,
+            floor=1,
+        )
+        try:
+            summarized = db.refresh_share_stats_recent(
+                difficulty_const=difficulty_const,
+                retain_seconds=summary_retention,
+                batch_size=summary_batch_size,
+                max_batches=summary_max_batches,
+            )
+            if summarized:
+                log.info("[%s] summarized %d share ids for dashboard stats",
+                         self.name, summarized)
+        except Exception as exc:
+            log.warning("[%s] share stats summary refresh failed: %s",
+                        self.name, exc)
 
         # 1. Reserved for the pool hashrate write — done at the END of
         # this tick after per-worker EMAs are computed, so the pool
@@ -302,13 +333,67 @@ class Statistics:
 
         # 5. Per-worker live-hashrate refresh (pool_worker.shares_difficulty).
         # eloipool doesn't update this column; without our refresh the UI
-        # shows 0 H/s per worker. Folded into statistics so it ticks at
-        # the same cadence as the other dashboard data — covers item (5)
-        # in the 100% gap list.
-        try:
-            n = db.update_pool_worker_difficulty(interval=interval)
-            log.debug("[%s] refreshed shares_difficulty on %d pool_worker rows",
-                      self.name, n)
-        except Exception as exc:
-            log.warning("[%s] pool_worker refresh failed: %s",
-                        self.name, exc)
+        # shows 0 H/s per worker. This is now throttled separately from
+        # the 60s statistics tick because the web UI normally reads the
+        # cached worker EMA, while this table column exists for legacy
+        # MPOS fallbacks and older templates.
+        worker_refresh_interval = db.get_setting_int(
+            "pool_worker_difficulty_update_seconds",
+            default=600,
+            floor=60,
+        )
+        worker_zero_interval = db.get_setting_int(
+            "pool_worker_difficulty_zero_update_seconds",
+            default=600,
+            floor=60,
+        )
+        worker_stale_batch_size = db.get_setting_int(
+            "pool_worker_difficulty_zero_batch_size",
+            default=500,
+            floor=100,
+        )
+        worker_refresh_last = db.get_setting_int(
+            "pool_worker_difficulty_last_update",
+            default=0,
+            floor=0,
+        )
+        worker_zero_last = db.get_setting_int(
+            "pool_worker_difficulty_zero_last_update",
+            default=0,
+            floor=0,
+        )
+        now_sec = int(now_ts)
+        active_due = now_sec - worker_refresh_last >= worker_refresh_interval
+        zero_due = now_sec - worker_zero_last >= worker_zero_interval
+        if active_due or zero_due:
+            try:
+                n = db.update_pool_worker_difficulty(
+                    interval=interval,
+                    stale_batch_size=worker_stale_batch_size,
+                    update_active=active_due,
+                    zero_stale=zero_due,
+                )
+                if active_due:
+                    db.set_setting(
+                        "pool_worker_difficulty_last_update",
+                        str(now_sec),
+                    )
+                if zero_due:
+                    db.set_setting(
+                        "pool_worker_difficulty_zero_last_update",
+                        str(now_sec),
+                    )
+                log.debug(
+                    "[%s] refreshed shares_difficulty on %d pool_worker rows",
+                    self.name, n,
+                )
+            except Exception as exc:
+                log.warning("[%s] pool_worker refresh failed: %s",
+                            self.name, exc)
+        else:
+            log.debug(
+                "[%s] skipped shares_difficulty refresh; active due in %ds, zero due in %ds",
+                self.name,
+                worker_refresh_interval - (now_sec - worker_refresh_last),
+                worker_zero_interval - (now_sec - worker_zero_last),
+            )

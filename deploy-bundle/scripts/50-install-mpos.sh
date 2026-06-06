@@ -64,6 +64,12 @@ if [ -f "$PPLNS_SHARES_SQL" ]; then
     mariadb "${MPOS_DB_NAME}" < "$PPLNS_SHARES_SQL"
 fi
 
+DB_HOTPATH_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/04-db-hotpath-indexes.sql"
+if [ -f "$DB_HOTPATH_SQL" ]; then
+    say "ensuring mining database hot-path indexes exist (from $DB_HOTPATH_SQL)"
+    mariadb "${MPOS_DB_NAME}" < "$DB_HOTPATH_SQL"
+fi
+
 # ---- MPOS web tree ------------------------------------------------------
 
 say "syncing MPOS web tree to ${MPOS_WEB_ROOT}"

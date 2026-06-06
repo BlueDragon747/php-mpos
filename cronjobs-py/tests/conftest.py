@@ -105,6 +105,7 @@ def fresh_db(_dsn_kwargs):
                 REPO_ROOT / "deploy-bundle" / "sql" / "01-cronjobs-py-wave1.sql",
                 REPO_ROOT / "deploy-bundle" / "sql" / "02-cronjobs-py-wave5.sql",
                 REPO_ROOT / "deploy-bundle" / "sql" / "03-pplns-shares.sql",
+                REPO_ROOT / "deploy-bundle" / "sql" / "04-db-hotpath-indexes.sql",
             ):
                 if not schema_file.exists():
                     pytest.skip(f"missing schema file: {schema_file}")

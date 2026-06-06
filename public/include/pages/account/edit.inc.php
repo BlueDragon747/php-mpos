@@ -15,6 +15,19 @@ function _ae_coin_amount_str($amount) {
   return number_format(max(0, (float)$amount), 8, '.', '');
 }
 
+function _ae_wallet_max_weight_error($message) {
+  $message = strtolower((string)$message);
+  return strpos($message, 'inputs size exceeds the maximum weight') !== false
+    || strpos($message, 'maximum weight') !== false
+    || strpos($message, 'too many small utxos') !== false;
+}
+
+function _ae_wallet_max_weight_message($currency) {
+  $coin = trim((string)$currency);
+  $prefix = $coin !== '' ? $coin . ' ' : '';
+  return $prefix . 'pool wallet has too many small UTXOs to quote this cash-out as one transaction. No payout was queued; the pool operator needs to consolidate the wallet UTXOs before this cash-out can proceed.';
+}
+
 function _ae_user_slot_address($uid, $addr_col) {
   global $user;
   $data = $user->getUserData((int)$uid);
@@ -29,7 +42,14 @@ function _ae_estimate_wallet_payout_fee($wallet, $address, $amount) {
 
   $outputs = array(array($address => _ae_coin_amount_str($gross)));
   $options = array('subtractFeeFromOutputs' => array(0));
-  $quote = $wallet->walletcreatefundedpsbt(array(), $outputs, 0, $options, true);
+  try {
+    $quote = $wallet->walletcreatefundedpsbt(array(), $outputs, 0, $options, true);
+  } catch (Exception $e) {
+    if (_ae_wallet_max_weight_error($e->getMessage())) {
+      throw new Exception(_ae_wallet_max_weight_message(''));
+    }
+    throw $e;
+  }
   if (!is_array($quote) || !isset($quote['fee'])) {
     throw new Exception('Wallet did not return a fee quote.');
   }
@@ -89,7 +109,10 @@ function _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, 
   try {
     $quote = _ae_estimate_wallet_payout_fee($wallet, $address, $confirmed);
   } catch (Exception $e) {
-    $_SESSION['POPUP'][] = array('CONTENT' => 'Unable to estimate network fee: ' . $e->getMessage(), 'TYPE' => 'errormsg', 'COIN' => $slot_key);
+    $message = _ae_wallet_max_weight_error($e->getMessage())
+      ? _ae_wallet_max_weight_message($currency)
+      : 'Unable to estimate network fee: ' . $e->getMessage();
+    $_SESSION['POPUP'][] = array('CONTENT' => $message, 'TYPE' => 'errormsg', 'COIN' => $slot_key);
     return false;
   }
 

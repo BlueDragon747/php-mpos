@@ -361,6 +361,23 @@ class PplnsPayout:
             round_valid, archive_extra, target, divisor,
         )
 
+        # Parent PPLNS archives live shares after crediting a block. Refresh
+        # the dashboard stats cache first so recent hashrate/worker stats do
+        # not miss shares that are about to move out of the live table.
+        if self.slot == "" and not shadow:
+            try:
+                db.refresh_share_stats_recent(
+                    difficulty_const=difficulty_const,
+                    retain_seconds=3600,
+                    batch_size=100000,
+                    max_batches=5,
+                )
+            except Exception as exc:
+                log.warning(
+                    "[%s/%s] share stats summary refresh before archive failed: %s",
+                    self.name, self.slot or "parent", exc,
+                )
+
         # ----------------------------------------------------------------
         # Wave 1: everything below this point is one atomic DB transaction.
         # The order is:

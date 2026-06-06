@@ -200,7 +200,7 @@ if (!$smarty->isCached('master.tpl', $smarty_cache_key)) {
               SUM(s.our_result = 'Y') AS valid,
               SUM(s.our_result = 'N') AS invalid
          FROM shares_archive AS s
-         INNER JOIN accounts AS a ON SUBSTRING_INDEX(s.username, '.', 1) = a.username
+         INNER JOIN accounts AS a ON s.username_base = a.username
         WHERE s.block_id = ?
         GROUP BY a.id, a.username, a.is_anonymous
         HAVING valid > 0

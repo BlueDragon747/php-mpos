@@ -27,12 +27,27 @@ DEFAULT_STATE_FILE = "/var/lib/blakestream-mpos/go-share-log-importer.state"
 DEFAULT_BATCH_SIZE = 2000
 DEFAULT_POLL_SECONDS = 1.0
 DEFAULT_WORKER_REFRESH_SECONDS = 30.0
+DEFAULT_DB_MAX_ATTEMPTS = 3
+DEFAULT_DB_BACKOFF_SECONDS = 0.2
 
 GO_DIFF1_TARGET = int(
     "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16
 )
 
 RUNNING = True
+
+RETRYABLE_MYSQL_CODES = {
+    1040,  # too many connections
+    1042,  # unable to connect to host
+    1043,  # bad handshake
+    1053,  # server shutdown
+    1205,  # lock wait timeout
+    1213,  # deadlock
+    2003,  # cannot connect
+    2006,  # server has gone away
+    2013,  # lost connection
+    2014,  # commands out of sync
+}
 
 
 @dataclass(frozen=True)
@@ -97,6 +112,23 @@ def db_connect() -> pymysql.Connection:
     with conn.cursor() as cur:
         cur.execute("SET time_zone = '+00:00'")
     return conn
+
+
+def is_retryable_db_error(exc: BaseException) -> bool:
+    if isinstance(exc, pymysql.err.InterfaceError):
+        return True
+    if not isinstance(exc, pymysql.MySQLError):
+        return False
+    code = exc.args[0] if exc.args else None
+    return code in RETRYABLE_MYSQL_CODES
+
+
+def reconnect(conn: pymysql.Connection) -> pymysql.Connection:
+    try:
+        conn.close()
+    except Exception:
+        pass
+    return db_connect()
 
 
 def load_state(path: Path) -> dict[str, int]:
@@ -177,7 +209,13 @@ def parse_share(line: str) -> ShareRow | None:
     )
 
 
-def insert_rows(conn: pymysql.Connection, rows: Iterable[ShareRow]) -> int:
+def insert_rows(
+    conn: pymysql.Connection,
+    rows: Iterable[ShareRow],
+    *,
+    max_attempts: int = DEFAULT_DB_MAX_ATTEMPTS,
+    backoff_seconds: float = DEFAULT_DB_BACKOFF_SECONDS,
+) -> tuple[pymysql.Connection, int]:
     values = [
         (
             row.rem_host,
@@ -192,16 +230,37 @@ def insert_rows(conn: pymysql.Connection, rows: Iterable[ShareRow]) -> int:
         for row in rows
     ]
     if not values:
-        return 0
+        return conn, 0
     sql = (
         "INSERT INTO shares "
         "(rem_host, username, our_result, upstream_result, reason, solution, difficulty, time) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
     )
-    with conn.cursor() as cur:
-        cur.executemany(sql, values)
-    conn.commit()
-    return len(values)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with conn.cursor() as cur:
+                cur.executemany(sql, values)
+            conn.commit()
+            return conn, len(values)
+        except pymysql.MySQLError as exc:
+            try:
+                conn.rollback()
+            except pymysql.MySQLError:
+                pass
+            if not is_retryable_db_error(exc) or attempt >= max_attempts:
+                raise
+            delay = backoff_seconds * (2 ** (attempt - 1))
+            logging.warning(
+                "share insert transient db error %s on attempt %d/%d; retrying in %.2fs",
+                exc,
+                attempt,
+                max_attempts,
+                delay,
+            )
+            if not getattr(conn, "open", True):
+                conn = reconnect(conn)
+            time.sleep(delay)
+    return conn, 0
 
 
 def open_at_state(log_path: Path, state_path: Path) -> tuple[object, os.stat_result]:
@@ -233,6 +292,10 @@ def main() -> int:
     worker_refresh_seconds = env_float(
         "SHARE_IMPORT_WORKER_REFRESH_SECONDS", DEFAULT_WORKER_REFRESH_SECONDS
     )
+    db_max_attempts = env_int("SHARE_IMPORT_DB_MAX_ATTEMPTS", DEFAULT_DB_MAX_ATTEMPTS)
+    db_backoff_seconds = env_float(
+        "SHARE_IMPORT_DB_BACKOFF_SECONDS", DEFAULT_DB_BACKOFF_SECONDS
+    )
 
     conn = db_connect()
     workers = refresh_workers(conn)
@@ -259,7 +322,13 @@ def main() -> int:
                 line = fh.readline()
                 if line == "":
                     if batch:
-                        inserted_total += insert_rows(conn, batch)
+                        conn, inserted = insert_rows(
+                            conn,
+                            batch,
+                            max_attempts=db_max_attempts,
+                            backoff_seconds=db_backoff_seconds,
+                        )
+                        inserted_total += inserted
                         logging.info(
                             "imported %d share(s), total=%d, skipped_unknown=%d",
                             len(batch),
@@ -292,7 +361,13 @@ def main() -> int:
                 batch.append(row)
 
                 if len(batch) >= batch_size:
-                    inserted_total += insert_rows(conn, batch)
+                    conn, inserted = insert_rows(
+                        conn,
+                        batch,
+                        max_attempts=db_max_attempts,
+                        backoff_seconds=db_backoff_seconds,
+                    )
+                    inserted_total += inserted
                     save_state(state_path, dev=st.st_dev, ino=st.st_ino, offset=fh.tell())
                     logging.info(
                         "imported %d share(s), total=%d, skipped_unknown=%d",
@@ -303,7 +378,13 @@ def main() -> int:
                     batch.clear()
 
             if batch:
-                inserted_total += insert_rows(conn, batch)
+                conn, inserted = insert_rows(
+                    conn,
+                    batch,
+                    max_attempts=db_max_attempts,
+                    backoff_seconds=db_backoff_seconds,
+                )
+                inserted_total += inserted
                 save_state(state_path, dev=st.st_dev, ino=st.st_ino, offset=fh.tell())
                 logging.info(
                     "imported %d share(s), total=%d, skipped_unknown=%d",

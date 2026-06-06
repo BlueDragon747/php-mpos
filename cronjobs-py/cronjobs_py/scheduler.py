@@ -282,11 +282,30 @@ class Scheduler:
             disabled=True,
         )
 
+    def _monitor_overlap_skip(self, job: Job) -> None:
+        cron, _started_at, started_mono = self._monitor_start(job)
+        self._monitor_end(
+            cron, started_mono,
+            message="Skipped by cronjobs-py: previous tick still active",
+            status=0,
+        )
+
     def _run_one(self, job: Job, ctx: JobContext) -> None:
         skip, reason = self._is_disabled(job)
         if skip:
             log.info("[%s] disabled (%s); skipping tick", job.name, reason)
             self._monitor_disabled_skip(job, reason or "disabled")
+            return
+
+        lock_scope = f"job:{job.name}"
+        try:
+            locked = self.db.try_advisory_lock(lock_scope, timeout=0)
+        except Exception as exc:
+            log.warning("[%s] could not acquire advisory lock: %s", job.name, exc)
+            locked = False
+        if not locked:
+            log.info("[%s] previous tick still active; skipping overlap", job.name)
+            self._monitor_overlap_skip(job)
             return
 
         log.info("[%s] tick", job.name)
@@ -312,6 +331,11 @@ class Scheduler:
         except Exception as exc:
             self._monitor_end(cron, t0, message=str(exc), status=1)
             log.exception("[%s] unexpected error: %s", job.name, exc)
+        finally:
+            try:
+                self.db.release_advisory_lock(lock_scope)
+            except Exception as exc:
+                log.warning("[%s] could not release advisory lock: %s", job.name, exc)
 
     def close(self) -> None:
         for client in self.rpc_by_slot.values():

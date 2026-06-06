@@ -8,6 +8,7 @@ replacing — with retries and connection pooling moved here.
 from __future__ import annotations
 
 import logging
+import hashlib
 import time
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -33,6 +34,7 @@ class Db:
         self.max_attempts = max_attempts
         self.backoff_base = backoff_base
         self._conn: pymysql.connections.Connection | None = None
+        self._share_stats_recent_ready_cache: dict[int, bool] = {}
 
     def close(self) -> None:
         if self._conn is not None:
@@ -94,7 +96,7 @@ class Db:
     def _is_retryable_db_error(self, exc: Exception) -> bool:
         if isinstance(exc, pymysql.err.InterfaceError):
             return True
-        if not isinstance(exc, pymysql.err.OperationalError):
+        if not isinstance(exc, pymysql.err.MySQLError):
             return False
         code = exc.args[0] if exc.args else None
         return code in {
@@ -115,7 +117,7 @@ class Db:
         for attempt in range(1, self.max_attempts + 1):
             try:
                 return op()
-            except (pymysql.err.OperationalError, pymysql.err.InterfaceError) as exc:
+            except (pymysql.err.MySQLError, pymysql.err.InterfaceError) as exc:
                 if not self._is_retryable_db_error(exc):
                     raise
                 last_exc = exc
@@ -153,6 +155,31 @@ class Db:
                 cur.execute(sql, params)
                 return cur.rowcount
         return self._run_with_retry(op)
+
+    def _advisory_lock_name(self, scope: str) -> str:
+        """Return a short, deployment-scoped MySQL advisory lock name."""
+        raw = f"{self.cfg.database}:{scope}".encode("utf-8")
+        return "mpos:" + hashlib.sha1(raw).hexdigest()
+
+    def try_advisory_lock(self, scope: str, *, timeout: int = 0) -> bool:
+        """Try to acquire a MariaDB advisory lock for this DB connection.
+
+        The lock is connection-owned and automatically released if the
+        connection dies. We use it as a cross-process single-flight guard
+        for cron jobs; it does not replace payout/accounting transactions.
+        """
+        row = self.fetchone(
+            "SELECT GET_LOCK(%s, %s) AS locked",
+            (self._advisory_lock_name(scope), int(timeout)),
+        )
+        return int((row or {}).get("locked") or 0) == 1
+
+    def release_advisory_lock(self, scope: str) -> bool:
+        row = self.fetchone(
+            "SELECT RELEASE_LOCK(%s) AS released",
+            (self._advisory_lock_name(scope),),
+        )
+        return int((row or {}).get("released") or 0) == 1
 
     def get_setting_int(self, name: str, *, default: int, floor: int = 0) -> int:
         """Read an integer-valued row from the MPOS `settings` table.
@@ -353,31 +380,68 @@ class Db:
         if block_time is None:
             return None
         result_col = "upstream_result" if require_upstream else "our_result"
-        params: list[Any] = [
-            prev_share_id, block_time, block_time,
-            prev_share_id, block_time, block_time,
-        ]
+
+        # Avoid sorting a UNION of live + archived shares. Under stress the
+        # 120-second block-time window can be very large, so probe each table
+        # for its first matching share id and fetch only the chosen row.
+        live_id = self._find_upstream_candidate_id(
+            table="shares",
+            id_col="id",
+            result_col=result_col,
+            block_time=block_time,
+            prev_share_id=prev_share_id,
+            exclude_ids=exclude_ids,
+        )
+        archive_id = self._find_upstream_candidate_id(
+            table="shares_archive",
+            id_col="share_id",
+            result_col=result_col,
+            block_time=block_time,
+            prev_share_id=prev_share_id,
+            exclude_ids=exclude_ids,
+        )
+        if live_id is None and archive_id is None:
+            return None
+        if archive_id is None or (live_id is not None and live_id <= archive_id):
+            return self.fetchone(
+                "SELECT id, username, our_result, upstream_result "
+                "FROM shares "
+                f"WHERE id = %s AND {result_col} = 'Y' "
+                "LIMIT 1",
+                (live_id,),
+            )
+        return self.fetchone(
+            "SELECT share_id AS id, username, our_result, upstream_result "
+            "FROM shares_archive "
+            f"WHERE share_id = %s AND {result_col} = 'Y' "
+            "LIMIT 1",
+            (archive_id,),
+        )
+
+    def _find_upstream_candidate_id(self, *, table: str, id_col: str,
+                                    result_col: str, block_time: int,
+                                    prev_share_id: int,
+                                    exclude_ids: list[int] | None) -> int | None:
+        index = (
+            "upstream_time_id" if table == "shares" and result_col == "upstream_result"
+            else "upstream_time_share" if result_col == "upstream_result"
+            else "result_time_user_diff"
+        )
+        params: list[Any] = [prev_share_id, block_time, block_time]
         sql = (
-            "SELECT id, username, our_result, upstream_result FROM ("
-            "  SELECT id, username, our_result, upstream_result, time "
-            "  FROM shares "
-            f"  WHERE {result_col} = 'Y' AND id > %s "
-            "    AND UNIX_TIMESTAMP(time) >= %s - 60 "
-            "    AND UNIX_TIMESTAMP(time) <= %s + 60"
-            "  UNION ALL "
-            "  SELECT share_id AS id, username, our_result, upstream_result, time "
-            "  FROM shares_archive "
-            f"  WHERE {result_col} = 'Y' AND share_id > %s "
-            "    AND UNIX_TIMESTAMP(time) >= %s - 60 "
-            "    AND UNIX_TIMESTAMP(time) <= %s + 60"
-            ") u"
+            f"SELECT MIN({id_col}) AS id "
+            f"FROM {table} FORCE INDEX ({index}) "
+            f"WHERE {result_col} = 'Y' AND {id_col} > %s "
+            "  AND time >= FROM_UNIXTIME(%s - 60) "
+            "  AND time <= FROM_UNIXTIME(%s + 60)"
         )
         if exclude_ids:
             placeholders = ",".join(["%s"] * len(exclude_ids))
-            sql += f" WHERE u.id NOT IN ({placeholders})"
+            sql += f" AND {id_col} NOT IN ({placeholders})"
             params.extend(exclude_ids)
-        sql += " ORDER BY u.id ASC LIMIT 1"
-        return self.fetchone(sql, tuple(params))
+        row = self.fetchone(sql, tuple(params))
+        value = (row or {}).get("id")
+        return int(value) if value is not None else None
 
     def get_round_shares(self, prev_share_id: int, current_share_id: int) -> int:
         row = self.fetchone(
@@ -471,6 +535,11 @@ class Db:
             "ON DUPLICATE KEY UPDATE value = VALUES(value)",
             (name, value),
         )
+        if name.startswith("share_stats_recent_"):
+            self._invalidate_share_stats_recent_ready()
+
+    def _invalidate_share_stats_recent_ready(self) -> None:
+        self._share_stats_recent_ready_cache.clear()
 
     def get_block_by_id(self, slot: str, block_id: int) -> dict | None:
         return self.fetchone(
@@ -898,9 +967,152 @@ class Db:
 
     # ---- statistics queries (used by the statistics job) -----------------
 
-    def stats_current_hashrate(self, *, target_bits: int, difficulty_const: int,
-                               interval: int = 180) -> float:
-        """kH/s over the last `interval` seconds across `shares` + `shares_archive`.
+    def refresh_share_stats_recent(
+        self,
+        *,
+        difficulty_const: int,
+        retain_seconds: int = 3600,
+        batch_size: int = 100000,
+        max_batches: int = 5,
+    ) -> int:
+        """Roll new `shares` rows into the bounded dashboard stats cache.
+
+        `shares` / `shares_archive` stay authoritative for PPLNS, block
+        accounting and audits. This table is only a recent-window read
+        accelerator for dashboard stats, SSE stats and worker difficulty
+        display. Processing advances by the canonical `shares.id`, so a
+        later cron tick only handles rows that were not summarized before.
+        """
+        batch_size = max(1000, int(batch_size))
+        max_batches = max(1, int(max_batches))
+        retain_seconds = max(600, int(retain_seconds))
+        baseline = float(2 ** (int(difficulty_const) - 16))
+
+        max_row = self.fetchone("SELECT IFNULL(MAX(id), 0) AS id FROM shares")
+        max_id = int((max_row or {}).get("id") or 0)
+        last_id = self.get_setting_int(
+            "share_stats_recent_last_share_id",
+            default=0,
+            floor=0,
+        )
+        if max_id < last_id:
+            # Normal PPLNS archive/delete can empty the live share table
+            # after those rows were summarized. Keep the bounded cache and
+            # leave manual rebuilds to operator-controlled setting resets.
+            self.execute(
+                "DELETE FROM share_stats_recent "
+                "WHERE bucket_ts < DATE_SUB(NOW(), INTERVAL %s SECOND)",
+                (retain_seconds,),
+            )
+            self.set_setting("share_stats_recent_caught_up", "1")
+            return 0
+
+        if max_id <= last_id:
+            self.execute(
+                "DELETE FROM share_stats_recent "
+                "WHERE bucket_ts < DATE_SUB(NOW(), INTERVAL %s SECOND)",
+                (retain_seconds,),
+            )
+            self.set_setting("share_stats_recent_caught_up", "1")
+            return 0
+
+        processed = 0
+        insert_sql = (
+            "INSERT INTO share_stats_recent "
+            "(bucket_ts, username, username_base, valid_count, invalid_count, "
+            " valid_diff, invalid_diff, worker_diff_sum, "
+            " last_share_time, max_share_id) "
+            "SELECT "
+            "  FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(time) / 60) * 60) AS bucket_ts, "
+            "  username, "
+            "  username_base, "
+            "  SUM(our_result = 'Y') AS valid_count, "
+            "  SUM(our_result = 'N') AS invalid_count, "
+            "  SUM(IF(our_result = 'Y', IF(difficulty = 0, %s, difficulty), 0)) AS valid_diff, "
+            "  SUM(IF(our_result = 'N', IF(difficulty = 0, %s, difficulty), 0)) AS invalid_diff, "
+            "  SUM(IF(our_result = 'Y', IF(difficulty = 0, 1, difficulty), 0)) AS worker_diff_sum, "
+            "  MAX(time) AS last_share_time, "
+            "  MAX(id) AS max_share_id "
+            "FROM shares "
+            "WHERE id > %s AND id <= %s "
+            "GROUP BY bucket_ts, username, username_base "
+            "ON DUPLICATE KEY UPDATE "
+            "  username_base = VALUES(username_base), "
+            "  valid_count = valid_count + VALUES(valid_count), "
+            "  invalid_count = invalid_count + VALUES(invalid_count), "
+            "  valid_diff = valid_diff + VALUES(valid_diff), "
+            "  invalid_diff = invalid_diff + VALUES(invalid_diff), "
+            "  worker_diff_sum = worker_diff_sum + VALUES(worker_diff_sum), "
+            "  last_share_time = GREATEST(last_share_time, VALUES(last_share_time)), "
+            "  max_share_id = GREATEST(max_share_id, VALUES(max_share_id))"
+        )
+        for _ in range(max_batches):
+            if last_id >= max_id:
+                break
+            upper_id = min(max_id, last_id + batch_size)
+            with self.transaction() as cur:
+                cur.execute(insert_sql, (baseline, baseline, last_id, upper_id))
+                cur.execute(
+                    "INSERT INTO settings (name, value) VALUES (%s, %s) "
+                    "ON DUPLICATE KEY UPDATE value = VALUES(value)",
+                    ("share_stats_recent_last_share_id", str(upper_id)),
+                )
+                cur.execute(
+                    "DELETE FROM share_stats_recent "
+                    "WHERE bucket_ts < DATE_SUB(NOW(), INTERVAL %s SECOND)",
+                    (retain_seconds,),
+                )
+            processed += upper_id - last_id
+            last_id = upper_id
+        self.set_setting(
+            "share_stats_recent_caught_up",
+            "1" if last_id >= max_id else "0",
+        )
+        self._invalidate_share_stats_recent_ready()
+        return processed
+
+    def share_stats_recent_lag(self) -> int:
+        """Return how far the bounded stats cache is behind live shares.
+
+        `MAX(id)` is a primary-key lookup on InnoDB, so this is cheap enough
+        to use as a guard before optional stats/UI refresh work. Avoid
+        `COUNT(*)` here; on multi-million-row test pools it becomes the test.
+        """
+        max_id = self.stats_max_share_id()
+        last_id = self.get_setting_int(
+            "share_stats_recent_last_share_id",
+            default=0,
+            floor=0,
+        )
+        return max(0, max_id - last_id)
+
+    def _share_stats_recent_ready(self, *, interval: int) -> bool:
+        interval = int(interval)
+        cached = self._share_stats_recent_ready_cache.get(interval)
+        if cached is not None:
+            return cached
+        caught_up = self.get_setting_int(
+            "share_stats_recent_caught_up",
+            default=0,
+            floor=0,
+        ) == 1
+        tolerance = self.get_setting_int(
+            "share_stats_recent_ready_lag_tolerance",
+            default=50000,
+            floor=0,
+        )
+        ready = caught_up and self.share_stats_recent_lag() <= tolerance
+        self._share_stats_recent_ready_cache[interval] = ready
+        return ready
+
+    def _share_stats_recent_has_rows(self) -> bool:
+        row = self.fetchone("SELECT 1 AS found FROM share_stats_recent LIMIT 1")
+        return row is not None
+
+    def _stats_current_hashrate_legacy(self, *, target_bits: int,
+                                       difficulty_const: int,
+                                       interval: int = 180) -> float:
+        """Original kH/s query over `shares` + `shares_archive`.
 
         Mirrors `Statistics::getCurrentHashrate` in MPOS PHP. The
         `target_bits` value comes from MPOS config (`config.target_bits`).
@@ -930,6 +1142,49 @@ class Db:
         row = self.fetchone(sql, (interval, interval, interval, interval))
         return float(row["hashrate"] or 0.0) if row else 0.0
 
+    def stats_current_hashrate(self, *, target_bits: int, difficulty_const: int,
+                               interval: int = 180) -> float:
+        """kH/s over the recent window using the summary cache when warm."""
+        row = self.fetchone(
+            f"SELECT COUNT(*) AS rows_seen, "
+            f"       IFNULL(ROUND(SUM(valid_diff) * POW(2, {target_bits}) / %s / 1000), 0) AS hashrate "
+            f"FROM share_stats_recent "
+            f"WHERE last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND)",
+            (interval, interval),
+        )
+        if row and (
+            self._share_stats_recent_ready(interval=interval)
+            or int(row.get("rows_seen") or 0) > 0
+            or self._share_stats_recent_has_rows()
+        ):
+            return float(row.get("hashrate") or 0.0)
+        return self._stats_current_hashrate_legacy(
+            target_bits=target_bits,
+            difficulty_const=difficulty_const,
+            interval=interval,
+        )
+
+    def stats_active_workers(self, *, interval: int = 300) -> int:
+        """Distinct active workers over the recent window."""
+        row = self.fetchone(
+            "SELECT COUNT(DISTINCT username) AS n "
+            "FROM share_stats_recent "
+            "WHERE last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND)",
+            (interval,),
+        )
+        if (
+            self._share_stats_recent_ready(interval=interval)
+            or int((row or {}).get("n") or 0) > 0
+            or self._share_stats_recent_has_rows()
+        ):
+            return int((row or {}).get("n") or 0)
+        row = self.fetchone(
+            "SELECT COUNT(DISTINCT username) AS n FROM shares "
+            "WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND)",
+            (interval,),
+        )
+        return int((row or {}).get("n") or 0)
+
     def stats_current_round_id(self) -> int:
         row = self.fetchone(
             "SELECT IFNULL(id, 0) AS id FROM blocks ORDER BY height DESC LIMIT 1"
@@ -946,6 +1201,37 @@ class Db:
         Mirrors `Statistics::getAllUserShares` and writes the same row
         shape PHP expects under `STATISTICS_ALL_USER_SHARES`.
         """
+        baseline = float(2 ** (int(difficulty_const) - 16))
+        block_row = self.fetchone(
+            "SELECT IFNULL(MAX(time), 0) AS block_ts FROM blocks"
+        )
+        block_ts = int((block_row or {}).get("block_ts") or 0)
+        summary_sql = (
+            "SELECT "
+            "  ROUND(IFNULL(SUM(s.valid_diff), 0) / %s, 0) AS valid, "
+            "  ROUND(IFNULL(SUM(s.invalid_diff), 0) / %s, 0) AS invalid, "
+            "  u.id AS id, "
+            "  u.donate_percent AS donate_percent, "
+            "  u.is_anonymous AS is_anonymous, "
+            "  u.username AS username "
+            "FROM share_stats_recent s "
+            "JOIN accounts u "
+            "  ON u.username = s.username_base "
+            "WHERE s.last_share_time > FROM_UNIXTIME(%s) "
+            "GROUP BY u.id"
+        )
+        rows = self.fetchall(summary_sql, (baseline, baseline, block_ts))
+        if rows:
+            for r in rows:
+                r["id"] = int(r.get("id") or 0)
+                r["valid"] = float(r.get("valid") or 0)
+                r["invalid"] = float(r.get("invalid") or 0)
+                r["donate_percent"] = float(r.get("donate_percent") or 0)
+                r["is_anonymous"] = int(r.get("is_anonymous") or 0)
+            return rows
+        if self._share_stats_recent_has_rows():
+            return []
+
         sql = (
             "SELECT "
             f"  ROUND(IFNULL(SUM(IF(s.our_result='Y', IF(s.difficulty=0, POW(2, ({difficulty_const} - 16)), s.difficulty), 0)), 0) / POW(2, ({difficulty_const} - 16)), 0) AS valid, "
@@ -956,7 +1242,7 @@ class Db:
             "  u.username AS username "
             "FROM shares AS s, accounts AS u "
             "WHERE u.username = s.username_base "
-            "  AND UNIX_TIMESTAMP(s.time) > IFNULL((SELECT MAX(b.time) FROM blocks AS b), 0) "
+            "  AND s.time > FROM_UNIXTIME(IFNULL((SELECT MAX(b.time) FROM blocks AS b), 0)) "
             "GROUP BY u.id"
         )
         rows = self.fetchall(sql)
@@ -971,6 +1257,30 @@ class Db:
     def stats_top_contributors(self, *, target_bits: int, difficulty_const: int,
                                interval: int = 600, limit: int = 15) -> list[dict]:
         """Top miners by hashrate over the last `interval` seconds."""
+        sql = (
+            f"SELECT a.username AS account, "
+            f"       a.donate_percent AS donate_percent, "
+            f"       a.is_anonymous AS is_anonymous, "
+            f"       IFNULL(ROUND(SUM(s.valid_diff) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate "
+            f"FROM share_stats_recent s "
+            f"LEFT JOIN accounts a "
+            f"  ON a.username = s.username_base "
+            f"WHERE s.last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
+            f"GROUP BY account "
+            f"ORDER BY hashrate DESC "
+            f"LIMIT %s"
+        )
+        rows = self.fetchall(sql, (interval, interval, limit))
+        if (
+            self._share_stats_recent_ready(interval=interval)
+            or rows
+            or self._share_stats_recent_has_rows()
+        ):
+            for r in rows:
+                r["hashrate"] = float(r.get("hashrate") or 0.0)
+                r["donate_percent"] = float(r.get("donate_percent") or 0)
+                r["is_anonymous"] = int(r.get("is_anonymous") or 0)
+            return rows
         sql = (
             f"SELECT a.username AS account, "
             f"       a.donate_percent AS donate_percent, "
@@ -1008,6 +1318,26 @@ class Db:
         submitting recently — so their EMA can be decayed aggressively
         instead of waiting for the window to drain.
         """
+        rows = self.fetchall(
+            f"SELECT username AS worker, "
+            f"       IFNULL(ROUND(SUM(valid_diff) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate, "
+            f"       TIMESTAMPDIFF(SECOND, MAX(last_share_time), NOW()) AS last_share_age_sec "
+            f"FROM share_stats_recent "
+            f"WHERE last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
+            f"  AND valid_count > 0 "
+            f"GROUP BY username",
+            (interval, interval),
+        )
+        if (
+            self._share_stats_recent_ready(interval=interval)
+            or rows
+            or self._share_stats_recent_has_rows()
+        ):
+            return [{
+                "worker": str(r.get("worker") or ""),
+                "hashrate": float(r.get("hashrate") or 0.0),
+                "last_share_age_sec": int(r.get("last_share_age_sec") or 0),
+            } for r in rows]
         sql = (
             f"SELECT u.username AS worker, "
             f"       IFNULL(ROUND(SUM(u.difficulty) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate, "
@@ -1039,6 +1369,33 @@ class Db:
         sql = (
             f"SELECT a.id AS id, "
             f"       a.username AS account, "
+            f"       IFNULL(ROUND(SUM(s.valid_diff) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate, "
+            f"       ROUND(SUM(s.valid_count) / %s, 2) AS sharerate, "
+            f"       IFNULL(SUM(s.valid_diff) / NULLIF(SUM(s.valid_count), 0), 0) AS avgsharediff "
+            f"FROM share_stats_recent s "
+            f"LEFT JOIN accounts a "
+            f"  ON a.username = s.username_base "
+            f"WHERE s.last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
+            f"  AND s.valid_count > 0 "
+            f"  AND a.id IS NOT NULL "
+            f"GROUP BY account "
+            f"ORDER BY hashrate DESC"
+        )
+        rows = self.fetchall(sql, (interval, interval, interval))
+        if (
+            self._share_stats_recent_ready(interval=interval)
+            or rows
+            or self._share_stats_recent_has_rows()
+        ):
+            for r in rows:
+                r["id"] = int(r.get("id") or 0)
+                r["hashrate"] = float(r.get("hashrate") or 0.0)
+                r["sharerate"] = float(r.get("sharerate") or 0.0)
+                r["avgsharediff"] = float(r.get("avgsharediff") or 0.0)
+            return rows
+        sql = (
+            f"SELECT a.id AS id, "
+            f"       a.username AS account, "
             f"       IFNULL(ROUND(SUM(u.difficulty) * POW(2, {target_bits}) / %s / 1000, 2), 0) AS hashrate, "
             f"       ROUND(COUNT(u.id) / %s, 2) AS sharerate, "
             f"       IFNULL(AVG(IF(u.difficulty=0, POW(2, ({difficulty_const} - 16)), u.difficulty)), 0) AS avgsharediff "
@@ -1065,7 +1422,10 @@ class Db:
             r["avgsharediff"] = float(r.get("avgsharediff") or 0.0)
         return rows
 
-    def update_pool_worker_difficulty(self, *, interval: int = 180) -> int:
+    def update_pool_worker_difficulty(self, *, interval: int = 180,
+                                      stale_batch_size: int = 1000,
+                                      update_active: bool = True,
+                                      zero_stale: bool = True) -> int:
         """Refresh `pool_worker.difficulty` from recent shares.
 
         The MPOS web UI reads `pool_worker.difficulty` to display
@@ -1074,28 +1434,81 @@ class Db:
         write to this column — it only writes share rows — so without
         this update the UI shows 0 H/s per worker.
 
-        Updates the rolling-average difficulty across both `shares` and
-        `shares_archive` over the recent window. Returns the number of
-        pool_worker rows whose difficulty value changed.
+        Updates the rolling-average difficulty from `share_stats_recent`.
+        This is display-only data, so when the bounded summary is behind we
+        skip the refresh instead of falling back to a large canonical-table
+        scan. Rows whose value is already current are left alone, which avoids
+        one redundant write per worker on every statistics tick. Returns the
+        number of pool_worker rows matched by the changed-value guard.
         """
-        sql = (
-            "UPDATE pool_worker pw "
-            "LEFT JOIN ("
-            "  SELECT username, "
-            "         AVG(IF(difficulty=0, 1, difficulty)) AS avg_diff "
-            "  FROM ("
-            "    SELECT username, difficulty FROM shares "
-            "    WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
-            "      AND our_result='Y' "
-            "    UNION ALL "
-            "    SELECT username, difficulty FROM shares_archive "
-            "    WHERE time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
-            "      AND our_result='Y'"
-            "  ) u GROUP BY username "
-            ") s ON s.username = pw.username "
-            "SET pw.difficulty = COALESCE(s.avg_diff, 0)"
-        )
-        return self.execute(sql, (interval, interval))
+        matched = 0
+        if self._share_stats_recent_ready(interval=interval):
+            stale_batch_size = max(100, int(stale_batch_size))
+            max_row = self.fetchone("SELECT IFNULL(MAX(id), 0) AS id FROM pool_worker")
+            max_worker_id = int((max_row or {}).get("id") or 0)
+            if max_worker_id <= 0:
+                return matched
+            if update_active:
+                active_cursor = self.get_setting_int(
+                    "pool_worker_difficulty_active_cursor",
+                    default=0,
+                    floor=0,
+                )
+                if active_cursor >= max_worker_id:
+                    active_cursor = 0
+                active_upper_id = min(max_worker_id, active_cursor + stale_batch_size)
+                active_sql = (
+                    "UPDATE pool_worker pw "
+                    "JOIN ("
+                    "  SELECT pw2.id, "
+                    "         SUM(s.worker_diff_sum) / NULLIF(SUM(s.valid_count), 0) AS avg_diff "
+                    "  FROM pool_worker pw2 "
+                    "  JOIN share_stats_recent s FORCE INDEX (username_last_share_time) "
+                    "    ON s.username = pw2.username "
+                    "   AND s.last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
+                    "   AND s.valid_count > 0 "
+                    "  WHERE pw2.id > %s AND pw2.id <= %s "
+                    "  GROUP BY pw2.id "
+                    ") s ON s.id = pw.id "
+                    "SET pw.difficulty = s.avg_diff "
+                    "WHERE ABS(COALESCE(pw.difficulty, 0) - COALESCE(s.avg_diff, 0)) > 0.000001"
+                )
+                matched += self.execute(active_sql, (
+                    interval, active_cursor, active_upper_id,
+                ))
+                self.set_setting(
+                    "pool_worker_difficulty_active_cursor",
+                    "0" if active_upper_id >= max_worker_id else str(active_upper_id),
+                )
+            if not zero_stale:
+                return matched
+
+            cursor = self.get_setting_int(
+                "pool_worker_difficulty_zero_cursor",
+                default=0,
+                floor=0,
+            )
+            if cursor >= max_worker_id:
+                cursor = 0
+            upper_id = min(max_worker_id, cursor + stale_batch_size)
+            stale_sql = (
+                "UPDATE pool_worker pw "
+                "LEFT JOIN share_stats_recent s FORCE INDEX (username_last_share_time) "
+                "  ON s.username = pw.username "
+                " AND s.last_share_time > DATE_SUB(NOW(), INTERVAL %s SECOND) "
+                " AND s.valid_count > 0 "
+                "SET pw.difficulty = 0 "
+                "WHERE pw.id > %s AND pw.id <= %s "
+                "  AND COALESCE(pw.difficulty, 0) <> 0 "
+                "  AND s.username IS NULL"
+            )
+            stale = self.execute(stale_sql, (interval, cursor, upper_id))
+            self.set_setting(
+                "pool_worker_difficulty_zero_cursor",
+                "0" if upper_id >= max_worker_id else str(upper_id),
+            )
+            return matched + stale
+        return 0
 
     def get_locked_balance(self, slot: str = "",
                            min_confirmations: int = 100) -> float:

@@ -73,6 +73,22 @@ def _make_wallet_comment(*, slot: str, account_id: int,
     return f"mpos:{slot}:{account_id}:{outbox_id}:{nonce}"
 
 
+def _wallet_max_weight_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "inputs size exceeds the maximum weight" in message
+        or "maximum weight" in message
+        or "too many small utxos" in message
+    )
+
+
+def _wallet_max_weight_message(slot_label: str) -> str:
+    return (
+        f"{slot_label} wallet has too many small UTXOs for this payout "
+        "as one transaction; consolidate wallet UTXOs before retrying."
+    )
+
+
 @dataclass
 class Payouts:
     name: str = "payouts"
@@ -323,12 +339,20 @@ class Payouts:
             try:
                 quote = rpc.walletcreatefundedpsbt(address, amount)
             except Exception as exc:
-                log.warning(
-                    "[%s/%s] skipping %s payout for %s (account %s): "
-                    "wallet fee quote failed: %s",
-                    self.name, slot_label, queue_name, username,
-                    account_id, exc,
-                )
+                if _wallet_max_weight_error(exc):
+                    log.error(
+                        "[%s/%s] skipping %s payout for %s (account %s): "
+                        "%s",
+                        self.name, slot_label, queue_name, username,
+                        account_id, _wallet_max_weight_message(slot_label),
+                    )
+                else:
+                    log.warning(
+                        "[%s/%s] skipping %s payout for %s (account %s): "
+                        "wallet fee quote failed: %s",
+                        self.name, slot_label, queue_name, username,
+                        account_id, exc,
+                    )
                 continue
 
             fee = round(float(quote.get("fee", 0.0)), 8) if isinstance(quote, dict) else 0.0
@@ -434,6 +458,7 @@ class Payouts:
                 f"{wallet_comment} before clearing the slot poison flag."
             )
         except Exception as exc:
+            max_weight = _wallet_max_weight_error(exc)
             with db.transaction() as cur:
                 cur.execute(
                     "UPDATE transactions_outbox "
@@ -445,6 +470,14 @@ class Payouts:
                     db.mark_manual_payout_complete(
                         self.slot, manual_payout_id, cur=cur,
                     )
+            if max_weight:
+                raise Fatal(
+                    f"E0092: sendtoaddress for {username} "
+                    f"(account {account_id}) was rejected because "
+                    f"{_wallet_max_weight_message(slot_label)} "
+                    f"Outbox {outbox_id} marked abandoned; user balance "
+                    f"unchanged."
+                )
             raise Fatal(
                 f"E0091: sendtoaddress for {username} (account {account_id}) "
                 f"was rejected by the daemon: {exc}. "

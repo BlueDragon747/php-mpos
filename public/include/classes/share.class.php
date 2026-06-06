@@ -83,7 +83,7 @@ class Share Extends Base {
       ROUND(IFNULL(SUM(IF(s.difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 8) AS total
       FROM $this->table AS s
       LEFT JOIN " . $this->user->getTableName() . " AS a
-      ON a.username = SUBSTRING_INDEX( s.username , '.', 1 )
+      ON a.username = s.username_base
        WHERE s.id > ? AND s.id <= ? AND s.our_result = 'Y' AND a.is_locked != 2
        ");
     if ($this->checkStmt($stmt) && $stmt->bind_param('ss', $previous_upstream, $current_upstream) && $stmt->execute() && $result = $stmt->get_result())
@@ -102,13 +102,13 @@ class Share Extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
         a.id,
-        SUBSTRING_INDEX( s.username , '.', 1 ) as username,
+        s.username_base as username,
         a.no_fees AS no_fees,
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(s.difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 8) AS valid,
         ROUND(IFNULL(SUM(IF(our_result='N', IF(s.difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 8) AS invalid
       FROM $this->table AS s
       LEFT JOIN " . $this->user->getTableName() . " AS a
-      ON a.username = SUBSTRING_INDEX( s.username , '.', 1 )
+      ON a.username = s.username_base
       WHERE s.id > ? AND s.id <= ? AND a.is_locked != 2
       GROUP BY username, a.id, a.no_fees
       ORDER BY valid DESC");
@@ -149,13 +149,13 @@ class Share Extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
         a.id,
-        SUBSTRING_INDEX( s.username , '.', 1 ) as account,
+        s.username_base as account,
         a.no_fees AS no_fees,
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 8) AS valid,
         ROUND(IFNULL(SUM(IF(our_result='N', IF(s.difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 8) AS invalid
       FROM $this->tableArchive AS s
       LEFT JOIN " . $this->user->getTableName() . " AS a
-      ON a.username = SUBSTRING_INDEX( s.username , '.', 1 )
+      ON a.username = s.username_base
       WHERE s.share_id > ? AND s.share_id <= ? AND a.is_locked != 2
       GROUP BY account, a.id, a.no_fees
       ORDER BY valid DESC");
@@ -449,4 +449,3 @@ $share->setConfig($config);
 $share->setUser($user);
 $share->setBlock($block);
 $share->setErrorCodes($aErrorCodes);
-

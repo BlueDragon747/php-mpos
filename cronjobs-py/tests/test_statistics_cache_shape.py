@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 
 from cronjobs_py.jobs.statistics import (
@@ -9,16 +10,27 @@ from cronjobs_py.jobs.statistics import (
 
 
 class FakeDb:
-    def get_setting_int(self, _key, default=0, floor=None, ceiling=None):
-        value = default
+    def __init__(self, settings=None):
+        self.settings = dict(settings or {})
+        self.worker_refresh_calls = 0
+        self.worker_refresh_kwargs = []
+
+    def get_setting_int(self, key, default=0, floor=None, ceiling=None):
+        value = int(self.settings.get(key, default))
         if floor is not None:
             value = max(value, floor)
         if ceiling is not None:
             value = min(value, ceiling)
         return value
 
+    def set_setting(self, key, value):
+        self.settings[key] = str(value)
+
     def stats_current_hashrate(self, **_kwargs):
         return 123.0
+
+    def refresh_share_stats_recent(self, **_kwargs):
+        return 0
 
     def stats_per_user_shares(self, **_kwargs):
         return [{
@@ -61,6 +73,8 @@ class FakeDb:
         }]
 
     def update_pool_worker_difficulty(self, **_kwargs):
+        self.worker_refresh_calls += 1
+        self.worker_refresh_kwargs.append(_kwargs)
         return 1
 
 
@@ -86,9 +100,10 @@ class FakeCache:
 
 def test_statistics_job_writes_php_cache_keys_and_shapes():
     cache = FakeCache()
+    db = FakeDb()
     ctx = SimpleNamespace(
         settings=SimpleNamespace(raw={"target_bits": 32, "difficulty": 32}),
-        db=FakeDb(),
+        db=db,
         cache=cache,
     )
 
@@ -111,3 +126,52 @@ def test_statistics_job_writes_php_cache_keys_and_shapes():
     top, top_expire = cache.static[TOP_CONTRIBUTORS_HASHES_15]
     assert top_expire is None
     assert top[0]["account"] == "miner"
+    assert db.worker_refresh_calls == 1
+    assert db.worker_refresh_kwargs[0]["update_active"] is True
+    assert db.worker_refresh_kwargs[0]["zero_stale"] is True
+    assert db.worker_refresh_kwargs[0]["stale_batch_size"] == 500
+    assert int(db.settings["pool_worker_difficulty_last_update"]) > 0
+    assert int(db.settings["pool_worker_difficulty_zero_last_update"]) > 0
+
+
+def test_statistics_job_skips_worker_refresh_inside_throttle_window():
+    cache = FakeCache()
+    db = FakeDb({
+        "pool_worker_difficulty_update_seconds": "600",
+        "pool_worker_difficulty_zero_update_seconds": "600",
+        "pool_worker_difficulty_last_update": str(int(time.time())),
+        "pool_worker_difficulty_zero_last_update": str(int(time.time())),
+    })
+    ctx = SimpleNamespace(
+        settings=SimpleNamespace(raw={"target_bits": 32, "difficulty": 32}),
+        db=db,
+        cache=cache,
+    )
+
+    Statistics().run(ctx)
+
+    assert db.worker_refresh_calls == 0
+
+
+def test_statistics_job_can_run_stale_zero_without_active_refresh():
+    cache = FakeCache()
+    now = int(time.time())
+    db = FakeDb({
+        "pool_worker_difficulty_update_seconds": "600",
+        "pool_worker_difficulty_zero_update_seconds": "600",
+        "pool_worker_difficulty_last_update": str(now),
+        "pool_worker_difficulty_zero_last_update": "0",
+    })
+    ctx = SimpleNamespace(
+        settings=SimpleNamespace(raw={"target_bits": 32, "difficulty": 32}),
+        db=db,
+        cache=cache,
+    )
+
+    Statistics().run(ctx)
+
+    assert db.worker_refresh_calls == 1
+    assert db.worker_refresh_kwargs[0]["update_active"] is False
+    assert db.worker_refresh_kwargs[0]["zero_stale"] is True
+    assert int(db.settings["pool_worker_difficulty_last_update"]) == now
+    assert int(db.settings["pool_worker_difficulty_zero_last_update"]) > 0

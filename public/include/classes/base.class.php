@@ -51,6 +51,86 @@ class Base {
       return $result->fetch_object()->id;
     return 0;
   }
+  protected function shareStatsRecentReady() {
+    static $ready = NULL;
+    if ($ready !== NULL) return $ready;
+    if (!isset($this->mysqli)) return false;
+
+    $stmt = $this->mysqli->prepare("
+      SELECT 1 AS present
+      FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'share_stats_recent'
+      LIMIT 1");
+    if (!$stmt || !$stmt->execute()) {
+      $ready = false;
+      return $ready;
+    }
+    $result = $stmt->get_result();
+    if (!$result || !$result->fetch_assoc()) {
+      $ready = false;
+      return $ready;
+    }
+
+    $stmt = $this->mysqli->prepare("
+      SELECT 1 AS present
+      FROM share_stats_recent
+      LIMIT 1");
+    if ($stmt && $stmt->execute() && $result = $stmt->get_result()) {
+      if ($result->fetch_assoc()) {
+        $ready = true;
+        return $ready;
+      }
+    }
+
+    $stmt = $this->mysqli->prepare("
+      SELECT value
+      FROM settings
+      WHERE name = 'share_stats_recent_caught_up'
+      LIMIT 1");
+    if (!$stmt || !$stmt->execute()) {
+      $ready = false;
+      return $ready;
+    }
+    $result = $stmt->get_result();
+    if (!$result) {
+      $ready = false;
+      return $ready;
+    }
+    $row = $result->fetch_assoc();
+    if (!$row || (string)$row['value'] !== '1') {
+      $ready = false;
+      return $ready;
+    }
+
+    $stmt = $this->mysqli->prepare("
+      SELECT
+        (SELECT IFNULL(MAX(id), 0) FROM shares) AS max_id,
+        (SELECT CAST(value AS UNSIGNED)
+           FROM settings
+          WHERE name = 'share_stats_recent_last_share_id'
+          LIMIT 1) AS last_id,
+        (SELECT CAST(value AS UNSIGNED)
+           FROM settings
+          WHERE name = 'share_stats_recent_ready_lag_tolerance'
+          LIMIT 1) AS tolerance");
+    if (!$stmt || !$stmt->execute()) {
+      $ready = false;
+      return $ready;
+    }
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : NULL;
+    if (!$row) {
+      $ready = false;
+      return $ready;
+    }
+    $maxId = (int)$row['max_id'];
+    $lastId = (int)$row['last_id'];
+    $tolerance = (int)($row['tolerance'] ?? 50000);
+    if ($tolerance < 0) $tolerance = 0;
+    $ready = max(0, $maxId - $lastId) <= $tolerance;
+    return $ready;
+  }
   public function setDebug($debug) {
     $this->debug = $debug;
   }

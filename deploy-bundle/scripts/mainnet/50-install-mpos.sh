@@ -33,6 +33,7 @@ say "applying cronjobs-py wave 1 + wave 5 migrations"
 mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/01-cronjobs-py-wave1.sql" 2>&1 | grep -v "^ERROR 1050\|^ERROR 1061\|already exists" || true
 mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/02-cronjobs-py-wave5.sql" 2>&1 | grep -v "^ERROR 1060\|already exists\|Duplicate column name\|Duplicate key" || true
 mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/03-pplns-shares.sql"
+mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/04-db-hotpath-indexes.sql"
 
 say "seeding required settings rows"
 mariadb "${MPOS_DB_NAME}" <<SQL || true
