@@ -17,9 +17,8 @@ MariaDB still passes). On the dev box the operator can:
     export CRONJOBS_PY_TEST_DSN=cjpy_test:cjpy_test@127.0.0.1:3306
 
 Each test gets its own database name `cjpy_test_<random>` which is
-DROP'd after the test. Schema is loaded from MPOS's
-`sql/database_blank.sql` plus our Wave 1 migration
-`deploy-bundle/sql/01-cronjobs-py-wave1.sql`.
+DROP'd after the test. Schema is loaded from MPOS's `sql/database_blank.sql`
+plus every `deploy-bundle/sql/*.sql` migration in sorted order.
 """
 
 from __future__ import annotations
@@ -80,11 +79,11 @@ def _dsn_kwargs() -> dict:
 @pytest.fixture
 def fresh_db(_dsn_kwargs):
     """One isolated test database per test, with the MPOS schema +
-    Wave 1 migration applied.
+    deploy-bundle SQL migrations applied.
 
     Schema files:
       - sql/database_blank.sql (MPOS upstream)
-      - deploy-bundle/sql/01-cronjobs-py-wave1.sql (our additions)
+      - deploy-bundle/sql/*.sql (deploy migrations, sorted by filename)
 
     Yields a `Db` instance pointed at the temp database. Drops the
     database on teardown.
@@ -100,13 +99,9 @@ def fresh_db(_dsn_kwargs):
                 f"DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
             )
             cur.execute(f"USE `{db_name}`")
-            for schema_file in (
-                REPO_ROOT / "sql" / "database_blank.sql",
-                REPO_ROOT / "deploy-bundle" / "sql" / "01-cronjobs-py-wave1.sql",
-                REPO_ROOT / "deploy-bundle" / "sql" / "02-cronjobs-py-wave5.sql",
-                REPO_ROOT / "deploy-bundle" / "sql" / "03-pplns-shares.sql",
-                REPO_ROOT / "deploy-bundle" / "sql" / "04-db-hotpath-indexes.sql",
-            ):
+            schema_files = [REPO_ROOT / "sql" / "database_blank.sql"]
+            schema_files.extend(sorted((REPO_ROOT / "deploy-bundle" / "sql").glob("*.sql")))
+            for schema_file in schema_files:
                 if not schema_file.exists():
                     pytest.skip(f"missing schema file: {schema_file}")
                 _apply_sql_file(cur, schema_file)

@@ -249,9 +249,12 @@ stop_existing_container() {
             fi
             sleep 5
         done
-        docker stop -t "$MPOS_DAEMON_STOP_TIMEOUT_S" "$coin" >/dev/null 2>&1 || true
+        if docker ps --format '{{.Names}}' | grep -qx "$coin"; then
+            warn "${coin} did not stop cleanly within ${MPOS_DAEMON_STOP_TIMEOUT_S}s"
+            return 1
+        fi
     fi
-    docker rm -f "$coin" >/dev/null 2>&1 || true
+    docker rm "$coin" >/dev/null 2>&1 || true
 }
 
 launch_coin() {
@@ -310,9 +313,9 @@ if [ "${SKIP_BOOTSTRAP:-0}" = "1" ]; then
     done
 
     say "daemon container status"
-    docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | head -1
+    printf 'NAMES\tIMAGE\tSTATUS\n'
     for coin in "${COINS[@]}"; do
-        docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' \
+        docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' \
             | grep "^${coin} " || warn "${coin} container not running"
     done
 

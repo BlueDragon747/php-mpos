@@ -33,6 +33,32 @@ else
     say "DB already populated; skipping schema import"
 fi
 
+apply_db_migrations() {
+    local sql_dir="$1"
+    local migration found=0
+
+    if [ ! -d "$sql_dir" ]; then
+        say "no database migration directory found at ${sql_dir}; skipping"
+        return
+    fi
+
+    say "applying database migrations from ${sql_dir}"
+    while IFS= read -r -d '' migration; do
+        found=1
+        say "applying database migration $(basename "$migration")"
+        if ! mariadb "${MPOS_DB_NAME}" < "$migration"; then
+            echo "database migration failed: ${migration}" >&2
+            return 1
+        fi
+    done < <(find "$sql_dir" -maxdepth 1 -type f -name '*.sql' -print0 | LC_ALL=C sort -z)
+
+    if [ "$found" = "0" ]; then
+        say "no database migrations found in ${sql_dir}"
+    fi
+}
+
+apply_db_migrations "${MPOS_REPO_ROOT}/deploy-bundle/sql"
+
 say "seeding required settings rows"
 mariadb "${MPOS_DB_NAME}" <<SQL || true
 INSERT INTO settings (name, value)
@@ -41,34 +67,6 @@ ON DUPLICATE KEY UPDATE value = VALUES(value);
 INSERT IGNORE INTO settings (name, value)
 VALUES ('backups_enabled', '1');
 SQL
-
-CRONJOBS_WAVE1_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/01-cronjobs-py-wave1.sql"
-if [ -f "$CRONJOBS_WAVE1_SQL" ]; then
-    say "ensuring cronjobs-py outbox/accounting tables exist (from $CRONJOBS_WAVE1_SQL)"
-    mariadb "${MPOS_DB_NAME}" < "$CRONJOBS_WAVE1_SQL"
-fi
-
-CRONJOBS_WAVE5_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/02-cronjobs-py-wave5.sql"
-if [ -f "$CRONJOBS_WAVE5_SQL" ]; then
-    say "ensuring cronjobs-py accounting mode column exists (from $CRONJOBS_WAVE5_SQL)"
-    mariadb "${MPOS_DB_NAME}" < "$CRONJOBS_WAVE5_SQL"
-fi
-
-# pplns_shares — slot-aware persisted PPLNS breakdown (replaces the legacy
-# statistics_shares writer that the cronjobs-py rewrite stopped populating).
-# Schema is shared with the cronjobs-py replay-test fixture loader
-# (cronjobs-py/tests/conftest.py reads the same .sql file).
-PPLNS_SHARES_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/03-pplns-shares.sql"
-if [ -f "$PPLNS_SHARES_SQL" ]; then
-    say "ensuring pplns_shares table exists (from $PPLNS_SHARES_SQL)"
-    mariadb "${MPOS_DB_NAME}" < "$PPLNS_SHARES_SQL"
-fi
-
-DB_HOTPATH_SQL="${MPOS_REPO_ROOT}/deploy-bundle/sql/04-db-hotpath-indexes.sql"
-if [ -f "$DB_HOTPATH_SQL" ]; then
-    say "ensuring mining database hot-path indexes exist (from $DB_HOTPATH_SQL)"
-    mariadb "${MPOS_DB_NAME}" < "$DB_HOTPATH_SQL"
-fi
 
 # ---- MPOS web tree ------------------------------------------------------
 

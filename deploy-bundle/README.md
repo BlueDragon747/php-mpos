@@ -263,6 +263,48 @@ export SKIP_DAEMON_IMAGE_BUILD=1
 sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 
+## Mainnet Updates
+
+`update-mainnet.sh` is for long-running pools that already have a working
+mainnet install. Run it from a fresh checkout on the pool host. It reads the
+existing deploy environment from `/root/.mpos-deploy.env`, preserves daemon
+data folders and configs, and updates only the selected layer.
+
+```bash
+# Update MPOS web files, DB migrations, cron jobs, SSE, importer, status cache,
+# logrotate, and backup timer.
+sudo bash deploy-bundle/update-mainnet.sh --mpos
+
+# Update Go Eloipool and merged-mine proxy.
+sudo bash deploy-bundle/update-mainnet.sh --eloipool
+
+# Update daemon containers from the configured image source.
+sudo bash deploy-bundle/update-mainnet.sh --daemons
+
+# Same daemon update, but stop/remove containers before building local images.
+sudo bash deploy-bundle/update-mainnet.sh --daemons --build
+
+# Update daemons, Eloipool, and MPOS in one run.
+sudo bash deploy-bundle/update-mainnet.sh --all
+
+# Full update with stop/remove/build/recreate daemon container rotation.
+sudo bash deploy-bundle/update-mainnet.sh --all --build
+```
+
+`--wallets` is accepted as an alias for `--daemons`. During daemon updates,
+the script stops Stratum first, cleanly stops daemon containers, updates the
+selected daemon images, restarts the daemons against their existing data
+folders, waits for RPC readiness, and then starts the pool layer again. During
+`--all`, Stratum stays stopped until daemon, Eloipool, and MPOS updates have
+all finished.
+
+By default daemon updates pull `${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG}`.
+The `--build` flag switches to the local source-build path and tags images as
+`local/<coin>:25.2-local` unless `MPOS_DOCKER_HUB` or `MPOS_IMAGE_TAG` is set
+explicitly. `--build` defaults to two concurrent daemon builds to reduce CPU
+pressure on live pool hosts; set `BUILD_CONCURRENCY=1` for a serial build or a
+higher value when the host has enough headroom.
+
 ### Bootstrap options
 
 By default the deploy queries

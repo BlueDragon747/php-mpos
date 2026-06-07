@@ -31,6 +31,53 @@ chown -R blakestream-mpos:blakestream-mpos "$LOG_POOL"
 chown root:blakestream-mpos "$CONFIG_DIR"
 chmod 750 "$CONFIG_DIR"
 
+EXISTING_POOL_CONFIG="${POOL_ROOT}/config.py"
+EXISTING_MMP_CONFIG="${CONFIG_DIR}/merged-mine-proxy.json"
+EXISTING_TRACKER_ADDR=""
+declare -A EXISTING_AUX_ADDR=()
+
+if [ -f "$EXISTING_POOL_CONFIG" ]; then
+    EXISTING_TRACKER_ADDR="$(python3 - "$EXISTING_POOL_CONFIG" <<'PY'
+import re
+import sys
+
+try:
+    data = open(sys.argv[1], "r", encoding="utf-8").read()
+except OSError:
+    sys.exit(0)
+m = re.search(r"^TrackerAddr\s*=\s*['\"]([^'\"]+)['\"]", data, re.M)
+if m:
+    print(m.group(1))
+PY
+)"
+fi
+if [ -z "$EXISTING_TRACKER_ADDR" ] && systemctl cat blakestream-mpos-eloipool.service >/dev/null 2>&1; then
+    EXISTING_TRACKER_ADDR="$(systemctl cat blakestream-mpos-eloipool.service \
+        | sed -n 's/.*-tracker-address \([^ ]*\).*/\1/p' \
+        | tail -n 1)"
+fi
+
+if [ -f "$EXISTING_MMP_CONFIG" ]; then
+    while IFS='|' read -r sym addr; do
+        [ -n "$sym" ] && [ -n "$addr" ] || continue
+        EXISTING_AUX_ADDR[$sym]="$addr"
+    done < <(python3 - "$EXISTING_MMP_CONFIG" <<'PY'
+import json
+import sys
+
+names = ["bbtc", "elt", "lit", "pho", "umo"]
+try:
+    data = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+payouts = data.get("aux_payout_addresses") or []
+for name, addr in zip(names, payouts):
+    if addr:
+        print(f"{name}|{addr}")
+PY
+)
+fi
+
 say "syncing eloipool tree → ${POOL_ROOT}"
 mkdir -p "$POOL_ROOT"
 rsync -a --delete --exclude='__pycache__' --exclude='*.pyc' \
@@ -181,27 +228,34 @@ sys.exit(0 if data.get("error") is None and data.get("result") is not None else 
 }
 
 ensure_default_wallet_loaded() {
-    local port="$1" rpc_user="$2" rpc_pass="$3" resp
+    local port="$1" rpc_user="$2" rpc_pass="$3" resp last_resp
+    local attempts="${MPOS_WALLET_RPC_READY_ATTEMPTS:-60}"
+    local attempt
 
-    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getwalletinfo '[]')
-    if printf '%s' "$resp" | rpc_success; then
-        return 0
-    fi
+    for attempt in $(seq 1 "$attempts"); do
+        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getwalletinfo '[]')
+        last_resp="$resp"
+        if printf '%s' "$resp" | rpc_success; then
+            return 0
+        fi
 
-    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" loadwallet '[""]')
-    if ! printf '%s' "$resp" | rpc_success; then
-        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" createwallet '[""]')
-    fi
-    if ! printf '%s' "$resp" | rpc_success; then
-        echo "failed to load or create the default wallet on RPC port ${port}: ${resp}" >&2
-        return 1
-    fi
+        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" loadwallet '[""]')
+        last_resp="$resp"
+        if ! printf '%s' "$resp" | rpc_success; then
+            resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" createwallet '[""]')
+            last_resp="$resp"
+        fi
 
-    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getwalletinfo '[]')
-    if ! printf '%s' "$resp" | rpc_success; then
-        echo "default wallet is not usable on RPC port ${port}: ${resp}" >&2
-        return 1
-    fi
+        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getwalletinfo '[]')
+        last_resp="$resp"
+        if printf '%s' "$resp" | rpc_success; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    echo "default wallet is not usable on RPC port ${port} after ${attempts} attempts: ${last_resp}" >&2
+    return 1
 }
 
 # Helper: ask a daemon for a fresh address. Tries the requested address type
@@ -209,25 +263,37 @@ ensure_default_wallet_loaded() {
 get_address() {
     local port="$1" label="$2" rpc_user="$3" rpc_pass="$4"
     local address_type="${5:-bech32}"
-    local resp addr
+    local resp addr attempt
     ensure_default_wallet_loaded "$port" "$rpc_user" "$rpc_pass" || return 1
-    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\",\"${address_type}\"]")
-    addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
-    if [ -n "$addr" ]; then
-        printf '%s' "$addr"
-        return 0
-    fi
-    # Fallback to the daemon's configured default address type.
-    resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\"]")
-    addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
-    printf '%s' "$addr"
+    for attempt in $(seq 1 "${MPOS_WALLET_ADDR_ATTEMPTS:-10}"); do
+        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\",\"${address_type}\"]")
+        addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
+        if [ -n "$addr" ]; then
+            printf '%s' "$addr"
+            return 0
+        fi
+        # Fallback to the daemon's configured default address type.
+        resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\"]")
+        addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
+        if [ -n "$addr" ]; then
+            printf '%s' "$addr"
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
 }
 
 if [ -z "${MPOS_TRACKER_ADDR:-}" ]; then
-    say "asking blakecoind (mainnet) for a fresh tracker address"
-    MPOS_TRACKER_ADDR=$(get_address 8772 "pool-tracker" \
-        "${MPOS_NODE_RPC_USER}" "${MPOS_NODE_RPC_PASS}")
-    [ -n "$MPOS_TRACKER_ADDR" ] || { echo "failed to obtain mainnet tracker address" >&2; exit 1; }
+    if [ -n "$EXISTING_TRACKER_ADDR" ]; then
+        say "reusing existing tracker address"
+        MPOS_TRACKER_ADDR="$EXISTING_TRACKER_ADDR"
+    else
+        say "asking blakecoind (mainnet) for a fresh tracker address"
+        MPOS_TRACKER_ADDR=$(get_address 8772 "pool-tracker" \
+            "${MPOS_NODE_RPC_USER}" "${MPOS_NODE_RPC_PASS}")
+        [ -n "$MPOS_TRACKER_ADDR" ] || { echo "failed to obtain mainnet tracker address" >&2; exit 1; }
+    fi
 fi
 say "tracker = ${MPOS_TRACKER_ADDR}"
 
@@ -243,7 +309,13 @@ declare -A AUX_ADDR
 for sym in bbtc elt lit pho umo; do
     var="MPOS_AUX_ADDR_${sym^^}"
     if [ -n "${!var:-}" ]; then
+        say "using operator-specified ${sym} aux payout address"
         AUX_ADDR[$sym]="${!var}"
+        continue
+    fi
+    if [ -n "${EXISTING_AUX_ADDR[$sym]:-}" ]; then
+        say "reusing existing ${sym} aux payout address"
+        AUX_ADDR[$sym]="${EXISTING_AUX_ADDR[$sym]}"
         continue
     fi
     say "asking ${sym} daemon for an aux payout address"
@@ -402,11 +474,17 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-say "starting eloipool"
-systemctl enable --now blakestream-mpos-eloipool.service
-sleep 1
-say "starting merged-mine-proxy"
-systemctl enable --now blakestream-mpos-mergeminer.service
-
-say "step 40 done — stratum on :${MPOS_STRATUM_PORT}, mmproxy on :19335"
+if [ "${MPOS_DEFER_POOL_START:-0}" = "1" ]; then
+    say "enabling eloipool and merged-mine-proxy; start deferred by update wrapper"
+    systemctl enable blakestream-mpos-eloipool.service >/dev/null
+    systemctl enable blakestream-mpos-mergeminer.service >/dev/null
+    say "step 40 done — pool services installed; startup deferred"
+else
+    say "starting eloipool"
+    systemctl enable --now blakestream-mpos-eloipool.service
+    sleep 1
+    say "starting merged-mine-proxy"
+    systemctl enable --now blakestream-mpos-mergeminer.service
+    say "step 40 done — stratum on :${MPOS_STRATUM_PORT}, mmproxy on :19335"
+fi
 say "tracker_addr=${MPOS_TRACKER_ADDR}"
