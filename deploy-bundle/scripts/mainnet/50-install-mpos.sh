@@ -29,10 +29,31 @@ else
     say "DB already populated; skipping schema import"
 fi
 
-say "applying cronjobs-py wave 1 + wave 5 migrations"
-mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/01-cronjobs-py-wave1.sql" 2>&1 | grep -v "^ERROR 1050\|^ERROR 1061\|already exists" || true
-mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/02-cronjobs-py-wave5.sql" 2>&1 | grep -v "^ERROR 1060\|already exists\|Duplicate column name\|Duplicate key" || true
-mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/deploy-bundle/sql/03-pplns-shares.sql"
+apply_db_migrations() {
+    local sql_dir="$1"
+    local migration found=0
+
+    if [ ! -d "$sql_dir" ]; then
+        say "no database migration directory found at ${sql_dir}; skipping"
+        return
+    fi
+
+    say "applying database migrations from ${sql_dir}"
+    while IFS= read -r -d '' migration; do
+        found=1
+        say "applying database migration $(basename "$migration")"
+        if ! mariadb "${MPOS_DB_NAME}" < "$migration"; then
+            echo "database migration failed: ${migration}" >&2
+            return 1
+        fi
+    done < <(find "$sql_dir" -maxdepth 1 -type f -name '*.sql' -print0 | LC_ALL=C sort -z)
+
+    if [ "$found" = "0" ]; then
+        say "no database migrations found in ${sql_dir}"
+    fi
+}
+
+apply_db_migrations "${MPOS_REPO}/deploy-bundle/sql"
 
 say "seeding required settings rows"
 mariadb "${MPOS_DB_NAME}" <<SQL || true

@@ -100,6 +100,12 @@ The following features have been implemented so far:
 * Pool donations, fees and block bonuses
 * Manual and auto payout
  * Wallet-estimated network fees for 25.2 payout broadcasts
+ * UTXO-fragmented pool wallets use restricted/chunked payouts: the pool
+   first tries the configured max payout threshold, then smaller bounded
+   chunks if the wallet reports too many small inputs. Only one chunk is
+   queued at a time until the previous payout clears. Wallet UTXO
+   consolidation remains an operator maintenance task, not an automatic
+   payout hot-path action.
 * Transaction list
 * Admin Panel
  * Cron Monitoring Overview

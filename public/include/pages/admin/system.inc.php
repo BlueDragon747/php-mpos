@@ -9,7 +9,7 @@ if (!$system_status_collector_mode &&
   die("404 Page not found");
 }
 
-// CSRF + method enforcement for the inline backup settings form. No-op
+// CSRF + method enforcement for the inline settings forms. No-op
 // for plain GET, which is the partial-poll + page render path.
 require_once dirname(__FILE__) . '/../../admin_csrf.inc.php';
 require_once __DIR__ . '/_daemon_rule_status.inc.php';
@@ -76,6 +76,13 @@ function _system_status_empty_payload($state = 'warming', $message = 'System sta
       'next_day_label' => '', 'retention_days' => 0, 'schedule_time' => '',
       'schedule_hour' => 0, 'schedule_minute' => 0, 'wallets' => array(),
       'tarball_path' => '', 'database' => '', 'database_size' => 0,
+    ),
+    'database'         => array(
+      'tables' => array(), 'total_size' => '—', 'total_rows' => '—',
+      'archive_oldest' => '—', 'archive_newest' => '—',
+      'prune_enabled' => 0, 'prune_after_days' => 0,
+      'prune_choices' => array(), 'prune_last_run' => 0,
+      'prune_last_deleted' => 0, 'prune_last_status' => '',
     ),
     'cpu'              => array(),
     'swap'             => array(),
@@ -170,6 +177,28 @@ if (!$system_status_collector_mode && @$_POST['do'] === 'update_backup_settings'
     'CONTENT' => 'Backup settings saved (' . implode(', ', $msgs) . ').',
     'TYPE'    => 'success',
   );
+  header('Location: ?page=admin&action=system');
+  exit;
+}
+
+if (!$system_status_collector_mode && @$_POST['do'] === 'update_db_prune_settings') {
+  $choices = array(0, 30, 60, 90, 180, 365);
+  $days = isset($_POST['db_prune_after_days']) && is_numeric($_POST['db_prune_after_days'])
+    ? (int)$_POST['db_prune_after_days']
+    : 0;
+  if (!in_array($days, $choices, true)) $days = 0;
+
+  $setting->setValue('db_prune_enabled', $days > 0 ? '1' : '0');
+  if ($days > 0) $setting->setValue('db_prune_after_days', (string)$days);
+
+  _system_status_cache_delete($system_status_cache_key);
+
+  $msg = $days > 0
+    ? "Database archive pruning set to {$days} days"
+    : 'Database archive pruning disabled';
+  $log->log("warn", @$_SESSION['USERDATA']['username']
+            . ' updated database prune settings via System Status: ' . $msg);
+  $_SESSION['POPUP'][] = array('CONTENT' => $msg . '.', 'TYPE' => 'success');
   header('Location: ?page=admin&action=system');
   exit;
 }
@@ -477,6 +506,104 @@ function _system_bytes($n) {
   return sprintf($fmt, $b, $units[$i]);
 }
 
+function _system_db_prune_choices() {
+  return array(
+    array('value' => 0,   'label' => 'Disabled'),
+    array('value' => 30,  'label' => '30 days'),
+    array('value' => 60,  'label' => '60 days'),
+    array('value' => 90,  'label' => '90 days'),
+    array('value' => 180, 'label' => '180 days'),
+    array('value' => 365, 'label' => '365 days'),
+  );
+}
+
+function _system_setting_int_value($name, $default, $min, $max) {
+  global $setting;
+  $raw = $setting->getValue($name);
+  if ($raw === null || $raw === '' || !is_numeric($raw)) return (int)$default;
+  return max((int)$min, min((int)$max, (int)$raw));
+}
+
+function _system_db_ident($name) {
+  return preg_match('/^[A-Za-z0-9_]+$/', (string)$name)
+    ? '`' . str_replace('`', '``', (string)$name) . '`'
+    : '';
+}
+
+function _system_db_table_meta($mysqli, $tables) {
+  $out = array();
+  if (!isset($mysqli) || !is_object($mysqli) || empty($tables)) return $out;
+  $names = array();
+  foreach ($tables as $table) {
+    if (preg_match('/^[A-Za-z0-9_]+$/', (string)$table)) {
+      $names[] = "'" . $mysqli->real_escape_string((string)$table) . "'";
+    }
+  }
+  if (!$names) return $out;
+
+  $sql = "SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH "
+       . "FROM information_schema.TABLES "
+       . "WHERE TABLE_SCHEMA = DATABASE() "
+       . "AND TABLE_NAME IN (" . implode(',', $names) . ")";
+  if ($res = $mysqli->query($sql)) {
+    while ($row = $res->fetch_assoc()) {
+      $out[$row['TABLE_NAME']] = array(
+        'rows'  => max(0, (int)$row['TABLE_ROWS']),
+        'bytes' => max(0, (int)$row['DATA_LENGTH'] + (int)$row['INDEX_LENGTH']),
+      );
+    }
+    $res->free();
+  }
+  return $out;
+}
+
+function _system_db_sum_meta($meta, $tables) {
+  $rows = 0;
+  $bytes = 0;
+  foreach ($tables as $table) {
+    if (!isset($meta[$table])) continue;
+    $rows += (int)$meta[$table]['rows'];
+    $bytes += (int)$meta[$table]['bytes'];
+  }
+  return array('rows' => $rows, 'bytes' => $bytes);
+}
+
+function _system_db_time_edge($mysqli, $table, $direction) {
+  $ident = _system_db_ident($table);
+  if (!$ident || !isset($mysqli) || !is_object($mysqli)) return '';
+  $dir = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+  $sql = "SELECT time FROM {$ident} ORDER BY time {$dir} LIMIT 1";
+  if ($res = $mysqli->query($sql)) {
+    $row = $res->fetch_assoc();
+    $res->free();
+    return $row && !empty($row['time']) ? (string)$row['time'] : '';
+  }
+  return '';
+}
+
+function _system_db_archive_edge($mysqli, $tables, $direction) {
+  $best = '';
+  foreach ($tables as $table) {
+    $ts = _system_db_time_edge($mysqli, $table, $direction);
+    if ($ts === '') continue;
+    if ($best === '') {
+      $best = $ts;
+      continue;
+    }
+    $cmp = strcmp($ts, $best);
+    if ((strtoupper($direction) === 'ASC' && $cmp < 0) ||
+        (strtoupper($direction) === 'DESC' && $cmp > 0)) {
+      $best = $ts;
+    }
+  }
+  return $best;
+}
+
+function _system_db_row_estimate($n) {
+  if (!is_numeric($n)) return '—';
+  return '~' . number_format((int)$n);
+}
+
 function _system_boot_time_str() {
   $stat = @file_get_contents('/proc/stat');
   if ($stat && preg_match('/^btime\s+(\d+)/m', $stat, $m)) {
@@ -723,6 +850,69 @@ foreach ($disk_targets as $label => $path) {
     'dirpct'  => _system_dir_pct_from_mb($dir_size['mb'], $fs_size_mb),
   );
 }
+
+// ---- Database status + archive prune settings -----------------------
+$db_hot_tables = array('shares');
+$db_archive_tables = array(
+  'shares_archive', 'shares_archive_mm', 'shares_archive_mm1',
+  'shares_archive_mm3', 'shares_archive_mm4', 'shares_archive_mm5',
+);
+$db_stats_tables = array('share_stats_recent');
+$db_block_tables = array(
+  'blocks', 'blocks_mm', 'blocks_mm1', 'blocks_mm3', 'blocks_mm4', 'blocks_mm5',
+);
+$db_payout_tables = array(
+  'transactions_outbox', 'payouts', 'payouts_mm', 'payouts_mm1',
+  'payouts_mm3', 'payouts_mm4', 'payouts_mm5',
+);
+$db_all_groups = array_merge(
+  $db_hot_tables,
+  $db_archive_tables,
+  $db_stats_tables,
+  $db_block_tables,
+  $db_payout_tables
+);
+$db_meta = _system_db_table_meta(isset($mysqli) ? $mysqli : null, $db_all_groups);
+$db_group_rows = array();
+foreach (array(
+  'Hot shares'       => $db_hot_tables,
+  'Archived shares'  => $db_archive_tables,
+  'Recent summaries' => $db_stats_tables,
+  'Blocks'           => $db_block_tables,
+  'Payout queues'    => $db_payout_tables,
+) as $label => $tables) {
+  $sum = _system_db_sum_meta($db_meta, $tables);
+  $db_group_rows[] = array(
+    'label' => $label,
+    'rows'  => _system_db_row_estimate($sum['rows']),
+    'size'  => _system_bytes($sum['bytes']),
+  );
+}
+$db_total = _system_db_sum_meta($db_meta, $db_all_groups);
+$db_archive_oldest = _system_db_archive_edge(isset($mysqli) ? $mysqli : null, $db_archive_tables, 'ASC');
+$db_archive_newest = _system_db_archive_edge(isset($mysqli) ? $mysqli : null, $db_archive_tables, 'DESC');
+$db_prune_enabled = trim((string)$setting->getValue('db_prune_enabled')) !== '0';
+$db_prune_after_days = _system_setting_int_value('db_prune_after_days', 180, 7, 3650);
+if (!$db_prune_enabled) $db_prune_after_days = 0;
+$db_prune_last_run = _system_setting_int_value('db_prune_last_run', 0, 0, PHP_INT_MAX);
+$db_prune_last_deleted = _system_setting_int_value('db_prune_last_deleted', 0, 0, PHP_INT_MAX);
+$db_prune_last_status = (string)$setting->getValue('db_prune_last_status');
+$sys_database = array(
+  'tables'              => $db_group_rows,
+  'total_size'          => _system_bytes($db_total['bytes']),
+  'total_rows'          => _system_db_row_estimate($db_total['rows']),
+  'archive_oldest'      => $db_archive_oldest !== '' ? _system_age_compact($db_archive_oldest) : '—',
+  'archive_newest'      => $db_archive_newest !== '' ? _system_age_compact($db_archive_newest) : '—',
+  'prune_enabled'       => $db_prune_after_days > 0 ? 1 : 0,
+  'prune_after_days'    => $db_prune_after_days,
+  'prune_choices'       => _system_db_prune_choices(),
+  'prune_last_run'      => $db_prune_last_run,
+  'prune_last_run_age'  => $db_prune_last_run > 0
+                            ? _system_age_compact(gmdate('Y-m-d H:i:s', $db_prune_last_run))
+                            : 'never',
+  'prune_last_deleted'  => $db_prune_last_deleted,
+  'prune_last_status'   => $db_prune_last_status,
+);
 
 // Schedule + retention come from the settings table (admin-editable).
 // Compute next-run from those values rather than parsing
@@ -1127,6 +1317,14 @@ foreach ($manual_payout_tables as $_slot => $_tables) {
   if (!preg_match('/^payouts(_mm[1345]?)?$/', $_table)) continue;
   if (!preg_match('/^transactions(_mm[1345]?)?$/', $_tx_table)) continue;
   if (!preg_match('/^blocks(_mm[1345]?)?$/', $_block_table)) continue;
+  $_threshold_col = $_slot === '' ? 'ap_threshold' : 'ap_threshold_' . $_slot;
+  if (!preg_match('/^ap_threshold(_mm[1345]?)?$/', $_threshold_col)) continue;
+  $_threshold_key = $_threshold_col;
+  $_configured_cap = 0.0;
+  if (isset($config[$_threshold_key]) && is_array($config[$_threshold_key]) && isset($config[$_threshold_key]['max'])) {
+    $_configured_cap = round((float)$config[$_threshold_key]['max'], 8);
+  }
+  $_configured_cap_sql = number_format($_configured_cap, 8, '.', '');
   $_slot_sql = isset($mysqli) ? $mysqli->real_escape_string($_slot) : $_slot;
   $_confirmed_expr =
     "IFNULL(ROUND(("
@@ -1136,9 +1334,14 @@ foreach ($manual_payout_tables as $_slot => $_tables) {
     . "), 8), 0)";
   $sql = "SELECT COUNT(*) AS cnt, COUNT(DISTINCT q.account_id) AS user_count, "
        . "GROUP_CONCAT(DISTINCT q.username ORDER BY q.username SEPARATOR ', ') AS users, "
-       . "SUM(q.net_amount) AS total_amount, MIN(q.time) AS oldest, MAX(q.time) AS latest "
+       . "SUM(LEAST(q.net_amount, CASE "
+       . "  WHEN q.threshold > 0 AND (" . $_configured_cap_sql . " <= 0 OR q.threshold < " . $_configured_cap_sql . ") THEN q.threshold "
+       . "  WHEN " . $_configured_cap_sql . " > 0 THEN " . $_configured_cap_sql . " "
+       . "  ELSE q.net_amount END)) AS total_amount, "
+       . "MIN(q.time) AS oldest, MAX(q.time) AS latest "
        . "FROM ("
        . "SELECT p.id, p.account_id, a.username, p.time, "
+       . "a." . $_threshold_col . " AS threshold, "
        . "GREATEST(ROUND((" . $_confirmed_expr . "), 8), 0) AS net_amount "
        . "FROM " . $_table . " AS p "
        . "LEFT JOIN " . $accounts_table . " AS a ON a.id = p.account_id "
@@ -1220,6 +1423,7 @@ $system_status_payload = array(
   'versions'         => $mpos_versions,
   'services'         => $service_rows,
   'backup'           => $sys_backup,
+  'database'         => $sys_database,
   'cpu'              => $cpu_rows,
   'swap'             => $swap_rows,
   'swap_available'   => $swap_available_str,
@@ -1257,6 +1461,9 @@ $invitations_info     = $system_status_payload['invitations'];
 $mpos_versions        = $system_status_payload['versions'];
 $service_rows         = $system_status_payload['services'];
 $sys_backup           = $system_status_payload['backup'];
+$sys_database         = isset($system_status_payload['database'])
+                          ? $system_status_payload['database']
+                          : _system_status_empty_payload()['database'];
 $cpu_rows             = $system_status_payload['cpu'];
 $swap_rows            = $system_status_payload['swap'];
 $swap_available_str   = $system_status_payload['swap_available'];
@@ -1286,6 +1493,7 @@ $smarty->assign('SYS_INVITATIONS', $invitations_info);
 $smarty->assign('SYS_VERSIONS',    $mpos_versions);
 $smarty->assign('SYS_SERVICES', $service_rows);
 $smarty->assign('SYS_BACKUP',   $sys_backup);
+$smarty->assign('SYS_DATABASE', $sys_database);
 $smarty->assign('SYS_CPU',      $cpu_rows);
 $smarty->assign('SYS_SWAP',         $swap_rows);
 $smarty->assign('SYS_SWAP_AVAIL',   $swap_available_str);

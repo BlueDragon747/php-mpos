@@ -71,8 +71,8 @@ with the admin credentials the script printed.
 
 - System Status:
   `Admin Panel -> System Status` is the main operator page. It shows
-  services, backup state, CPU, memory, swap, disk, network traffic,
-  daemon sync/rules, wallet balances, and payout state in one place.
+  services, backup state, CPU, memory, swap, disk, DB status, network
+  traffic, daemon sync/rules, wallet balances, and payout state in one place.
 - Coin daemons:
   `SYNC` should read `SYNCED`. `RULES` reads `OK` unless the daemon is
   actively signaling a known softfork rule, for example
@@ -88,6 +88,13 @@ with the admin credentials the script printed.
   helper without a password. If disk rows show `restricted` or `-`,
   verify the helper exists, is executable, and the sudoers file was
   installed.
+- DB Status:
+  Shows estimated row counts and table sizes for the hot share table,
+  archived shares, recent summaries, blocks, and payout queues. `Prune
+  after` controls how long archived share rows are kept before the
+  scheduler deletes them in bounded batches. The hot `shares` table is
+  still rotated into `shares_archive` first; pruning only trims old
+  archive history while keeping recent block history.
 - Payout:
   Use the filter buttons to view `Pending`, `Broadcasted`,
   `Reconciled`, or `Other`. `Other` means abandoned or unknown payout
@@ -123,6 +130,9 @@ BBTC, ELT, UMO, and LIT.
 - `deploy-bundle/scripts/mainnet/` — the stage scripts themselves.
   They're short and readable; treat them as the authoritative source
   for "what gets installed where".
+- `deploy-bundle/update-mainnet.sh` — layer updater for an existing
+  mainnet pool. Use `--mpos`, `--eloipool`, `--daemons`, or `--all`
+  instead of running a full bootstrap deploy for routine updates.
 - `deploy-bundle/systemd/` — the systemd units installed on the host.
 - `cronjobs-py/README.md` — the Python scheduler's job inventory.
 

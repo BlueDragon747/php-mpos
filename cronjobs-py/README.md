@@ -164,11 +164,13 @@ python3 -m venv .venv
 ```
 
 Requirements: Python 3.10+, `php` on `$PATH` (used to evaluate the MPOS
-config), MariaDB credentials per `global.inc.php`. Apply the Wave 1
-schema migration before first run:
+config), MariaDB credentials per `global.inc.php`. Apply the deploy-bundle
+schema migrations before first run:
 
 ```bash
-mariadb mpos < ../deploy-bundle/sql/01-cronjobs-py-wave1.sql
+for migration in $(find ../deploy-bundle/sql -maxdepth 1 -type f -name '*.sql' | LC_ALL=C sort); do
+  mariadb mpos < "$migration"
+done
 ```
 
 ## Usage

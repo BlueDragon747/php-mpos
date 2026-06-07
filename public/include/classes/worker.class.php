@@ -50,6 +50,20 @@ class Worker extends Base {
    **/
   public function getAllIdleWorkers($interval=600) {
     $this->debug->append("STA " . __METHOD__, 4);
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT w.account_id AS account_id, w.id AS id, w.username AS username
+        FROM " . $this->getTableName() . " AS w
+        LEFT JOIN share_stats_recent AS s
+          ON s.username = w.username
+          AND s.last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          AND s.valid_count > 0
+        WHERE w.monitor = 1
+          AND s.username IS NULL
+      ");
+      if ($stmt && $stmt->bind_param('i', $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $result->fetch_all(MYSQLI_ASSOC);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT w.account_id AS account_id, w.id AS id, w.username AS username
       FROM " . $this->share->getTableName() . " AS s
@@ -72,6 +86,28 @@ class Worker extends Base {
    **/
   public function getWorker($id, $interval=600) {
     $this->debug->append("STA " . __METHOD__, 4);
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT w.id, w.username, w.password, w.monitor,
+          IFNULL(s.share_count, 0) AS count_all,
+          0 AS count_all_archive,
+          IFNULL(ROUND(s.valid_difficulty * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate,
+          IFNULL(ROUND(s.total_difficulty / NULLIF(s.share_count, 0), 2), 0) AS difficulty
+        FROM $this->table AS w
+        LEFT JOIN (
+          SELECT username,
+            SUM(valid_count + invalid_count) AS share_count,
+            SUM(valid_diff) AS valid_difficulty,
+            SUM(valid_diff + invalid_diff) AS total_difficulty
+          FROM share_stats_recent
+          WHERE last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          GROUP BY username
+        ) AS s ON s.username = w.username
+        WHERE w.id = ?
+      ");
+      if ($stmt && $stmt->bind_param('iii', $interval, $interval, $id) && $stmt->execute() && $result = $stmt->get_result())
+        return $result->fetch_assoc();
+    }
     $stmt = $this->mysqli->prepare("
        SELECT id, username, password, monitor,
        ( SELECT COUNT(id) FROM " . $this->share->getTableName() . " WHERE username = w.username AND time > DATE_SUB(now(), INTERVAL ? SECOND)) AS count_all,
@@ -126,6 +162,38 @@ class Worker extends Base {
         && $data = $this->memcache->getStatic(STATISTICS_ALL_WORKER_HASHRATES)) {
       if (is_array($data) && isset($data['data']) && is_array($data['data'])) {
         $smoothed_workers = $data['data'];
+      }
+    }
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT w.id, w.username, w.password, w.monitor,
+               IFNULL(s.share_count, 0) AS count_all,
+               0 AS count_all_archive,
+               IFNULL(ROUND(s.valid_difficulty * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate,
+               IFNULL(ROUND(s.total_difficulty / NULLIF(s.share_count, 0), 2), 0) AS difficulty
+        FROM $this->table AS w
+        LEFT JOIN (
+          SELECT username,
+                 SUM(valid_count + invalid_count) AS share_count,
+                 SUM(valid_diff) AS valid_difficulty,
+                 SUM(valid_diff + invalid_diff) AS total_difficulty
+          FROM share_stats_recent
+          WHERE last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          GROUP BY username
+        ) AS s ON s.username = w.username
+        WHERE w.account_id = ?");
+      if ($stmt && $stmt->bind_param('iii', $interval, $interval, $account_id) && $stmt->execute() && $result = $stmt->get_result()) {
+        $rows = $result->fetch_all(MYSQLI_ASSOC);
+        if (!empty($smoothed_workers)) {
+          foreach ($rows as &$r) {
+            $u = isset($r['username']) ? (string)$r['username'] : '';
+            if ($u !== '' && isset($smoothed_workers[$u])) {
+              $r['hashrate'] = (float)$smoothed_workers[$u];
+            }
+          }
+          unset($r);
+        }
+        return $rows;
       }
     }
     $stmt = $this->mysqli->prepare("
@@ -185,6 +253,26 @@ class Worker extends Base {
    **/
   public function getAllWorkers($iLimit=0, $interval=600, $start=0) {
     $this->debug->append("STA " . __METHOD__, 4);
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT w.id, w.username, w.password, w.monitor,
+          IFNULL(w.difficulty, 0) AS difficulty,
+          IFNULL(ROUND(s.valid_difficulty * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate,
+          IFNULL(ROUND(s.total_difficulty / NULLIF(s.share_count, 0), 2), 0) AS avg_difficulty
+        FROM $this->table AS w
+        LEFT JOIN (
+          SELECT username,
+                 SUM(valid_count + invalid_count) AS share_count,
+                 SUM(valid_diff) AS valid_difficulty,
+                 SUM(valid_diff + invalid_diff) AS total_difficulty
+          FROM share_stats_recent
+          WHERE last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          GROUP BY username
+        ) AS s ON s.username = w.username
+        ORDER BY hashrate DESC LIMIT ?,?");
+      if ($stmt && $stmt->bind_param('iiii', $interval, $interval, $start, $iLimit) && $stmt->execute() && $result = $stmt->get_result())
+        return $result->fetch_all(MYSQLI_ASSOC);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT id, username, password, monitor,
       IFNULL(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0) AS difficulty,
@@ -237,6 +325,15 @@ class Worker extends Base {
   public function getCountAllActiveWorkers($interval=120) {
     $this->debug->append("STA " . __METHOD__, 4);
     if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT COUNT(DISTINCT(username)) AS total
+        FROM share_stats_recent
+        WHERE valid_count > 0
+          AND last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)");
+      if ($stmt && $stmt->bind_param('i', $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setCache(__FUNCTION__, $result->fetch_object()->total);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT COUNT(DISTINCT(username)) AS total
       FROM "  . $this->share->getTableName() . "

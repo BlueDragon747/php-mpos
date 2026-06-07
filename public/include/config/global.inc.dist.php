@@ -141,13 +141,13 @@ $config['ap_threshold_mm']['min'] = 1;
 $config['ap_threshold_mm']['max'] = 999999;
 
 $config['ap_threshold_mm1']['min'] = 0.05;
-$config['ap_threshold_mm1']['max'] = 9999;
+$config['ap_threshold_mm1']['max'] = 25;
 
 $config['ap_threshold_mm2']['min'] = 0.1;
 $config['ap_threshold_mm2']['max'] = 9999;
 
 $config['ap_threshold_mm3']['min'] = 1;
-$config['ap_threshold_mm3']['max'] = 9999;
+$config['ap_threshold_mm3']['max'] = 1000;
 
 $config['ap_threshold_mm4']['min'] = 0.1;
 $config['ap_threshold_mm4']['max'] = 9999;

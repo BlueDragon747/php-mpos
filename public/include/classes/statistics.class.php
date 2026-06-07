@@ -137,7 +137,7 @@ class Statistics extends Base {
         a.is_anonymous AS is_anonymous,
         ROUND((difficulty * POW(2, 32 - " . $this->config['target_bits'] . ")) / POW(2, (" . $this->config['difficulty'] . " -16)), 0) AS estshares
       FROM " . $this->block->getTableName() . " AS b
-      LEFT JOIN " . $this->user->getTableName() . " AS a 
+      LEFT JOIN " . $this->user->getTableName() . " AS a
       ON b.account_id = a.id
       WHERE b.height <= ?
       ORDER BY height DESC LIMIT ?");
@@ -159,10 +159,10 @@ class Statistics extends Base {
         a.id AS account_id,
         a.username AS finder,
         a.is_anonymous AS is_anonymous,
-        COUNT(b.id) AS solvedblocks, 
+        COUNT(b.id) AS solvedblocks,
         SUM(b.amount) AS generatedcoins
       FROM " . $this->block->getTableName() . " AS b
-      LEFT JOIN " . $this->user->getTableName() . " AS a 
+      LEFT JOIN " . $this->user->getTableName() . " AS a
       ON b.account_id = a.id
       WHERE confirmations > 0
       GROUP BY a.id, a.username, a.is_anonymous
@@ -171,7 +171,7 @@ class Statistics extends Base {
       return $this->memcache->setCache(__FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
-  
+
   /**
    * Get SUM of blocks found and generated Coins for each worker
    * @param limit int Last limit blocks
@@ -183,7 +183,7 @@ class Statistics extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
       	worker_name AS finder,
-        COUNT(id) AS solvedblocks, 
+        COUNT(id) AS solvedblocks,
         SUM(amount) AS generatedcoins
       FROM " . $this->block->getTableName() . "
       WHERE account_id = ? AND worker_name != 'unknown'
@@ -193,7 +193,7 @@ class Statistics extends Base {
       return $this->memcache->setCache(__FUNCTION__ . $account_id . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
-  
+
   /**
    * Currently the only function writing to the database
    * Stored per block user statistics of valid and invalid shares
@@ -228,6 +228,14 @@ class Statistics extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     $interval = $this->resolveWindow($interval);
     if ($this->getGetCache() && $data = $this->memcache->getStatic(__FUNCTION__)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT IFNULL(ROUND(SUM(valid_diff) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
+        FROM share_stats_recent
+        WHERE last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)");
+      if ($stmt && $stmt->bind_param('ii', $interval, $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setStaticCache(__FUNCTION__, $result->fetch_object()->hashrate);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT
       (
@@ -257,6 +265,14 @@ class Statistics extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     $interval = $this->resolveWindow($interval);
     if ($data = $this->memcache->getStatic(__FUNCTION__)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT IFNULL(ROUND(SUM(valid_count) / ?, 2), 0) AS sharerate
+        FROM share_stats_recent
+        WHERE last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)");
+      if ($stmt && $stmt->bind_param('ii', $interval, $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setStaticCache(__FUNCTION__, $result->fetch_object()->sharerate);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT
       (
@@ -303,7 +319,7 @@ class Statistics extends Base {
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS valid,
         ROUND(IFNULL(SUM(IF(our_result='N', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS invalid
       FROM " . $this->share->getTableName() . "
-      WHERE UNIX_TIMESTAMP(time) > IFNULL((SELECT MAX(time) FROM " . $this->block->getTableName() . "), 0)");
+      WHERE time > FROM_UNIXTIME(IFNULL((SELECT MAX(time) FROM " . $this->block->getTableName() . "), 0))");
     if ( $this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result() )
       return $this->memcache->setCache(STATISTICS_ROUND_SHARES, $result->fetch_assoc());
     return $this->sqlError();
@@ -331,12 +347,8 @@ class Statistics extends Base {
         u.username AS username
       FROM " . $this->share->getTableName() . " AS s,
            " . $this->user->getTableName() . " AS u
-      WHERE u.username = SUBSTRING_INDEX( s.username, '.', 1 )
-        AND UNIX_TIMESTAMP(s.time) > IFNULL(
-          (
-            SELECT MAX(b.time)
-            FROM " . $this->block->getTableName() . " AS b
-          ) ,0 )
+      WHERE u.username = s.username_base
+        AND s.time > FROM_UNIXTIME(IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b), 0))
         AND s.id > ?
         GROUP BY u.id");
     if ($stmt && $stmt->bind_param('i', $data['share_id']) && $stmt->execute() && $result = $stmt->get_result()) {
@@ -379,8 +391,8 @@ class Statistics extends Base {
         ROUND(IFNULL(SUM(IF(our_result='N', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS invalid
       FROM " . $this->share->getTableName() . "
       WHERE username LIKE ?
-        AND UNIX_TIMESTAMP(time) >IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b),0)");  
-    $username = $username . ".%";   
+        AND time > FROM_UNIXTIME(IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b),0))");
+    $username = $username . ".%";
    if ($stmt && $stmt->bind_param("s", $username) && $stmt->execute() && $result = $stmt->get_result())
       return $this->memcache->setCache(__FUNCTION__ . $account_id, $result->fetch_assoc());
     return $this->sqlError();
@@ -463,6 +475,30 @@ class Statistics extends Base {
   public function getAllUserMiningStats($interval=null) {
     $this->debug->append("STA " . __METHOD__, 4);
     $interval = $this->resolveWindow($interval);
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT
+          a.id AS id,
+          a.username AS account,
+          IFNULL(ROUND(SUM(s.valid_diff) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000, 2), 0) AS hashrate,
+          ROUND(SUM(s.valid_count) / ?, 2) AS sharerate,
+          IFNULL(SUM(s.valid_diff) / NULLIF(SUM(s.valid_count), 0), 0) AS avgsharediff
+        FROM share_stats_recent AS s
+        LEFT JOIN " . $this->user->getTableName() . " AS a
+          ON s.username_base = a.username
+        WHERE s.last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          AND s.valid_count > 0
+          AND a.id IS NOT NULL
+        GROUP BY account
+        ORDER BY hashrate DESC");
+      if ($stmt && $stmt->bind_param("iii", $interval, $interval, $interval) && $stmt->execute() && $result = $stmt->get_result() ) {
+        $aData = array();
+        while ($row = $result->fetch_assoc()) {
+          $aData['data'][$row['id']] = $row;
+        }
+        return $this->memcache->setStaticCache(STATISTICS_ALL_USER_HASHRATES, $aData, 600);
+      }
+    }
     $stmt = $this->mysqli->prepare("
       SELECT
         a.id AS id,
@@ -519,6 +555,17 @@ class Statistics extends Base {
       return 0;
     }
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $username_like = $username . ".%";
+      $stmt = $this->mysqli->prepare("
+        SELECT IFNULL(ROUND(SUM(valid_diff) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
+        FROM share_stats_recent
+        WHERE username LIKE ?
+          AND last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          AND valid_count > 0");
+      if ($stmt && $stmt->bind_param("isi", $interval, $username_like, $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->hashrate);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT
         IFNULL(ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
@@ -537,7 +584,7 @@ class Statistics extends Base {
           shares_archive
         WHERE username LIKE ?
           AND time > DATE_SUB(now(), INTERVAL ? SECOND)
-          AND our_result = 'Y') AS temp");   
+          AND our_result = 'Y') AS temp");
     $username = $username . ".%";
     if ($this->checkStmt($stmt) && $stmt->bind_param("isisi", $interval, $username, $interval, $username, $interval) && $stmt->execute() && $result = $stmt->get_result() )
       return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->hashrate);
@@ -578,6 +625,17 @@ class Statistics extends Base {
       return 0;
     }
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $username_like = $username . ".%";
+      $stmt = $this->mysqli->prepare("
+        SELECT IFNULL(SUM(valid_diff) / NULLIF(SUM(valid_count), 0), 0) AS avgsharediff
+        FROM share_stats_recent
+        WHERE username LIKE ?
+          AND last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          AND valid_count > 0");
+      if ($stmt && $stmt->bind_param("si", $username_like, $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->avgsharediff);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT
         IFNULL(AVG(IF(difficulty=0, pow(2, (" . $this->config['difficulty'] . " - 16)), difficulty)), 0) AS avgsharediff,
@@ -596,7 +654,7 @@ class Statistics extends Base {
   /**
    * Get Shares per x interval by user
    * @param username string username
-   * @param $account_id int account id   
+   * @param $account_id int account id
    * @return data integer Current Sharerate in shares/s
    **/
   public function getUserSharerate($username, $account_id=NULL, $interval=null) {
@@ -610,6 +668,17 @@ class Statistics extends Base {
       return 0;
     }
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $username_like = $username . ".%";
+      $stmt = $this->mysqli->prepare("
+        SELECT IFNULL(SUM(valid_count) / ?, 0) AS sharerate
+        FROM share_stats_recent
+        WHERE username LIKE ?
+          AND last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          AND valid_count > 0");
+      if ($stmt && $stmt->bind_param("isi", $interval, $username_like, $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setCache(__FUNCTION__ . $account_id, (float)$result->fetch_object()->sharerate);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT
         IFNULL(COUNT(*) / ?, 0) AS sharerate
@@ -645,10 +714,20 @@ class Statistics extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     $interval = $this->resolveWindow($interval);
     if ($data = $this->memcache->get(__FUNCTION__ . $worker_id)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT IFNULL(ROUND(SUM(valid_diff) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
+        FROM share_stats_recent
+        WHERE username = ?
+          AND last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)
+          AND valid_count > 0");
+      if ($stmt && $stmt->bind_param("isi", $interval, $workername, $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setCache(__FUNCTION__ . $worker_id, (float)$result->fetch_object()->hashrate);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT IFNULL(ROUND(SUM(IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty)) * POW(2, " . $this->config['target_bits'] . ") / ? / 1000), 0) AS hashrate
-      FROM " . $this->share->getTableName() . " AS
-      WHERE username = '?'
+      FROM " . $this->share->getTableName() . "
+      WHERE username = ?
         AND our_result = 'Y'
         AND time > DATE_SUB(now(), INTERVAL ? SECOND)");
     if ($this->checkStmt($stmt) && $stmt->bind_param("isi", $interval, $workername, $interval) && $stmt->execute() && $result = $stmt->get_result())
@@ -701,7 +780,7 @@ class Statistics extends Base {
           ROUND(IFNULL(SUM(IF(s.difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), s.difficulty)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS shares
         FROM " . $this->share->getTableName() . " AS s
         LEFT JOIN " . $this->user->getTableName() . " AS a
-        ON SUBSTRING_INDEX( s.username, '.', 1 ) = a.username
+        ON s.username_base = a.username
         WHERE our_result = 'Y'
         GROUP BY account
         ORDER BY shares DESC
@@ -713,6 +792,23 @@ class Statistics extends Base {
 
     case 'hashes':
       if ($this->getGetCache() && $data = $this->memcache->getStatic(__FUNCTION__ . $type . $limit)) return $data;
+      if ($this->shareStatsRecentReady()) {
+        $stmt = $this->mysqli->prepare("
+          SELECT
+            a.username AS account,
+            a.donate_percent AS donate_percent,
+            a.is_anonymous AS is_anonymous,
+            IFNULL(ROUND(SUM(s.valid_diff) * POW(2, " . $this->config['target_bits'] . ") / 600 / 1000, 2), 0) AS hashrate
+          FROM share_stats_recent AS s
+          LEFT JOIN " . $this->user->getTableName() . " AS a
+            ON s.username_base = a.username
+          WHERE s.last_share_time > DATE_SUB(now(), INTERVAL 10 MINUTE)
+            AND s.valid_count > 0
+          GROUP BY account
+          ORDER BY hashrate DESC LIMIT ?");
+        if ($stmt && $stmt->bind_param("i", $limit) && $stmt->execute() && $result = $stmt->get_result())
+          return $this->memcache->setStaticCache(__FUNCTION__ . $type . $limit, $result->fetch_all(MYSQLI_ASSOC));
+      }
       $stmt = $this->mysqli->prepare("
          SELECT
           a.username AS account,
@@ -778,7 +874,7 @@ class Statistics extends Base {
   }
 
   /**
-   * get Hourly hashrate for the pool 
+   * get Hourly hashrate for the pool
    * @param none
    * @return data array NOT FINISHED YET
    **/
@@ -869,12 +965,12 @@ class Statistics extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     if ($data = $this->memcache->get(__FUNCTION__ . $hour)) return $data;
     $stmt = $this->mysqli->prepare("
-      SELECT 
-      IFNULL(COUNT(id), 0) as count, 
+      SELECT
+      IFNULL(COUNT(id), 0) as count,
       IFNULL(AVG(difficulty), 0) as average,
       IFNULL(ROUND(SUM((POW(2, ( 32 - " . $this->config['target_bits'] . " )) * difficulty) / POW(2, (" . $this->config['difficulty'] . " -16))), 0), 0) AS expected,
       IFNULL(ROUND(SUM(shares)), 0) as shares,
-      IFNULL(SUM(amount), 0) as rewards 
+      IFNULL(SUM(amount), 0) as rewards
       FROM " . $this->block->getTableName() . "
       WHERE FROM_UNIXTIME(time) > DATE_SUB(now(), INTERVAL ? HOUR)
       AND confirmations >= 1");
@@ -916,25 +1012,25 @@ class Statistics extends Base {
       $dNetworkHashrate = 1;
       $dDifficulty = 1;
     }
-    
+
     // Debug log the raw values
     $this->debug->append("DEBUG: getNetworkExpectedTimePerBlock - hashrate=$dNetworkHashrate, difficulty=$dDifficulty", 4);
-    
+
     // Ensure hashrate is a positive number
     if (!is_numeric($dNetworkHashrate) || $dNetworkHashrate <= 0) {
       $this->debug->append("WARNING: Invalid network hashrate: $dNetworkHashrate, using cointarget", 2);
       return $this->memcache->setCache($cacheKey, $this->config['cointarget']);
     }
-    
+
     // Ensure difficulty is positive
     if (!is_numeric($dDifficulty) || $dDifficulty <= 0) {
       $this->debug->append("WARNING: Invalid difficulty: $dDifficulty, using cointarget", 2);
       return $this->memcache->setCache($cacheKey, $this->config['cointarget']);
     }
-    
+
     // Calculate expected time
     $estTime = pow(2, 32) * $dDifficulty / $dNetworkHashrate;
-    
+
     // Protect against negative or zero values
     if (!is_numeric($estTime) || $estTime <= 0) {
       $this->debug->append("WARNING: Invalid EstTimePerBlock calculated: $estTime (difficulty: $dDifficulty, hashrate: $dNetworkHashrate), using cointarget", 2);
@@ -1015,6 +1111,15 @@ class Statistics extends Base {
   public function getCountAllActiveUsers($interval=120) {
     $this->debug->append("STA " . __METHOD__, 4);
     if ($data = $this->memcache->get(__FUNCTION__)) return $data;
+    if ($this->shareStatsRecentReady()) {
+      $stmt = $this->mysqli->prepare("
+        SELECT COUNT(DISTINCT(SUBSTRING_INDEX(username, '.', 1))) AS total
+        FROM share_stats_recent
+        WHERE valid_count > 0
+          AND last_share_time > DATE_SUB(now(), INTERVAL ? SECOND)");
+      if ($stmt && $stmt->bind_param('i', $interval) && $stmt->execute() && $result = $stmt->get_result())
+        return $this->memcache->setCache(__FUNCTION__, $result->fetch_object()->total);
+    }
     $stmt = $this->mysqli->prepare("
       SELECT COUNT(DISTINCT(SUBSTRING_INDEX( `username` , '.', 1 ))) AS total
       FROM "  . $this->share->getTableName() . "

@@ -1,4 +1,4 @@
-<?php      
+<?php
 $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 
@@ -143,7 +143,7 @@ class Statistics_mm4 extends Base {
         a.is_anonymous AS is_anonymous,
         ROUND((difficulty * POW(2, 32 - " . $this->config['target_bits'] . ")) / POW(2, (" . $this->config['difficulty'] . " -16)), 0) AS estshares
       FROM " . $this->block->getTableName() . " AS b
-      LEFT JOIN " . $this->user->getTableName() . " AS a 
+      LEFT JOIN " . $this->user->getTableName() . " AS a
       ON b.account_id = a.id
       WHERE b.height <= ?
       ORDER BY height DESC LIMIT ?");
@@ -165,10 +165,10 @@ class Statistics_mm4 extends Base {
         a.id AS account_id,
         a.username AS finder,
         a.is_anonymous,
-        COUNT(b.id) AS solvedblocks, 
+        COUNT(b.id) AS solvedblocks,
         SUM(b.amount) AS generatedcoins
       FROM " . $this->block->getTableName() . " AS b
-      LEFT JOIN " . $this->user->getTableName() . " AS a 
+      LEFT JOIN " . $this->user->getTableName() . " AS a
       ON b.account_id = a.id
       WHERE confirmations > 0
       GROUP BY a.id, a.username, a.is_anonymous
@@ -177,7 +177,7 @@ class Statistics_mm4 extends Base {
       return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
-  
+
   /**
    * Get SUM of blocks found and generated Coins for each worker
    * @param limit int Last limit blocks
@@ -189,7 +189,7 @@ class Statistics_mm4 extends Base {
     $stmt = $this->mysqli->prepare("
       SELECT
        worker_name AS finder,
-        COUNT(id) AS solvedblocks, 
+        COUNT(id) AS solvedblocks,
         SUM(amount) AS generatedcoins
       FROM " . $this->block->getTableName() . "
       WHERE account_id = ? AND worker_name != 'unknown'
@@ -199,7 +199,7 @@ class Statistics_mm4 extends Base {
       return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id . $limit, $result->fetch_all(MYSQLI_ASSOC), 5);
     return $this->sqlError();
   }
-  
+
   /**
    * Currently the only function writing to the database
    * Stored per block user statistics of valid and invalid shares
@@ -307,7 +307,7 @@ class Statistics_mm4 extends Base {
         ROUND(IFNULL(SUM(IF(our_result='Y', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS valid,
         ROUND(IFNULL(SUM(IF(our_result='N', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS invalid
       FROM shares
-      WHERE UNIX_TIMESTAMP(time) > IFNULL((SELECT MAX(time) FROM " . $this->block->getTableName() . "), 0)");
+      WHERE time > FROM_UNIXTIME(IFNULL((SELECT MAX(time) FROM " . $this->block->getTableName() . "), 0))");
     if ( $this->checkStmt($stmt) && $stmt->execute() && $result = $stmt->get_result() )
       return $this->memcache->setCache(STATISTICS_ROUND_SHARES, $result->fetch_assoc());
     return $this->sqlError();
@@ -336,11 +336,7 @@ class Statistics_mm4 extends Base {
       FROM shares AS s,
            " . $this->user->getTableName() . " AS u
       WHERE u.username = SUBSTRING_INDEX( s.username, '.', 1 )
-        AND UNIX_TIMESTAMP(s.time) > IFNULL(
-          (
-            SELECT MAX(b.time)
-            FROM " . $this->block->getTableName() . " AS b
-          ) ,0 )
+        AND s.time > FROM_UNIXTIME(IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b), 0))
         AND s.id > ?
         GROUP BY u.id");
     if ($stmt && $stmt->bind_param('i', $data['share_id']) && $stmt->execute() && $result = $stmt->get_result()) {
@@ -383,8 +379,8 @@ class Statistics_mm4 extends Base {
         ROUND(IFNULL(SUM(IF(our_result='N', IF(difficulty=0, POW(2, (" . $this->config['difficulty'] . " - 16)), difficulty), 0)), 0) / POW(2, (" . $this->config['difficulty'] . " - 16)), 0) AS invalid
       FROM shares
       WHERE username LIKE ?
-        AND UNIX_TIMESTAMP(time) >IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b),0)");  
-    $username = $username . ".%";   
+        AND time > FROM_UNIXTIME(IFNULL((SELECT MAX(b.time) FROM " . $this->block->getTableName() . " AS b),0))");
+    $username = $username . ".%";
    if ($stmt && $stmt->bind_param("s", $username) && $stmt->execute() && $result = $stmt->get_result())
       return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, $result->fetch_assoc());
     return $this->sqlError();
@@ -539,7 +535,7 @@ class Statistics_mm4 extends Base {
           shares_archive
         WHERE username LIKE ?
           AND time > DATE_SUB(now(), INTERVAL ? SECOND)
-          AND our_result = 'Y') AS temp");   
+          AND our_result = 'Y') AS temp");
     $username = $username . ".%";
     if ($this->checkStmt($stmt) && $stmt->bind_param("isisi", $interval, $username, $interval, $username, $interval) && $stmt->execute() && $result = $stmt->get_result() )
       return $this->memcache->setCache(get_class($this) . __FUNCTION__ . $account_id, (float)$result->fetch_object()->hashrate);
@@ -597,7 +593,7 @@ class Statistics_mm4 extends Base {
   /**
    * Get Shares per x interval by user
    * @param username string username
-   * @param $account_id int account id   
+   * @param $account_id int account id
    * @return data integer Current Sharerate in shares/s
    **/
   public function getUserSharerate($username, $account_id=NULL, $interval=180) {
@@ -776,7 +772,7 @@ class Statistics_mm4 extends Base {
   }
 
   /**
-   * get Hourly hashrate for the pool 
+   * get Hourly hashrate for the pool
    * @param none
    * @return data array NOT FINISHED YET
    **/
@@ -869,12 +865,12 @@ class Statistics_mm4 extends Base {
     $this->debug->append("STA " . __METHOD__, 4);
     if ($data = $this->memcache->get(get_class($this) . __FUNCTION__ . $hour)) return $data;
     $stmt = $this->mysqli->prepare("
-      SELECT 
-      IFNULL(COUNT(id), 0) as count, 
+      SELECT
+      IFNULL(COUNT(id), 0) as count,
       IFNULL(AVG(difficulty), 0) as average,
       IFNULL(ROUND(SUM((POW(2, ( 32 - " . $this->config['target_bits'] . " )) * difficulty) / POW(2, (" . $this->config['difficulty'] . " -16))), 0), 0) AS expected,
       IFNULL(ROUND(SUM(shares)), 0) as shares,
-      IFNULL(SUM(amount), 0) as rewards 
+      IFNULL(SUM(amount), 0) as rewards
       FROM " . $this->block->getTableName() . "
       WHERE FROM_UNIXTIME(time) > DATE_SUB(now(), INTERVAL ? HOUR)
       AND confirmations >= 1");
@@ -899,7 +895,7 @@ class Statistics_mm4 extends Base {
   public function getNetworkExpectedTimePerBlock_mm4(){
     // Create unique cache key based on bitcoin wrapper instance
     $cacheKey = get_class($this) . __FUNCTION__ . '_' . md5(spl_object_hash($this->bitcoin));
-    
+
     // Check cache - if negative, delete and recalculate
     if ($data = $this->memcache->get($cacheKey)) {
       if ($data < 0) {
@@ -917,28 +913,28 @@ class Statistics_mm4 extends Base {
       $dNetworkHashrate = 1;
       $dDifficulty = 1;
     }
-    
+
     // Debug logging for raw values
     $this->debug->append("DEBUG: MM4 - Raw hashrate: " . var_export($dNetworkHashrate, true) . ", difficulty: " . var_export($dDifficulty, true), 3);
-    
+
     // Validate hashrate is numeric and positive
     if (!is_numeric($dNetworkHashrate) || $dNetworkHashrate <= 0) {
       $this->debug->append("WARNING: MM4 - Invalid network hashrate: " . var_export($dNetworkHashrate, true) . ", using cointarget_mm4 fallback", 2);
       return $this->memcache->setCache($cacheKey, $this->config['cointarget_mm4']);
     }
-    
+
     // Validate difficulty is numeric and positive
     if (!is_numeric($dDifficulty) || $dDifficulty <= 0) {
       $this->debug->append("WARNING: MM4 - Invalid difficulty: " . var_export($dDifficulty, true) . ", using cointarget_mm4 fallback", 2);
       return $this->memcache->setCache($cacheKey, $this->config['cointarget_mm4']);
     }
-    
+
     // Calculate expected time
     $estTime = pow(2, 32) * $dDifficulty / $dNetworkHashrate;
-    
+
     // Debug logging for calculated value
     $this->debug->append("DEBUG: MM4 - Calculated estTime: " . var_export($estTime, true), 3);
-    
+
     // Validate the calculated estTime is numeric and positive before caching
     if (!is_numeric($estTime) || $estTime <= 0) {
       $this->debug->append("WARNING: MM4 - Invalid/negative EstTimePerBlock calculated: " . var_export($estTime, true) . ", using cointarget_mm4 fallback", 2);

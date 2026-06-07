@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS transactions_outbox (
   account_id INT UNSIGNED NOT NULL,
   coin_address VARCHAR(255) NOT NULL,
   amount DECIMAL(20,8) NOT NULL,
+  archive_on_reconcile TINYINT(1) NOT NULL DEFAULT 1,
   wallet_comment VARCHAR(64) NOT NULL,
   status ENUM('pending','broadcast','indeterminate','reconciled','abandoned')
     NOT NULL DEFAULT 'pending',
@@ -49,6 +50,10 @@ CREATE TABLE IF NOT EXISTS transactions_outbox (
   KEY idx_status (status, created_at),
   KEY idx_slot_account (slot, account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE transactions_outbox
+  ADD COLUMN IF NOT EXISTS archive_on_reconcile TINYINT(1) NOT NULL DEFAULT 1
+  AFTER amount;
 
 -- ---------------------------------------------------------------------
 -- 2. cronjobs_py_accounting: guard table for credit/fee/donation/bonus
