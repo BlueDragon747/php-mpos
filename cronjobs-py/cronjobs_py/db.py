@@ -1105,9 +1105,20 @@ class Db:
         self._share_stats_recent_ready_cache[interval] = ready
         return ready
 
-    def _share_stats_recent_has_rows(self) -> bool:
-        row = self.fetchone("SELECT 1 AS found FROM share_stats_recent LIMIT 1")
-        return row is not None
+    def _share_stats_recent_started(self) -> bool:
+        """True once summary processing has advanced at least one share id.
+
+        During large backfills the summary can process old shares that are
+        immediately outside the recent retention window. In that state the
+        table may have zero rows, but falling back to canonical `shares`
+        scans would recreate the DB pressure the summary table is meant to
+        avoid. Treat a non-zero cursor as an initialized summary path.
+        """
+        return self.get_setting_int(
+            "share_stats_recent_last_share_id",
+            default=0,
+            floor=0,
+        ) > 0
 
     def _stats_current_hashrate_legacy(self, *, target_bits: int,
                                        difficulty_const: int,
@@ -1155,7 +1166,7 @@ class Db:
         if row and (
             self._share_stats_recent_ready(interval=interval)
             or int(row.get("rows_seen") or 0) > 0
-            or self._share_stats_recent_has_rows()
+            or self._share_stats_recent_started()
         ):
             return float(row.get("hashrate") or 0.0)
         return self._stats_current_hashrate_legacy(
@@ -1175,7 +1186,7 @@ class Db:
         if (
             self._share_stats_recent_ready(interval=interval)
             or int((row or {}).get("n") or 0) > 0
-            or self._share_stats_recent_has_rows()
+            or self._share_stats_recent_started()
         ):
             return int((row or {}).get("n") or 0)
         row = self.fetchone(
@@ -1229,7 +1240,7 @@ class Db:
                 r["donate_percent"] = float(r.get("donate_percent") or 0)
                 r["is_anonymous"] = int(r.get("is_anonymous") or 0)
             return rows
-        if self._share_stats_recent_has_rows():
+        if self._share_stats_recent_started():
             return []
 
         sql = (
@@ -1274,7 +1285,7 @@ class Db:
         if (
             self._share_stats_recent_ready(interval=interval)
             or rows
-            or self._share_stats_recent_has_rows()
+            or self._share_stats_recent_started()
         ):
             for r in rows:
                 r["hashrate"] = float(r.get("hashrate") or 0.0)
@@ -1331,7 +1342,7 @@ class Db:
         if (
             self._share_stats_recent_ready(interval=interval)
             or rows
-            or self._share_stats_recent_has_rows()
+            or self._share_stats_recent_started()
         ):
             return [{
                 "worker": str(r.get("worker") or ""),
@@ -1385,7 +1396,7 @@ class Db:
         if (
             self._share_stats_recent_ready(interval=interval)
             or rows
-            or self._share_stats_recent_has_rows()
+            or self._share_stats_recent_started()
         ):
             for r in rows:
                 r["id"] = int(r.get("id") or 0)

@@ -278,6 +278,69 @@ def test_stats_helpers_do_not_fallback_when_summary_window_is_empty(fresh_db):
     assert fresh_db.stats_per_user_shares(difficulty_const=21) == []
 
 
+def test_stats_helpers_do_not_fallback_when_summary_started_but_pruned(fresh_db):
+    insert_account(fresh_db, username="miner", account_id=1)
+    insert_share(
+        fresh_db,
+        share_id=1,
+        username="miner.rig0",
+        difficulty=32,
+        our_result="Y",
+        time_offset=7200,
+    )
+    assert fresh_db.refresh_share_stats_recent(
+        difficulty_const=21,
+        retain_seconds=60,
+        batch_size=1000,
+        max_batches=10,
+    ) == 1
+    assert int(fresh_db.get_setting("share_stats_recent_last_share_id") or 0) == 1
+    assert int(
+        fresh_db.fetchone("SELECT COUNT(*) AS n FROM share_stats_recent")["n"]
+    ) == 0
+    fresh_db.set_setting("share_stats_recent_caught_up", "0")
+    insert_block(
+        fresh_db,
+        block_id=1,
+        height=100,
+        blockhash="block-100",
+        amount=50.0,
+        share_id=1,
+    )
+    fresh_db.execute("UPDATE blocks SET time = UNIX_TIMESTAMP() - 60")
+    insert_share(
+        fresh_db,
+        share_id=2,
+        username="miner.rig0",
+        difficulty=512,
+        our_result="Y",
+        time_offset=1,
+    )
+
+    assert fresh_db.stats_current_hashrate(
+        target_bits=32,
+        difficulty_const=21,
+        interval=30,
+    ) == 0.0
+    assert fresh_db.stats_active_workers(interval=30) == 0
+    assert fresh_db.stats_top_contributors(
+        target_bits=32,
+        difficulty_const=21,
+        interval=30,
+    ) == []
+    assert fresh_db.stats_per_worker_mining(
+        target_bits=32,
+        difficulty_const=21,
+        interval=30,
+    ) == []
+    assert fresh_db.stats_per_user_mining(
+        target_bits=32,
+        difficulty_const=21,
+        interval=30,
+    ) == []
+    assert fresh_db.stats_per_user_shares(difficulty_const=21) == []
+
+
 def test_pool_worker_difficulty_zeroes_stale_by_id_range(fresh_db):
     insert_account(fresh_db, username="miner", account_id=1)
     with fresh_db.cursor() as cur:

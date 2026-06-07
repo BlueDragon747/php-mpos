@@ -36,6 +36,19 @@ CREATE INDEX IF NOT EXISTS username_last_share_time
 CREATE INDEX IF NOT EXISTS username_base_last_share_time
   ON share_stats_recent (username_base, last_share_time);
 
+-- Existing pools created before the MariaDB username_base optimization need
+-- the generated columns too; fresh installs already get them from
+-- sql/database_blank.sql.
+ALTER TABLE shares
+  ADD COLUMN IF NOT EXISTS username_base varchar(120)
+    GENERATED ALWAYS AS (substring_index(`username`,'.',1)) STORED
+    AFTER username;
+
+ALTER TABLE shares_archive
+  ADD COLUMN IF NOT EXISTS username_base varchar(120)
+    GENERATED ALWAYS AS (substring_index(`username`,'.',1)) VIRTUAL
+    AFTER username;
+
 -- Go-pool stats hot-path controls. Existing operator values are kept.
 INSERT IGNORE INTO settings (name, value)
   VALUES ('pool_worker_difficulty_update_seconds', '600');
@@ -49,6 +62,12 @@ CREATE INDEX IF NOT EXISTS result_time_user_diff
   ON shares (our_result, time, username, difficulty);
 CREATE INDEX IF NOT EXISTS upstream_time_id
   ON shares (upstream_result, time, id);
+CREATE INDEX IF NOT EXISTS idx_time_result
+  ON shares (time, our_result);
+CREATE INDEX IF NOT EXISTS idx_id_result
+  ON shares (id, our_result);
+CREATE INDEX IF NOT EXISTS idx_username_base_result_time
+  ON shares (username_base, our_result, time);
 CREATE INDEX IF NOT EXISTS result_time_user_diff
   ON shares_mm (our_result, time, username, difficulty);
 CREATE INDEX IF NOT EXISTS upstream_time_id
@@ -82,6 +101,10 @@ CREATE INDEX IF NOT EXISTS result_time_user_diff
   ON shares_archive (our_result, time, username, difficulty, share_id);
 CREATE INDEX IF NOT EXISTS upstream_time_share
   ON shares_archive (upstream_result, time, share_id);
+CREATE INDEX IF NOT EXISTS idx_username_base_result_time
+  ON shares_archive (username_base, our_result, time);
+CREATE INDEX IF NOT EXISTS idx_share_id_result
+  ON shares_archive (share_id, our_result);
 CREATE INDEX IF NOT EXISTS result_time_user_diff
   ON shares_archive_mm (our_result, time, username, difficulty, share_id);
 CREATE INDEX IF NOT EXISTS upstream_time_share
