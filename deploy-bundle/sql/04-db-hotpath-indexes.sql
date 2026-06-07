@@ -56,6 +56,18 @@ INSERT IGNORE INTO settings (name, value)
   VALUES ('pool_worker_difficulty_zero_update_seconds', '600');
 INSERT IGNORE INTO settings (name, value)
   VALUES ('pool_worker_difficulty_zero_batch_size', '500');
+-- Default to 180 days so long-running pools keep useful audit history while
+-- still bounding archive growth through hourly batched pruning.
+INSERT IGNORE INTO settings (name, value)
+  VALUES ('db_prune_enabled', '1');
+INSERT IGNORE INTO settings (name, value)
+  VALUES ('db_prune_after_days', '180');
+INSERT IGNORE INTO settings (name, value)
+  VALUES ('db_prune_keep_recent_blocks', '100');
+INSERT IGNORE INTO settings (name, value)
+  VALUES ('db_prune_batch_size', '50000');
+INSERT IGNORE INTO settings (name, value)
+  VALUES ('db_prune_max_batches', '4');
 
 -- Share stats and block-attribution reads.
 CREATE INDEX IF NOT EXISTS result_time_user_diff

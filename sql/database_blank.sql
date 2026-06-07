@@ -506,6 +506,14 @@ INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('backups_enabled', '1');
 INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('pool_worker_difficulty_update_seconds', '600');
 INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('pool_worker_difficulty_zero_update_seconds', '600');
 INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('pool_worker_difficulty_zero_batch_size', '500');
+-- Database archive pruning is controlled from Admin -> System Status.
+-- The 180-day default keeps useful audit history while the scheduler deletes
+-- old shares_archive rows in bounded batches on long-running pools.
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('db_prune_enabled', '1');
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('db_prune_after_days', '180');
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('db_prune_keep_recent_blocks', '100');
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('db_prune_batch_size', '50000');
+INSERT IGNORE INTO `settings` (`name`, `value`) VALUES ('db_prune_max_batches', '4');
 -- Fresh installs ship with payouts + contact form OFF by default.
 -- Operator opts in via Admin ? Settings once they've configured wallet
 -- credentials / SMTP. Prevents auto-payouts from firing on a half-

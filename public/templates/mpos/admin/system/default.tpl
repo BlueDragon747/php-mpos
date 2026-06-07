@@ -54,7 +54,16 @@
   }
   .bsx-system-page .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .bsx-system-page .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-  .bsx-system-page .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; }
+  .bsx-system-page .grid4 {
+    display: grid;
+    grid-template-columns:
+      minmax(205px, .9fr)
+      minmax(300px, 1.1fr)
+      minmax(320px, 1fr)
+      minmax(320px, 1fr)
+      minmax(205px, .9fr);
+    gap: 12px;
+  }
   @media (max-width: 1300px) {
     .bsx-system-page .grid4 { grid-template-columns: 1fr 1fr; }
   }
@@ -224,6 +233,14 @@
   .bsx-system-page .meta-row { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #cdd; }
   .bsx-system-page .meta-row .k { color: #aab; }
   .bsx-system-page .footnote { font-size: 11px; color: #99a; margin-top: 8px; font-style: italic; }
+  .bsx-system-page .db-footnote {
+    line-height: 1.25;
+    margin-top: 6px;
+  }
+  .bsx-system-page .db-footnote span {
+    display: block;
+    white-space: nowrap;
+  }
   /* Empty-state message */
   .bsx-system-page .empty-state {
     margin: 6px 0 2px; padding: 8px 0;
@@ -244,6 +261,25 @@
   .bsx-system-page .backup-form {
     display: inline-flex; align-items: center; gap: 10px;
     margin: 0; padding: 0;
+  }
+  .bsx-system-page .db-prune-form {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 0; padding: 0;
+    font-size: 11px;
+  }
+  .bsx-system-page .inline-select {
+    font: inherit;
+    min-height: 22px;
+    padding: 1px 20px 1px 6px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.20);
+    color: #cdd;
+  }
+  [data-theme="light"] .bsx-system-page .inline-select {
+    border-color: rgba(0,0,0,.20);
+    background: #ffffff;
+    color: #1f2933;
   }
   .bsx-system-page .backup-toggle {
     display: inline-flex; align-items: center; gap: 8px;
@@ -864,6 +900,47 @@
     </div>
   </article>
 
+  {* ===== Database ===== *}
+  <article class="bsx-card">
+    <header>
+      <h3>DB Status</h3>
+      <form id="db-prune-form" method="POST" action="?page=admin&action=system" class="db-prune-form">
+        <input type="hidden" name="page"   value="admin">
+        <input type="hidden" name="action" value="system">
+        <input type="hidden" name="do"     value="update_db_prune_settings">
+        <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
+        <span class="card-stat-k">Prune after</span>
+        <select class="inline-select" name="db_prune_after_days" onchange="this.form.submit()">
+          {section name=c loop=$SYS_DATABASE.prune_choices}
+            <option value="{$SYS_DATABASE.prune_choices[c].value|escape}"
+              {if $SYS_DATABASE.prune_choices[c].value == $SYS_DATABASE.prune_after_days}selected{/if}>
+              {$SYS_DATABASE.prune_choices[c].label|escape}
+            </option>
+          {/section}
+        </select>
+        <noscript><button type="submit" class="bsx-btn-sm">Save</button></noscript>
+      </form>
+    </header>
+    <div class="bsx-card-body">
+      <table>
+        <thead><tr><th>Area</th><th class="num">Rows</th><th class="num">Size</th></tr></thead>
+        <tbody id="sys-tbody-db">
+        {section name=db loop=$SYS_DATABASE.tables}
+          <tr>
+            <td>{$SYS_DATABASE.tables[db].label|escape}</td>
+            <td class="num">{$SYS_DATABASE.tables[db].rows|escape}</td>
+            <td class="num">{$SYS_DATABASE.tables[db].size|escape}</td>
+          </tr>
+        {/section}
+        </tbody>
+      </table>
+      <p class="footnote db-footnote" id="sys-db-footnote">
+        <span>Total {$SYS_DATABASE.total_size|escape} / {$SYS_DATABASE.total_rows|escape} rows</span>
+        <span>archive oldest {$SYS_DATABASE.archive_oldest|escape} · newest {$SYS_DATABASE.archive_newest|escape} · last prune {$SYS_DATABASE.prune_last_run_age|escape}{if $SYS_DATABASE.prune_last_deleted} · deleted {$SYS_DATABASE.prune_last_deleted|escape}{/if}</span>
+      </p>
+    </div>
+  </article>
+
   {* ===== Network ===== *}
   <article class="bsx-card">
     <header>
@@ -1275,6 +1352,25 @@
              '</td><td class="num">' + esc(r.dirpct || '—') +
              '</td></tr>';
     }).join(''));
+
+    if (data.database) {
+      fill('sys-tbody-db', (data.database.tables || []).map(function (r) {
+        return '<tr><td>' + esc(r.label) + '</td>' +
+               '<td class="num">' + esc(r.rows || '—') + '</td>' +
+               '<td class="num">' + esc(r.size || '—') + '</td></tr>';
+      }).join(''));
+      var dbFoot = document.getElementById('sys-db-footnote');
+      if (dbFoot) {
+        var deleted = parseInt(data.database.prune_last_deleted, 10);
+        dbFoot.innerHTML =
+          '<span>Total ' + esc(data.database.total_size || '—') + ' / ' + esc(data.database.total_rows || '—') + ' rows</span>' +
+          '<span>archive oldest ' + esc(data.database.archive_oldest || '—') +
+          ' · newest ' + esc(data.database.archive_newest || '—') +
+          ' · last prune ' + esc(data.database.prune_last_run_age || 'never') +
+          (!isNaN(deleted) && deleted > 0 ? ' · deleted ' + esc(deleted) : '') +
+          '</span>';
+      }
+    }
 
     fill('sys-tbody-network', (data.network || []).map(function (r) {
       var tip = r.tooltip ? ' data-tooltip="' + esc(r.tooltip) + '"' : '';
