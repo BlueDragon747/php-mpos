@@ -1701,7 +1701,8 @@ class Db:
 
     def insert_outbox_pending(self, *, slot: str, account_id: int,
                               coin_address: str, amount: float,
-                              wallet_comment: str) -> int:
+                              wallet_comment: str,
+                              archive_on_reconcile: bool = True) -> int:
         """Reserve an outbox slot before the wallet send is issued.
 
         wallet_comment is the idempotency anchor: the value is written
@@ -1714,9 +1715,14 @@ class Db:
         with self.cursor() as cur:
             cur.execute(
                 "INSERT INTO transactions_outbox "
-                "(slot, account_id, coin_address, amount, wallet_comment, status) "
-                "VALUES (%s, %s, %s, %s, %s, 'pending')",
-                (slot, account_id, coin_address, amount, wallet_comment),
+                "(slot, account_id, coin_address, amount, archive_on_reconcile, "
+                "wallet_comment, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'pending')",
+                (
+                    slot, account_id, coin_address, amount,
+                    1 if archive_on_reconcile else 0,
+                    wallet_comment,
+                ),
             )
             return int(cur.lastrowid)
 
@@ -1766,9 +1772,11 @@ class Db:
     def list_outbox_broadcast(self, slot: str) -> list[dict]:
         """Wave 2: broadcast outbox rows awaiting on-chain reconciliation.
 
-        Returned rows still hold the user's `Debit_AP` / `Debit_MP` /
+        Full-balance rows still hold the user's `Debit_AP` / `Debit_MP` /
         `TXFee` as `archived=0`, so the dashboard balance reads as
-        negative until the reconciler archives them.
+        negative until the reconciler archives them. Partial capped rows
+        keep those debits unarchived after reconciliation so the unpaid
+        balance remains visible.
         """
         return self.fetchall(
             "SELECT * FROM transactions_outbox "
@@ -1781,28 +1789,41 @@ class Db:
         self, *, cur: "pymysql.cursors.DictCursor",
         outbox_id: int, slot: str, txid: str,
     ) -> int:
-        """Wave 2: archive the Debit + TXFee transactions tied to a
-        broadcast outbox row, then advance the outbox to 'reconciled'.
+        """Wave 2: resolve a broadcast outbox row.
 
         The matching txns are linked by (account_id, slot's
         transactions_<slot> table, txid) — payouts.py records the same
         txid on the Debit_AP/Debit_MP and TXFee rows it inserts when
-        broadcast lands. Returns the number of transaction rows
-        archived (0–2 normally: one Debit + one optional TXFee).
+        broadcast lands. Full-balance payouts archive the Debit + TXFee
+        rows here; capped partial payouts leave them unarchived so the
+        remaining balance keeps subtracting the already-paid amount.
+        Returns the number of transaction rows archived.
         """
         txn_table = self._transactions_table(slot)
         cur.execute(
-            f"UPDATE {txn_table} SET archived = 1 "
-            "WHERE txid = %s AND archived = 0 "
-            "AND type IN ('Debit_AP','Debit_MP','TXFee')",
-            (txid,),
+            "SELECT archive_on_reconcile FROM transactions_outbox "
+            "WHERE id = %s AND slot = %s AND status = 'broadcast' "
+            "FOR UPDATE",
+            (outbox_id, slot),
         )
-        archived = int(cur.rowcount)
+        outbox = cur.fetchone()
+        archive_on_reconcile = bool(
+            outbox is not None and int(outbox.get("archive_on_reconcile", 1))
+        )
+        archived = 0
+        if archive_on_reconcile:
+            cur.execute(
+                f"UPDATE {txn_table} SET archived = 1 "
+                "WHERE txid = %s AND archived = 0 "
+                "AND type IN ('Debit_AP','Debit_MP','TXFee')",
+                (txid,),
+            )
+            archived = int(cur.rowcount)
         cur.execute(
             "UPDATE transactions_outbox "
             "SET status = 'reconciled' "
-            "WHERE id = %s AND status = 'broadcast'",
-            (outbox_id,),
+            "WHERE id = %s AND slot = %s AND status = 'broadcast'",
+            (outbox_id, slot),
         )
         return archived
 
@@ -1943,7 +1964,8 @@ class Db:
             counted unconditionally regardless of block confirmations).
           - includes `Donation_PPS`, `Fee_PPS`, `TXFee` on the debit
             side (PHP nets these against credit; Wave 1 didn't).
-          - HAVING uses strict `> ap_threshold` (PHP semantics).
+          - HAVING uses `>= ap_threshold` so an account-threshold chunk
+            also clears the final exact-threshold balance.
           - HAVING also requires `confirmed > txfee_auto` so the
             daemon's mandatory tx fee can be deducted without leaving
             the user with a negative balance.
@@ -1951,6 +1973,9 @@ class Db:
             getAPQueue doesn't filter on is_locked. Lock semantics are
             enforced separately by the web UI when the user tries to
             change their address.
+          - Excludes accounts with an open transactions_outbox row for
+            this slot so large balances are paid one broadcast chunk at
+            a time and only re-enter the queue after reconciliation.
 
         Note: per-slot column names (`coin_address_<slot>`,
         `ap_threshold_<slot>`) keep working since the parent slot uses
@@ -1986,12 +2011,18 @@ class Db:
             f"  AND a.{threshold_col} > 0 "
             f"  AND a.{coin_addr_col} IS NOT NULL "
             f"  AND a.{coin_addr_col} <> '' "
+            f"  AND NOT EXISTS ("
+            f"    SELECT 1 FROM transactions_outbox o "
+            f"    WHERE o.slot = %s "
+            f"      AND o.account_id = t.account_id "
+            f"      AND o.status IN ('pending','broadcast')"
+            f"  ) "
             f"GROUP BY t.account_id "
-            f"HAVING balance > a.{threshold_col} "
+            f"HAVING balance >= a.{threshold_col} "
             f"   AND balance > %s"
         )
         return self.fetchall(sql, (
-            min_confirmations, min_confirmations, txfee_auto,
+            min_confirmations, min_confirmations, slot, txfee_auto,
         ))
 
     # ---- Wave 2: fee meta + manual payout queue (missing stubs) ----
@@ -2021,9 +2052,10 @@ class Db:
         Returns rows for accounts with an active (completed=0) manual
         payout request whose confirmed balance exceeds ``txfee_manual``.
 
-        Row shape: ``{account_id, username, payout_address, amount, payout_id}``
+        Row shape: ``{account_id, username, payout_address, threshold, amount, payout_id}``
         """
         coin_addr_col = "coin_address" if slot == "" else f"coin_address_{slot}"
+        threshold_col = "ap_threshold" if slot == "" else f"ap_threshold_{slot}"
         txn_table = self._transactions_table(slot)
         block_table = self._blocks_table(slot)
         payouts_table = self._suffixed("payouts", slot)
@@ -2033,6 +2065,7 @@ class Db:
         sql = (
             f"SELECT a.id AS account_id, a.username, "
             f"       a.{coin_addr_col} AS payout_address, "
+            f"       a.{threshold_col} AS threshold, "
             f"       p.id AS payout_id, "
             f"       {confirmed} AS amount "
             f"FROM {payouts_table} p "
@@ -2043,9 +2076,15 @@ class Db:
             f"  AND t.archived = 0 "
             f"  AND a.{coin_addr_col} IS NOT NULL "
             f"  AND a.{coin_addr_col} <> '' "
+            f"  AND NOT EXISTS ("
+            f"    SELECT 1 FROM transactions_outbox o "
+            f"    WHERE o.slot = %s "
+            f"      AND o.account_id = p.account_id "
+            f"      AND o.status IN ('pending','broadcast')"
+            f"  ) "
             f"GROUP BY p.id "
             f"HAVING amount > %s"
         )
         return self.fetchall(sql, (
-            min_confirmations, min_confirmations, txfee_manual,
+            min_confirmations, min_confirmations, slot, txfee_manual,
         ))

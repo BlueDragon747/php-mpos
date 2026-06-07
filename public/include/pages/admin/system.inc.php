@@ -1127,6 +1127,14 @@ foreach ($manual_payout_tables as $_slot => $_tables) {
   if (!preg_match('/^payouts(_mm[1345]?)?$/', $_table)) continue;
   if (!preg_match('/^transactions(_mm[1345]?)?$/', $_tx_table)) continue;
   if (!preg_match('/^blocks(_mm[1345]?)?$/', $_block_table)) continue;
+  $_threshold_col = $_slot === '' ? 'ap_threshold' : 'ap_threshold_' . $_slot;
+  if (!preg_match('/^ap_threshold(_mm[1345]?)?$/', $_threshold_col)) continue;
+  $_threshold_key = $_threshold_col;
+  $_configured_cap = 0.0;
+  if (isset($config[$_threshold_key]) && is_array($config[$_threshold_key]) && isset($config[$_threshold_key]['max'])) {
+    $_configured_cap = round((float)$config[$_threshold_key]['max'], 8);
+  }
+  $_configured_cap_sql = number_format($_configured_cap, 8, '.', '');
   $_slot_sql = isset($mysqli) ? $mysqli->real_escape_string($_slot) : $_slot;
   $_confirmed_expr =
     "IFNULL(ROUND(("
@@ -1136,9 +1144,14 @@ foreach ($manual_payout_tables as $_slot => $_tables) {
     . "), 8), 0)";
   $sql = "SELECT COUNT(*) AS cnt, COUNT(DISTINCT q.account_id) AS user_count, "
        . "GROUP_CONCAT(DISTINCT q.username ORDER BY q.username SEPARATOR ', ') AS users, "
-       . "SUM(q.net_amount) AS total_amount, MIN(q.time) AS oldest, MAX(q.time) AS latest "
+       . "SUM(LEAST(q.net_amount, CASE "
+       . "  WHEN q.threshold > 0 AND (" . $_configured_cap_sql . " <= 0 OR q.threshold < " . $_configured_cap_sql . ") THEN q.threshold "
+       . "  WHEN " . $_configured_cap_sql . " > 0 THEN " . $_configured_cap_sql . " "
+       . "  ELSE q.net_amount END)) AS total_amount, "
+       . "MIN(q.time) AS oldest, MAX(q.time) AS latest "
        . "FROM ("
        . "SELECT p.id, p.account_id, a.username, p.time, "
+       . "a." . $_threshold_col . " AS threshold, "
        . "GREATEST(ROUND((" . $_confirmed_expr . "), 8), 0) AS net_amount "
        . "FROM " . $_table . " AS p "
        . "LEFT JOIN " . $accounts_table . " AS a ON a.id = p.account_id "

@@ -1131,6 +1131,7 @@ CREATE TABLE IF NOT EXISTS `transactions_outbox` (
   `account_id` int(10) unsigned NOT NULL,
   `coin_address` varchar(255) NOT NULL,
   `amount` decimal(20,8) NOT NULL,
+  `archive_on_reconcile` tinyint(1) NOT NULL DEFAULT 1,
   `wallet_comment` varchar(64) NOT NULL,
   `status` enum('pending','broadcast','indeterminate','reconciled','abandoned') NOT NULL DEFAULT 'pending',
   `txid` varchar(80) DEFAULT NULL,

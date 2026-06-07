@@ -150,6 +150,11 @@ type CashOutQuote = {
   currency: string;
   address: string;
   amount: string;
+  balance?: string;
+  cap?: string;
+  capped?: boolean;
+  walletLimited?: boolean;
+  fallbackAttempts?: number;
   fee: string;
   sendAmount: string;
 };
@@ -934,8 +939,16 @@ async function copyApiKey() {
               >
                 <dl class="cashout-quote-lines">
                   <div>
-                    <dt>Balance</dt>
+                    <dt>Payout</dt>
                     <dd>{{ quoteForCoin(coin.key)!.amount }}</dd>
+                  </div>
+                  <div v-if="quoteForCoin(coin.key)!.capped && quoteForCoin(coin.key)!.balance">
+                    <dt>Available</dt>
+                    <dd>{{ quoteForCoin(coin.key)!.balance }}</dd>
+                  </div>
+                  <div v-if="quoteForCoin(coin.key)!.walletLimited">
+                    <dt>Wallet limit</dt>
+                    <dd>reduced for UTXOs</dd>
                   </div>
                   <div>
                     <dt>Network fee</dt>

@@ -89,6 +89,56 @@ def _wallet_max_weight_message(slot_label: str) -> str:
     )
 
 
+def _slot_threshold_max(raw: dict, slot: str) -> float:
+    key = "ap_threshold" if slot == "" else f"ap_threshold_{slot}"
+    threshold_cfg = raw.get(key)
+    value = threshold_cfg.get("max") if isinstance(threshold_cfg, dict) else None
+    try:
+        cap = round(float(value), 8)
+    except (TypeError, ValueError):
+        return 0.0
+    return cap if cap > 0 else 0.0
+
+
+def _slot_threshold_min(raw: dict, slot: str) -> float:
+    key = "ap_threshold" if slot == "" else f"ap_threshold_{slot}"
+    threshold_cfg = raw.get(key)
+    value = threshold_cfg.get("min") if isinstance(threshold_cfg, dict) else None
+    try:
+        floor = round(float(value), 8)
+    except (TypeError, ValueError):
+        return 0.0
+    return floor if floor > 0 else 0.0
+
+
+def _next_fallback_amount(amount: float, floor: float) -> float:
+    amount = round(float(amount), 8)
+    floor = round(float(floor), 8)
+    if amount <= 0 or (floor > 0 and amount <= floor):
+        return 0.0
+    next_amount = round(amount / 2, 8)
+    if floor > 0 and next_amount < floor:
+        next_amount = floor
+    if next_amount <= 0 or next_amount >= amount:
+        return 0.0
+    return next_amount
+
+
+def _row_payout_amount(row: dict, amount_key: str) -> float:
+    return round(float(row.get("_payout_amount", row.get(amount_key) or 0.0)), 8)
+
+
+def _row_effective_payout_cap(row: dict, configured_cap: float) -> float:
+    configured_cap = round(float(configured_cap or 0.0), 8)
+    try:
+        user_threshold = round(float(row.get("threshold") or 0.0), 8)
+    except (TypeError, ValueError):
+        user_threshold = 0.0
+    if user_threshold > 0 and (configured_cap <= 0 or user_threshold < configured_cap):
+        return user_threshold
+    return configured_cap
+
+
 @dataclass
 class Payouts:
     name: str = "payouts"
@@ -181,6 +231,9 @@ class Payouts:
         manual_queue = self._filter_valid_payout_rows(
             ctx, manual_queue, slot_label=slot_label, queue_name="manual",
         )
+        manual_queue = self._dedupe_manual_queue(
+            ctx, manual_queue, slot_label=slot_label,
+        )
         auto_candidates = self._filter_valid_payout_rows(
             ctx, auto_candidates, slot_label=slot_label, queue_name="auto",
         )
@@ -190,13 +243,26 @@ class Payouts:
                       self.name, slot_label)
             return
 
+        payout_cap = _slot_threshold_max(cfg.raw, self.slot)
+        payout_floor = _slot_threshold_min(cfg.raw, self.slot)
+        manual_queue = self._apply_payout_cap(
+            manual_queue, amount_key="amount", cap=payout_cap,
+            slot_label=slot_label, queue_name="manual",
+        )
+        auto_candidates = self._apply_payout_cap(
+            auto_candidates, amount_key="balance", cap=payout_cap,
+            slot_label=slot_label, queue_name="auto",
+        )
+
         manual_queue = self._with_fee_quotes(
             ctx, manual_queue, slot_label=slot_label,
             queue_name="manual", amount_key="amount",
+            min_amount=payout_floor,
         )
         auto_candidates = self._with_fee_quotes(
             ctx, auto_candidates, slot_label=slot_label,
             queue_name="auto", amount_key="balance",
+            min_amount=payout_floor,
         )
 
         if not manual_queue and not auto_candidates:
@@ -211,8 +277,8 @@ class Payouts:
 
         # With subtractfeefromamount=true, each wallet transaction spends
         # the user's gross balance: recipient amount + network fee == gross.
-        total_manual = sum(float(p["amount"]) for p in manual_queue)
-        total_auto = sum(float(c["balance"]) for c in auto_candidates)
+        total_manual = sum(_row_payout_amount(p, "amount") for p in manual_queue)
+        total_auto = sum(_row_payout_amount(c, "balance") for c in auto_candidates)
         total = total_manual + total_auto
         log.info(
             "[%s/%s] manual_queue=%d (%.8f), auto_candidates=%d (%.8f), "
@@ -236,7 +302,7 @@ class Payouts:
             account_id = int(p["account_id"])
             username = p["username"]
             address = p["payout_address"]
-            amount = round(float(p["amount"]), 8)
+            amount = _row_payout_amount(p, "amount")
             payout_id = int(p["payout_id"])
             if amount <= 0:
                 continue
@@ -246,6 +312,7 @@ class Payouts:
                 kind="Debit_MP",
                 estimated_txfee=float(p.get("_fee_quote", 0.0)),
                 manual_payout_id=payout_id,
+                archive_on_reconcile=not bool(p.get("_payout_partial")),
             )
             paid_account_ids.add(account_id)
 
@@ -266,7 +333,7 @@ class Payouts:
                 continue
             username = c["username"]
             address = c["payout_address"]
-            amount = round(float(c["balance"]), 8)
+            amount = _row_payout_amount(c, "balance")
             if amount <= 0:
                 continue
             self._pay_one(
@@ -275,7 +342,69 @@ class Payouts:
                 kind="Debit_AP",
                 estimated_txfee=float(c.get("_fee_quote", 0.0)),
                 manual_payout_id=None,
+                archive_on_reconcile=not bool(c.get("_payout_partial")),
             )
+
+    def _dedupe_manual_queue(self, ctx: JobContext, rows: list[dict], *,
+                             slot_label: str) -> list[dict]:
+        """Keep only one legacy manual payout row per account and slot.
+
+        The account page normally blocks duplicate manual cash-out rows,
+        but concurrent submits or direct DB repair can still leave more
+        than one completed=0 row. Only the oldest row should be processed;
+        later duplicates are closed before fee quotes or wallet sends.
+        """
+        if not rows:
+            return []
+        kept: list[dict] = []
+        seen_accounts: set[int] = set()
+        for row in rows:
+            account_id = int(row["account_id"])
+            payout_id = int(row["payout_id"])
+            if account_id in seen_accounts:
+                log.warning(
+                    "[%s/%s] closing duplicate manual payout row id=%d "
+                    "for account_id=%d before wallet quote",
+                    self.name, slot_label, payout_id, account_id,
+                )
+                with ctx.db.transaction() as cur:
+                    ctx.db.mark_manual_payout_complete(
+                        self.slot, payout_id, cur=cur,
+                    )
+                continue
+            seen_accounts.add(account_id)
+            kept.append(row)
+        return kept
+
+    def _apply_payout_cap(self, rows: list[dict], *, amount_key: str,
+                          cap: float, slot_label: str,
+                          queue_name: str) -> list[dict]:
+        if not rows:
+            return []
+        capped_rows: list[dict] = []
+        for row in rows:
+            original = round(float(row.get(amount_key) or 0.0), 8)
+            payout_amount = original
+            partial = False
+            row_cap = _row_effective_payout_cap(row, cap)
+            if row_cap > 0 and original > row_cap:
+                payout_amount = row_cap
+                partial = True
+                log.info(
+                    "[%s/%s] capping %s payout for %s (account %s) "
+                    "from %.8f to payout threshold %.8f",
+                    self.name, slot_label, queue_name,
+                    row.get("username", ""),
+                    row.get("account_id", row.get("id", "?")),
+                    original, row_cap,
+                )
+            enriched = dict(row)
+            enriched["_payout_original_amount"] = original
+            enriched["_payout_amount"] = payout_amount
+            enriched["_payout_cap"] = row_cap
+            enriched["_payout_partial"] = partial
+            capped_rows.append(enriched)
+        return capped_rows
 
     def _filter_valid_payout_rows(self, ctx: JobContext, rows: list[dict],
                                   *, slot_label: str,
@@ -318,12 +447,15 @@ class Payouts:
 
     def _with_fee_quotes(self, ctx: JobContext, rows: list[dict],
                          *, slot_label: str, queue_name: str,
-                         amount_key: str) -> list[dict]:
+                         amount_key: str, min_amount: float = 0.0) -> list[dict]:
         """Attach wallet-calculated fee quotes to payout rows.
 
         Quotes use walletcreatefundedpsbt with subtractFeeFromOutputs so the
         estimate matches the final policy: the network fee comes out of the
         amount being paid to the user, not from a fixed MPOS config value.
+        If a fragmented wallet cannot quote the requested amount because the
+        selected inputs exceed transaction weight limits, reduce the amount
+        geometrically and send only the first quotable chunk this tick.
         """
         if not rows:
             return []
@@ -333,11 +465,33 @@ class Payouts:
             address = str(row.get("payout_address") or "")
             username = str(row.get("username") or "")
             account_id = row.get("account_id", row.get("id", "?"))
-            amount = round(float(row.get(amount_key) or 0.0), 8)
+            amount = _row_payout_amount(row, amount_key)
             if amount <= 0:
                 continue
+            attempts = 0
+            max_attempts = 8
             try:
-                quote = rpc.walletcreatefundedpsbt(address, amount)
+                while True:
+                    try:
+                        quote = rpc.walletcreatefundedpsbt(address, amount)
+                        break
+                    except Exception as exc:
+                        if not _wallet_max_weight_error(exc):
+                            raise
+                        next_amount = _next_fallback_amount(
+                            amount, min_amount,
+                        )
+                        if next_amount <= 0 or attempts >= (max_attempts - 1):
+                            raise
+                        attempts += 1
+                        log.warning(
+                            "[%s/%s] reducing %s payout quote for %s "
+                            "(account %s) from %.8f to %.8f after wallet "
+                            "input-weight limit",
+                            self.name, slot_label, queue_name, username,
+                            account_id, amount, next_amount,
+                        )
+                        amount = next_amount
             except Exception as exc:
                 if _wallet_max_weight_error(exc):
                     log.error(
@@ -366,6 +520,16 @@ class Payouts:
                 )
                 continue
             enriched = dict(row)
+            original = round(float(
+                enriched.get("_payout_original_amount",
+                             enriched.get(amount_key) or 0.0)
+            ), 8)
+            enriched["_payout_amount"] = amount
+            enriched["_payout_partial"] = bool(
+                enriched.get("_payout_partial") or amount < original
+            )
+            enriched["_wallet_limited"] = attempts > 0
+            enriched["_fallback_attempts"] = attempts
             enriched["_fee_quote"] = fee
             enriched["_send_amount_quote"] = send_amount
             quoted.append(enriched)
@@ -375,7 +539,8 @@ class Payouts:
                  username: str, address: str, amount: float,
                  slot_label: str, kind: str = "Debit_AP",
                  estimated_txfee: float = 0.0,
-                 manual_payout_id: int | None = None) -> None:
+                 manual_payout_id: int | None = None,
+                 archive_on_reconcile: bool = True) -> None:
         """Pay one user. The flow is:
 
           1. Reserve outbox row (status=pending) with a fresh
@@ -386,9 +551,8 @@ class Payouts:
              network fee and deducts it from the recipient amount.
           3. On success: in one transaction, mark outbox=broadcast,
              insert Debit_AP/Debit_MP for the net recipient amount,
-             insert TXFee for the wallet-reported fee, mark older
-             transactions archived (so the next cycle doesn't re-net the
-             same Credit/Fee rows), and (for manual payouts) mark
+             insert TXFee for the wallet-reported fee, archive only
+             full-balance payouts, and (for manual payouts) mark
              `payouts.completed = 1`.
           4. On Indeterminate: mark outbox=indeterminate, raise Fatal.
           5. On Fatal from daemon: mark outbox=abandoned, close the
@@ -425,6 +589,7 @@ class Payouts:
             coin_address=address,
             amount=estimated_send_amount,
             wallet_comment=placeholder,
+            archive_on_reconcile=archive_on_reconcile,
         )
         wallet_comment = _make_wallet_comment(
             slot=self.slot, account_id=account_id, outbox_id=outbox_id,
@@ -520,9 +685,9 @@ class Payouts:
         #   outbox → broadcast
         #   insert Debit row for `send_amount`
         #   insert TXFee row for `txfee` (if any)
-        #   archive older transactions (so the next cycle reads a
-        #   fresh balance from this user — credits already paid out
-        #   don't re-net into the AP queue)
+        #   archive older transactions only for full-balance payouts.
+        #   Capped partial payouts leave the old credits and this
+        #   Debit/TXFee unarchived so the remaining balance stays visible.
         #   for manual payouts: mark payouts.completed = 1
         try:
             with db.transaction() as cur:
@@ -554,15 +719,17 @@ class Payouts:
                         txid=txid,
                         slot=self.slot,
                     )
-                # Archive older Credit / Fee / Donation / *_PPS rows up
-                # to (but excluding) this Debit. PHP-parity with
-                # createPayoutDebitRecord.
-                archived_count = db.set_account_transactions_archived(
-                    cur=cur,
-                    account_id=account_id,
-                    insert_id_max=debit_id,
-                    slot=self.slot,
-                )
+                archived_count = 0
+                if archive_on_reconcile:
+                    # Archive older Credit / Fee / Donation / *_PPS rows up
+                    # to (but excluding) this Debit. PHP-parity with
+                    # createPayoutDebitRecord.
+                    archived_count = db.set_account_transactions_archived(
+                        cur=cur,
+                        account_id=account_id,
+                        insert_id_max=debit_id,
+                        slot=self.slot,
+                    )
                 if manual_payout_id is not None:
                     db.mark_manual_payout_complete(
                         self.slot, manual_payout_id, cur=cur,

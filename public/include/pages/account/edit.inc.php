@@ -28,6 +28,52 @@ function _ae_wallet_max_weight_message($currency) {
   return $prefix . 'pool wallet has too many small UTXOs to quote this cash-out as one transaction. No payout was queued; the pool operator needs to consolidate the wallet UTXOs before this cash-out can proceed.';
 }
 
+function _ae_slot_payout_max($slot_key) {
+  global $config;
+  $key = ($slot_key === 'main' || $slot_key === '') ? 'ap_threshold' : 'ap_threshold_' . $slot_key;
+  if (!isset($config[$key]) || !is_array($config[$key]) || !isset($config[$key]['max'])) {
+    return 0.0;
+  }
+  return round((float)$config[$key]['max'], 8);
+}
+
+function _ae_slot_payout_min($slot_key) {
+  global $config;
+  $key = ($slot_key === 'main' || $slot_key === '') ? 'ap_threshold' : 'ap_threshold_' . $slot_key;
+  if (!isset($config[$key]) || !is_array($config[$key]) || !isset($config[$key]['min'])) {
+    return 0.0;
+  }
+  return round((float)$config[$key]['min'], 8);
+}
+
+function _ae_effective_payout_cap($slot_key, $user_threshold = 0.0) {
+  $configured_cap = _ae_slot_payout_max($slot_key);
+  $user_threshold = round((float)$user_threshold, 8);
+  if ($user_threshold > 0 && ($configured_cap <= 0 || $user_threshold < $configured_cap)) {
+    return $user_threshold;
+  }
+  return $configured_cap;
+}
+
+function _ae_capped_cashout_amount($confirmed, $slot_key, $user_threshold = 0.0) {
+  $confirmed = round((float)$confirmed, 8);
+  $cap = _ae_effective_payout_cap($slot_key, $user_threshold);
+  if ($cap > 0 && $confirmed > $cap) {
+    return array($cap, $cap, true);
+  }
+  return array($confirmed, $cap, false);
+}
+
+function _ae_next_fallback_amount($amount, $floor) {
+  $amount = round((float)$amount, 8);
+  $floor = round((float)$floor, 8);
+  if ($amount <= 0 || ($floor > 0 && $amount <= $floor)) return 0.0;
+  $next = round($amount / 2, 8);
+  if ($floor > 0 && $next < $floor) $next = $floor;
+  if ($next <= 0 || $next >= $amount) return 0.0;
+  return $next;
+}
+
 function _ae_user_slot_address($uid, $addr_col) {
   global $user;
   $data = $user->getUserData((int)$uid);
@@ -35,39 +81,59 @@ function _ae_user_slot_address($uid, $addr_col) {
   return trim((string)$data[$addr_col]);
 }
 
-function _ae_estimate_wallet_payout_fee($wallet, $address, $amount) {
+function _ae_user_slot_threshold($uid, $threshold_col) {
+  global $user;
+  $data = $user->getUserData((int)$uid);
+  if (!is_array($data) || !isset($data[$threshold_col])) return 0.0;
+  return round((float)$data[$threshold_col], 8);
+}
+
+function _ae_estimate_wallet_payout_fee($wallet, $address, $amount, $min_amount = 0.0) {
   $gross = round((float)$amount, 8);
   if ($gross <= 0) throw new Exception('No confirmed balance is available to pay out.');
   if (!is_object($wallet)) throw new Exception('Wallet RPC is not configured for this coin.');
 
-  $outputs = array(array($address => _ae_coin_amount_str($gross)));
-  $options = array('subtractFeeFromOutputs' => array(0));
-  try {
-    $quote = $wallet->walletcreatefundedpsbt(array(), $outputs, 0, $options, true);
-  } catch (Exception $e) {
-    if (_ae_wallet_max_weight_error($e->getMessage())) {
-      throw new Exception(_ae_wallet_max_weight_message(''));
+  $attempts = 0;
+  $max_attempts = 8;
+  $floor = round((float)$min_amount, 8);
+  while ($gross > 0 && $attempts < $max_attempts) {
+    $outputs = array(array($address => _ae_coin_amount_str($gross)));
+    $options = array('subtractFeeFromOutputs' => array(0));
+    try {
+      $quote = $wallet->walletcreatefundedpsbt(array(), $outputs, 0, $options, true);
+    } catch (Exception $e) {
+      if (!_ae_wallet_max_weight_error($e->getMessage())) throw $e;
+      $next = _ae_next_fallback_amount($gross, $floor);
+      if ($next <= 0 || $attempts >= ($max_attempts - 1)) {
+        throw new Exception(_ae_wallet_max_weight_message(''));
+      }
+      $gross = $next;
+      $attempts++;
+      continue;
     }
-    throw $e;
-  }
-  if (!is_array($quote) || !isset($quote['fee'])) {
-    throw new Exception('Wallet did not return a fee quote.');
+    if (!is_array($quote) || !isset($quote['fee'])) {
+      throw new Exception('Wallet did not return a fee quote.');
+    }
+
+    $fee = round((float)$quote['fee'], 8);
+    $send = round($gross - $fee, 8);
+    if ($fee < 0 || $send <= 0) {
+      throw new Exception('Estimated network fee is greater than the payout amount.');
+    }
+
+    return array(
+      'amount'           => _ae_coin_amount_str($gross),
+      'fee'              => _ae_coin_amount_str($fee),
+      'sendAmount'       => _ae_coin_amount_str($send),
+      'walletLimited'    => $attempts > 0,
+      'fallbackAttempts' => $attempts,
+    );
   }
 
-  $fee = round((float)$quote['fee'], 8);
-  $send = round($gross - $fee, 8);
-  if ($fee < 0 || $send <= 0) {
-    throw new Exception('Estimated network fee is greater than the payout amount.');
-  }
-
-  return array(
-    'amount'     => _ae_coin_amount_str($gross),
-    'fee'        => _ae_coin_amount_str($fee),
-    'sendAmount' => _ae_coin_amount_str($send),
-  );
+  throw new Exception(_ae_wallet_max_weight_message(''));
 }
 
-function _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method) {
+function _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $threshold_col, $active_method) {
   global $user, $setting, $config, $csrftoken, $oPayout;
 
   $uid = isset($_SESSION['USERDATA']['id']) ? (int)$_SESSION['USERDATA']['id'] : 0;
@@ -107,7 +173,9 @@ function _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, 
   }
 
   try {
-    $quote = _ae_estimate_wallet_payout_fee($wallet, $address, $confirmed);
+    $user_threshold = _ae_user_slot_threshold($uid, $threshold_col);
+    list($payout_amount, $payout_cap, $payout_capped) = _ae_capped_cashout_amount($confirmed, $slot_key, $user_threshold);
+    $quote = _ae_estimate_wallet_payout_fee($wallet, $address, $payout_amount, _ae_slot_payout_min($slot_key));
   } catch (Exception $e) {
     $message = _ae_wallet_max_weight_error($e->getMessage())
       ? _ae_wallet_max_weight_message($currency)
@@ -119,18 +187,21 @@ function _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, 
   $quote['coin'] = $slot_key;
   $quote['currency'] = (string)$currency;
   $quote['address'] = $address;
+  $quote['balance'] = _ae_coin_amount_str($confirmed);
+  $quote['cap'] = _ae_coin_amount_str($payout_cap);
+  $quote['capped'] = $payout_capped || round((float)$quote['amount'], 8) < $confirmed;
   return $quote;
 }
 
-function _ae_quote_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method) {
+function _ae_quote_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $threshold_col, $active_method) {
   global $_ae_ajax_quote;
-  $quote = _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method);
+  $quote = _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $threshold_col, $active_method);
   if ($quote !== false) $_ae_ajax_quote = $quote;
 }
 
-function _ae_queue_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method, $create_method, $token) {
+function _ae_queue_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $threshold_col, $active_method, $create_method, $token) {
   global $oPayout, $log;
-  $quote = _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $active_method);
+  $quote = _ae_prepare_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $threshold_col, $active_method);
   if ($quote === false) return;
 
   $uid = (int)$_SESSION['USERDATA']['id'];
@@ -226,45 +297,45 @@ if ($user->isAuthenticated()) {
       } else {
         switch (@$_POST['do']) {
           case 'quoteCashOut':
-            _ae_quote_cashout('main', $config['currency'], $transaction, $bitcoin, 'coin_address', 'isPayoutActive');
+            _ae_quote_cashout('main', $config['currency'], $transaction, $bitcoin, 'coin_address', 'ap_threshold', 'isPayoutActive');
           break;
           case 'cashOut':
-            _ae_queue_cashout('main', $config['currency'], $transaction, $bitcoin, 'coin_address', 'isPayoutActive', 'createPayout', $oldtoken_wf);
+            _ae_queue_cashout('main', $config['currency'], $transaction, $bitcoin, 'coin_address', 'ap_threshold', 'isPayoutActive', 'createPayout', $oldtoken_wf);
           break;
 
           case 'quoteCashOut_mm':
-            _ae_quote_cashout('mm', $config['currency_mm'], $transaction_mm, $bitcoin_mm, 'coin_address_mm', 'isPayoutActive_mm');
+            _ae_quote_cashout('mm', $config['currency_mm'], $transaction_mm, $bitcoin_mm, 'coin_address_mm', 'ap_threshold_mm', 'isPayoutActive_mm');
           break;
           case 'cashOut_mm':
-            _ae_queue_cashout('mm', $config['currency_mm'], $transaction_mm, $bitcoin_mm, 'coin_address_mm', 'isPayoutActive_mm', 'createPayout_mm', $oldtoken_wf);
+            _ae_queue_cashout('mm', $config['currency_mm'], $transaction_mm, $bitcoin_mm, 'coin_address_mm', 'ap_threshold_mm', 'isPayoutActive_mm', 'createPayout_mm', $oldtoken_wf);
           break;
 
           case 'quoteCashOut_mm1':
-            _ae_quote_cashout('mm1', $config['currency_mm1'], $transaction_mm1, $bitcoin_mm1, 'coin_address_mm1', 'isPayoutActive_mm1');
+            _ae_quote_cashout('mm1', $config['currency_mm1'], $transaction_mm1, $bitcoin_mm1, 'coin_address_mm1', 'ap_threshold_mm1', 'isPayoutActive_mm1');
           break;
           case 'cashOut_mm1':
-            _ae_queue_cashout('mm1', $config['currency_mm1'], $transaction_mm1, $bitcoin_mm1, 'coin_address_mm1', 'isPayoutActive_mm1', 'createPayout_mm1', $oldtoken_wf);
+            _ae_queue_cashout('mm1', $config['currency_mm1'], $transaction_mm1, $bitcoin_mm1, 'coin_address_mm1', 'ap_threshold_mm1', 'isPayoutActive_mm1', 'createPayout_mm1', $oldtoken_wf);
           break;
 
           case 'quoteCashOut_mm3':
-            _ae_quote_cashout('mm3', $config['currency_mm3'], $transaction_mm3, $bitcoin_mm3, 'coin_address_mm3', 'isPayoutActive_mm3');
+            _ae_quote_cashout('mm3', $config['currency_mm3'], $transaction_mm3, $bitcoin_mm3, 'coin_address_mm3', 'ap_threshold_mm3', 'isPayoutActive_mm3');
           break;
           case 'cashOut_mm3':
-            _ae_queue_cashout('mm3', $config['currency_mm3'], $transaction_mm3, $bitcoin_mm3, 'coin_address_mm3', 'isPayoutActive_mm3', 'createPayout_mm3', $oldtoken_wf);
+            _ae_queue_cashout('mm3', $config['currency_mm3'], $transaction_mm3, $bitcoin_mm3, 'coin_address_mm3', 'ap_threshold_mm3', 'isPayoutActive_mm3', 'createPayout_mm3', $oldtoken_wf);
           break;
 
           case 'quoteCashOut_mm4':
-            _ae_quote_cashout('mm4', $config['currency_mm4'], $transaction_mm4, $bitcoin_mm4, 'coin_address_mm4', 'isPayoutActive_mm4');
+            _ae_quote_cashout('mm4', $config['currency_mm4'], $transaction_mm4, $bitcoin_mm4, 'coin_address_mm4', 'ap_threshold_mm4', 'isPayoutActive_mm4');
           break;
           case 'cashOut_mm4':
-            _ae_queue_cashout('mm4', $config['currency_mm4'], $transaction_mm4, $bitcoin_mm4, 'coin_address_mm4', 'isPayoutActive_mm4', 'createPayout_mm4', $oldtoken_wf);
+            _ae_queue_cashout('mm4', $config['currency_mm4'], $transaction_mm4, $bitcoin_mm4, 'coin_address_mm4', 'ap_threshold_mm4', 'isPayoutActive_mm4', 'createPayout_mm4', $oldtoken_wf);
           break;
 
           case 'quoteCashOut_mm5':
-            _ae_quote_cashout('mm5', $config['currency_mm5'], $transaction_mm5, $bitcoin_mm5, 'coin_address_mm5', 'isPayoutActive_mm5');
+            _ae_quote_cashout('mm5', $config['currency_mm5'], $transaction_mm5, $bitcoin_mm5, 'coin_address_mm5', 'ap_threshold_mm5', 'isPayoutActive_mm5');
           break;
           case 'cashOut_mm5':
-            _ae_queue_cashout('mm5', $config['currency_mm5'], $transaction_mm5, $bitcoin_mm5, 'coin_address_mm5', 'isPayoutActive_mm5', 'createPayout_mm5', $oldtoken_wf);
+            _ae_queue_cashout('mm5', $config['currency_mm5'], $transaction_mm5, $bitcoin_mm5, 'coin_address_mm5', 'ap_threshold_mm5', 'isPayoutActive_mm5', 'createPayout_mm5', $oldtoken_wf);
           break;
 
 
@@ -538,19 +609,6 @@ if (empty($_userdata) && isset($_SESSION['USERDATA']) && is_array($_SESSION['USE
   $_userdata = $_SESSION['USERDATA'];
 }
 
-// Per-coin auto-payout threshold ranges (min/max). Keyed by ticker so
-// we don't accidentally couple to the slot suffix — easier to extend
-// when a new coin lands. Falls back to the global $config['ap_threshold']
-// min/max when a coin's ticker isn't in the map (still bounded sanely).
-$ae_threshold_ranges = array(
-  'BLC'  => array('min' => 1.0,    'max' => 2500.0),
-  'PHO'  => array('min' => 1.0,    'max' => 999999.0),
-  'BBTC' => array('min' => 0.05,   'max' => 25.0),
-  'ELT'  => array('min' => 1.0,    'max' => 1000.0),
-  'UMO'  => array('min' => 0.1,    'max' => 9999.0),
-  'LIT'  => array('min' => 1.0,    'max' => 9999.0),
-);
-
 require_once dirname(__DIR__) . '/admin/_wallet_coin_meta.inc.php';
 
 $coins = array();
@@ -566,8 +624,9 @@ foreach (array(
   $currency = isset($config[$cfg_key]) ? $config[$cfg_key] : '';
   if ($currency === '' && $key !== 'main') continue;   // slot not configured on this pool
   $tk = strtoupper($currency);
-  $thr_min = isset($ae_threshold_ranges[$tk]) ? $ae_threshold_ranges[$tk]['min'] : $ap_min;
-  $thr_max = isset($ae_threshold_ranges[$tk]) ? $ae_threshold_ranges[$tk]['max'] : $ap_max;
+  $thr_cfg = isset($config[$thr_col]) && is_array($config[$thr_col]) ? $config[$thr_col] : array();
+  $thr_min = isset($thr_cfg['min']) ? (float)$thr_cfg['min'] : $ap_min;
+  $thr_max = isset($thr_cfg['max']) ? (float)$thr_cfg['max'] : $ap_max;
   $coin_name = isset($_wallet_coin_names[$tk]) ? $_wallet_coin_names[$tk] : $currency;
   $icon_url  = _wallet_coin_icon_url($tk);
   $icon_fallback_url = _wallet_coin_icon_fallback_url($tk);
