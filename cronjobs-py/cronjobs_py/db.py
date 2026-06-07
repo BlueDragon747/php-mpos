@@ -381,9 +381,15 @@ class Db:
 
     def get_round_shares(self, prev_share_id: int, current_share_id: int) -> int:
         row = self.fetchone(
-            "SELECT COUNT(*) AS n FROM shares "
-            "WHERE id > %s AND id <= %s AND our_result = 'Y'",
-            (prev_share_id, current_share_id),
+            "SELECT COUNT(*) AS n FROM ("
+            "  SELECT id FROM shares "
+            "  WHERE id > %s AND id <= %s AND our_result = 'Y'"
+            "  UNION ALL "
+            "  SELECT share_id AS id FROM shares_archive "
+            "  WHERE share_id > %s AND share_id <= %s AND our_result = 'Y'"
+            ") u",
+            (prev_share_id, current_share_id,
+             prev_share_id, current_share_id),
         )
         return int(row["n"]) if row else 0
 
@@ -399,8 +405,15 @@ class Db:
         baseline = 2.0 ** (difficulty_const - 16)
         row = self.fetchone(
             "SELECT IFNULL(SUM(IF(difficulty=0, %s, difficulty)), 0) AS total "
-            "FROM shares WHERE id > %s AND id <= %s AND our_result = 'Y'",
-            (baseline, prev_share_id, current_share_id),
+            "FROM ("
+            "  SELECT difficulty FROM shares "
+            "  WHERE id > %s AND id <= %s AND our_result = 'Y'"
+            "  UNION ALL "
+            "  SELECT difficulty FROM shares_archive "
+            "  WHERE share_id > %s AND share_id <= %s AND our_result = 'Y'"
+            ") u",
+            (baseline, prev_share_id, current_share_id,
+             prev_share_id, current_share_id),
         )
         return float(row["total"]) / baseline if row else 0.0
 
