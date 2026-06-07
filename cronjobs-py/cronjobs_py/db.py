@@ -1785,6 +1785,23 @@ class Db:
             (slot,),
         )
 
+    def list_open_coldwallet_outbox(self, slot: str) -> list[dict]:
+        """Cold-wallet sweep sends use account_id=0 in transactions_outbox.
+
+        They do not belong to a user account and do not create Debit_AP /
+        Debit_MP rows, but the outbox still gives the wallet send a durable
+        comment anchor and keeps later sweeps from double-sending while a
+        prior sweep is still unresolved.
+        """
+        return self.fetchall(
+            # account_id=0 is reserved here for cold-wallet sweep markers.
+            "SELECT * FROM transactions_outbox "
+            "WHERE slot = %s AND account_id = 0 "
+            "  AND status IN ('pending','broadcast','indeterminate') "
+            "ORDER BY id ASC",
+            (slot,),
+        )
+
     def reconcile_outbox_in_tx(
         self, *, cur: "pymysql.cursors.DictCursor",
         outbox_id: int, slot: str, txid: str,

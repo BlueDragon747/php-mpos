@@ -6,8 +6,9 @@ this directory in `LC_ALL=C` sorted filename order.
 
 Rules for new migrations:
 
-- Use a zero-padded numeric prefix so order is obvious, for example
-  `05-add-example-index.sql` or `06-add-example-column.sql`.
+- Use a zero-padded numeric prefix so order is obvious and stable under
+  `LC_ALL=C` sorting, for example `005-add-example-index.sql` or
+  `010-add-example-column.sql`.
 - Migrations must be safe to run more than once.
 - Prefer `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`,
   `CREATE INDEX IF NOT EXISTS`, `INSERT IGNORE`, or `ON DUPLICATE KEY UPDATE`.
