@@ -14,7 +14,8 @@ import os
 import signal
 import sys
 import time
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -96,6 +97,15 @@ def env_float(name: str, default: float) -> float:
     return value
 
 
+def env_bool(name: str, default: bool) -> bool:
+    raw = env(name, "1" if default else "0").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise SystemExit(f"{name} must be a boolean, got {raw!r}")
+
+
 def db_connect() -> pymysql.Connection:
     conn = pymysql.connect(
         host=env("MPOS_DB_HOST", "127.0.0.1"),
@@ -156,12 +166,55 @@ def save_state(path: Path, *, dev: int, ino: int, offset: int) -> None:
     os.replace(tmp, path)
 
 
-def refresh_workers(conn: pymysql.Connection) -> set[str]:
+def build_worker_lookup(
+    worker_names: Iterable[str],
+    *,
+    allow_bare_suffixes: bool = True,
+) -> dict[str, str]:
+    """Return accepted share-log names mapped to canonical MPOS workers.
+
+    Go Eloipool may log only the worker suffix for miners authenticated as
+    ``account.worker``. Exact MPOS worker names are always preferred, and bare
+    suffix aliases are accepted only when they identify one full worker.
+    """
+    exact = {str(name) for name in worker_names if name}
+    lookup = {name: name for name in exact}
+    if not allow_bare_suffixes:
+        return lookup
+
+    suffixes: dict[str, set[str]] = defaultdict(set)
+    for name in exact:
+        if "." not in name:
+            continue
+        _account, suffix = name.split(".", 1)
+        if suffix:
+            suffixes[suffix].add(name)
+
+    for suffix, matches in suffixes.items():
+        if suffix not in lookup and len(matches) == 1:
+            lookup[suffix] = next(iter(matches))
+    return lookup
+
+
+def refresh_workers(
+    conn: pymysql.Connection,
+    *,
+    allow_bare_suffixes: bool = True,
+) -> dict[str, str]:
     with conn.cursor() as cur:
         cur.execute("SELECT username FROM pool_worker")
-        workers = {str(row[0]) for row in cur.fetchall() if row and row[0]}
+        worker_names = [str(row[0]) for row in cur.fetchall() if row and row[0]]
     conn.commit()
-    logging.info("loaded %d MPOS worker name(s)", len(workers))
+    workers = build_worker_lookup(
+        worker_names,
+        allow_bare_suffixes=allow_bare_suffixes,
+    )
+    alias_count = max(0, len(workers) - len(worker_names))
+    logging.info(
+        "loaded %d MPOS worker name(s), %d unique suffix alias(es)",
+        len(worker_names),
+        alias_count,
+    )
     return workers
 
 
@@ -292,14 +345,16 @@ def main() -> int:
     worker_refresh_seconds = env_float(
         "SHARE_IMPORT_WORKER_REFRESH_SECONDS", DEFAULT_WORKER_REFRESH_SECONDS
     )
+    allow_bare_suffixes = env_bool("SHARE_IMPORT_ALLOW_BARE_SUFFIX_MAPPING", True)
     db_max_attempts = env_int("SHARE_IMPORT_DB_MAX_ATTEMPTS", DEFAULT_DB_MAX_ATTEMPTS)
     db_backoff_seconds = env_float(
         "SHARE_IMPORT_DB_BACKOFF_SECONDS", DEFAULT_DB_BACKOFF_SECONDS
     )
 
     conn = db_connect()
-    workers = refresh_workers(conn)
+    workers = refresh_workers(conn, allow_bare_suffixes=allow_bare_suffixes)
     next_worker_refresh = time.monotonic() + worker_refresh_seconds
+    mapped_aliases_seen: set[tuple[str, str]] = set()
     inserted_total = 0
     skipped_unknown = 0
 
@@ -315,7 +370,10 @@ def main() -> int:
         try:
             while RUNNING:
                 if time.monotonic() >= next_worker_refresh:
-                    workers = refresh_workers(conn)
+                    workers = refresh_workers(
+                        conn,
+                        allow_bare_suffixes=allow_bare_suffixes,
+                    )
                     next_worker_refresh = time.monotonic() + worker_refresh_seconds
 
                 pos = fh.tell()
@@ -355,9 +413,26 @@ def main() -> int:
                 row = parse_share(line)
                 if row is None:
                     continue
-                if row.username not in workers:
+                canonical_username = workers.get(row.username)
+                if canonical_username is None:
                     skipped_unknown += 1
+                    if skipped_unknown <= 5 or skipped_unknown % 1000 == 0:
+                        logging.warning(
+                            "skipping unknown share username %r, skipped_unknown=%d",
+                            row.username,
+                            skipped_unknown,
+                        )
                     continue
+                if canonical_username != row.username:
+                    alias_key = (row.username, canonical_username)
+                    if alias_key not in mapped_aliases_seen:
+                        mapped_aliases_seen.add(alias_key)
+                        logging.info(
+                            "mapped bare share username %r to MPOS worker %r",
+                            row.username,
+                            canonical_username,
+                        )
+                    row = replace(row, username=canonical_username[:120])
                 batch.append(row)
 
                 if len(batch) >= batch_size:
@@ -404,7 +479,7 @@ def main() -> int:
                 pass
             time.sleep(poll_seconds)
             conn = db_connect()
-            workers = refresh_workers(conn)
+            workers = refresh_workers(conn, allow_bare_suffixes=allow_bare_suffixes)
             next_worker_refresh = time.monotonic() + worker_refresh_seconds
         finally:
             try:

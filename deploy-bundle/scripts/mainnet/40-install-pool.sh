@@ -217,7 +217,7 @@ get_address() {
         printf '%s' "$addr"
         return 0
     fi
-    # Fallback to default (legacy P2PKH).
+    # Fallback to the daemon's configured default address type.
     resp=$(rpc_call "$port" "$rpc_user" "$rpc_pass" getnewaddress "[\"${label}\"]")
     addr=$(printf '%s' "$resp" | sed -n 's/.*"result":"\([^"]*\)".*/\1/p')
     printf '%s' "$addr"
@@ -246,15 +246,9 @@ for sym in bbtc elt lit pho umo; do
         AUX_ADDR[$sym]="${!var}"
         continue
     fi
-    address_type="bech32"
-    if [ "$sym" = "bbtc" ]; then
-        address_type="legacy"
-        say "asking ${sym} daemon for a legacy aux payout address"
-    else
-        say "asking ${sym} daemon for an aux payout address"
-    fi
+    say "asking ${sym} daemon for an aux payout address"
     AUX_ADDR[$sym]=$(get_address "${AUX_RPC_PORT[$sym]}" "pool-aux" \
-        "${MPOS_NODE_RPC_USER}" "${MPOS_NODE_RPC_PASS}" "${address_type}")
+        "${MPOS_NODE_RPC_USER}" "${MPOS_NODE_RPC_PASS}" bech32)
     [ -n "${AUX_ADDR[$sym]}" ] || { echo "failed to obtain ${sym} aux address" >&2; exit 1; }
 done
 

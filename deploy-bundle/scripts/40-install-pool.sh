@@ -117,12 +117,8 @@ sys.exit(0 if data.get("error") is None and data.get("result") is not None else 
             AUX_ADDR[$sym]="${!var}"
             continue
         fi
-        address_type="bech32"
-        if [ "$sym" = "bbtc" ]; then
-            address_type="legacy"
-        fi
         say "asking ${sym} daemon for an aux payout address"
-        AUX_ADDR[$sym]=$(get_address "${AUX_RPC_PORT[$sym]}" "pool-aux" "${address_type}")
+        AUX_ADDR[$sym]=$(get_address "${AUX_RPC_PORT[$sym]}" "pool-aux" bech32)
         [ -n "${AUX_ADDR[$sym]}" ] || { echo "failed to obtain ${sym} aux address" >&2; exit 1; }
     done
 
