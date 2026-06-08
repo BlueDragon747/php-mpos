@@ -20,7 +20,7 @@ if [ ! -x "$DU" ]; then
     exit 69
 fi
 
-run_du() {
+du_mb() {
     local path="$1"
     if [ ! -d "$path" ]; then
         return 0
@@ -35,7 +35,36 @@ run_du() {
 
     mb="$(printf '%s\n' "$out" | awk 'NR == 1 { print $1 }')"
     if [[ "$mb" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' "$mb"
+    fi
+}
+
+run_du() {
+    local path="$1" mb=""
+    mb="$(du_mb "$path")"
+    if [[ "$mb" =~ ^[0-9]+$ ]]; then
         printf '%s\t%s\n' "$path" "$mb"
+    fi
+}
+
+run_daemon_total() {
+    local total=0 found=0 path="" mb=""
+    for path in \
+        /root/.blakecoin \
+        /root/.blakebitcoin \
+        /root/.electron \
+        /root/.lithium \
+        /root/.photon \
+        /root/.universalmolecule
+    do
+        mb="$(du_mb "$path")"
+        if [[ "$mb" =~ ^[0-9]+$ ]]; then
+            total=$((total + mb))
+            found=1
+        fi
+    done
+    if [ "$found" -eq 1 ]; then
+        printf '%s\t%s\n' '__daemon_datadirs_total__' "$total"
     fi
 }
 
@@ -43,3 +72,4 @@ run_du /var/backups/blakestream-mpos
 run_du /var/lib/mysql
 run_du /var/log/blakestream-mpos
 run_du /var/lib/docker
+run_daemon_total

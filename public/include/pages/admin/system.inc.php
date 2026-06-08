@@ -243,6 +243,127 @@ function _system_run_all($cmd, $maxBytes = 8192) {
   return trim($out);
 }
 
+function _system_coin_slug($value) {
+  $slug = strtolower(trim((string)$value));
+  $slug = preg_replace('/[^a-z0-9]+/', '', $slug);
+  return $slug ? $slug : '';
+}
+
+function _system_configured_daemon_container_candidates() {
+  global $config;
+  $candidates = array();
+  $env = getenv('MPOS_DAEMON_CONTAINERS');
+  if ($env !== false && trim($env) !== '') {
+    foreach (explode(',', $env) as $name) {
+      $slug = _system_coin_slug($name);
+      if ($slug !== '') $candidates[$slug] = strtoupper($slug);
+    }
+  }
+  foreach (array('currency', 'currency_mm', 'currency_mm1', 'currency_mm2', 'currency_mm3', 'currency_mm4', 'currency_mm5', 'currency_mm6') as $key) {
+    if (empty($config[$key])) continue;
+    $ticker = trim((string)$config[$key]);
+    if ($ticker === '' || stripos($ticker, 'unused') !== false) continue;
+    $slug = _system_coin_slug($ticker);
+    if ($slug !== '') $candidates[$slug] = strtoupper($ticker);
+  }
+  return $candidates;
+}
+
+function _system_docker_mem_to_mb($value) {
+  $value = trim((string)$value);
+  if (!preg_match('/^([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?i?B?)$/i', $value, $m)) return '';
+  $n = (float)$m[1];
+  $unit = strtoupper($m[2]);
+  if ($unit === '' || $unit === 'B') return round($n / 1048576, 1);
+  if ($unit === 'KB' || $unit === 'KIB') return round($n / 1024, 1);
+  if ($unit === 'MB' || $unit === 'MIB') return round($n, 1);
+  if ($unit === 'GB' || $unit === 'GIB') return round($n * 1024, 1);
+  if ($unit === 'TB' || $unit === 'TIB') return round($n * 1048576, 1);
+  return '';
+}
+
+function _system_daemon_container_proc_rows() {
+  $candidates = _system_configured_daemon_container_candidates();
+  if (!$candidates) return array();
+  $raw = _system_run("command -v docker >/dev/null 2>&1 && docker stats --no-stream --format '{{.Name}}\t{{.MemUsage}}'", 65536);
+  if ($raw === '') return array();
+  $rows = array();
+  foreach (preg_split('/\r?\n/', $raw) as $line) {
+    $line = trim($line);
+    if ($line === '') continue;
+    $parts = explode("\t", $line, 2);
+    if (count($parts) < 2) continue;
+    $name = trim($parts[0]);
+    $slug = _system_coin_slug($name);
+    if ($slug === '' || !isset($candidates[$slug])) continue;
+    $mem = trim(explode('/', $parts[1], 2)[0]);
+    $rows[] = array(
+      'label'  => strtolower($candidates[$slug]),
+      'pid'    => $name,
+      'rss_mb' => _system_docker_mem_to_mb($mem),
+    );
+  }
+  return $rows;
+}
+
+function _system_daemon_process_proc_rows() {
+  $raw = _system_run("ps -eo pid=,rss=,args= | grep -- '-datadir=' | grep -v grep", 65536);
+  if ($raw === '') return array();
+  $rows = array();
+  $seen = array();
+  foreach (preg_split('/\r?\n/', $raw) as $line) {
+    if (!preg_match('/^\s*([0-9]+)\s+([0-9]+)\s+(.+)$/', $line, $m)) continue;
+    $pid = $m[1];
+    $rss_kb = (int)$m[2];
+    $args = $m[3];
+    if (!preg_match('/(?:^|\s)-datadir=([^\s]+)/', $args, $dm)) continue;
+    $datadir = trim($dm[1], "\"'");
+    $label = basename($datadir);
+    $label = ltrim($label, '.');
+    $slug = _system_coin_slug($label);
+    if ($slug === '' || isset($seen[$slug])) continue;
+    $seen[$slug] = true;
+    $rows[] = array(
+      'label'  => $slug,
+      'pid'    => $pid,
+      'rss_mb' => round($rss_kb / 1024, 1),
+    );
+  }
+  return $rows;
+}
+
+function _system_daemon_service_rows() {
+  $raw = _system_run("ps -eo pid=,lstart=,args= | grep -- '-datadir=' | grep -v grep", 65536);
+  if ($raw === '') return array();
+  $rows = array();
+  $seen = array();
+  foreach (preg_split('/\r?\n/', $raw) as $line) {
+    if (!preg_match('/^\s*([0-9]+)\s+([A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d\s+\d{4})\s+(.+)$/', $line, $m)) continue;
+    $args = $m[3];
+    if (!preg_match('/(?:^|\s)-datadir=([^\s]+)/', $args, $dm)) continue;
+    $datadir = trim($dm[1], "\"'");
+    $label = basename($datadir);
+    $label = ltrim($label, '.');
+    $slug = _system_coin_slug($label);
+    if ($slug === '' || isset($seen[$slug])) continue;
+    $seen[$slug] = true;
+    $ts = strtotime($m[2]);
+    $since_ts = $ts ? (int)$ts : 0;
+    $rows[] = array(
+      'label'    => $slug,
+      'unit'     => 'process:' . $m[1],
+      'state'    => 'active',
+      'since'    => $since_ts ? gmdate('D Y-m-d H:i:s \U\T\C', $since_ts) : $m[2],
+      'since_ts' => $since_ts,
+      'duration' => _system_duration_from_epoch($since_ts),
+    );
+  }
+  usort($rows, function ($a, $b) {
+    return strcmp($a['label'], $b['label']);
+  });
+  return $rows;
+}
+
 function _system_unit_candidate($unit) {
   $scope = 'system';
   $name = (string)$unit;
@@ -451,6 +572,32 @@ function _system_age_compact($ts) {
   if ($diff < 604800) return floor($diff / 86400) . 'd';
   if ($diff < 31536000) return floor($diff / 604800) . 'w';
   return floor($diff / 31536000) . 'y';
+}
+
+function _system_duration_compact_seconds($diff) {
+  $diff = max(0, (int)$diff);
+  $units = array(
+    array('label' => 'y',  'seconds' => 31536000),
+    array('label' => 'mo', 'seconds' => 2592000),
+    array('label' => 'd',  'seconds' => 86400),
+    array('label' => 'h',  'seconds' => 3600),
+    array('label' => 'm',  'seconds' => 60),
+  );
+  $parts = array();
+  foreach ($units as $unit) {
+    if ($diff < $unit['seconds']) continue;
+    $n = (int)floor($diff / $unit['seconds']);
+    $diff -= $n * $unit['seconds'];
+    $parts[] = $n . $unit['label'];
+    if (count($parts) >= 3) break;
+  }
+  return $parts ? implode(' ', $parts) : 'now';
+}
+
+function _system_duration_from_epoch($epoch) {
+  $epoch = (int)$epoch;
+  if ($epoch <= 0) return '—';
+  return _system_duration_compact_seconds(time() - $epoch);
 }
 
 function _system_amount_compact($amount) {
@@ -866,13 +1013,23 @@ $services = array(
 );
 $service_rows = array();
 foreach ($services as $label => $unit) {
+  $since = _system_unit_active_since($unit);
+  $since_ts = $since !== '' ? (int)strtotime($since) : 0;
   $service_rows[] = array(
-    'label'  => $label,
-    'unit'   => _system_unit_selected_name($unit),
-    'state'  => _system_unit_state($unit),
-    'since'  => _system_unit_active_since($unit),
+    'label'    => $label,
+    'unit'     => _system_unit_selected_name($unit),
+    'state'    => _system_unit_state($unit),
+    'since'    => $since,
+    'since_ts' => $since_ts,
+    'duration' => _system_duration_from_epoch($since_ts),
   );
 }
+foreach (_system_daemon_service_rows() as $daemon_service_row) {
+  $service_rows[] = $daemon_service_row;
+}
+usort($service_rows, function ($a, $b) {
+  return strcmp(strtolower($a['label']), strtolower($b['label']));
+});
 
 // ---- Backups panel --------------------------------------------------
 $backup_dir = '/var/backups/blakestream-mpos';
@@ -887,44 +1044,32 @@ $last_backup_size = !empty($backup_status['last_size'])
   ? (int)$backup_status['last_size']
   : ((is_link($latest_link) || is_file($latest_link)) ? @filesize($latest_link) : 0);
 
-// Disk usage for the backup dir + log dir + daemon datadir parent.
-// Production mainnet currently keeps daemon datadirs under /root/.<coin>,
-// which www-data cannot traverse. Prefer an explicit daemon parent when it
-// exists, otherwise use the accessible backing filesystem so the operator
-// still sees the capacity pressure for the daemon storage.
-$daemon_disk_path = _system_first_existing_dir(array(
-  '/var/lib/blakestream-25.2',
-  '/var/lib/blakestream-mpos',
-  '/root/.blakecoin',
-  '/root/.photon',
-  '/root/.blakebitcoin',
-  '/root/.electron',
-  '/root/.universalmolecule',
-  '/root/.lithium',
-  '/var/lib/docker',
-  '/',
-));
 $disk_targets = array(
   'Backups'  => $backup_dir,
   'DB'       => '/var/lib/mysql',
   'Logs'     => '/var/log/blakestream-mpos',
+  'Daemons'  => '__daemon_datadirs_total__',
 );
-if ($daemon_disk_path !== '') $disk_targets['Daemons'] = $daemon_disk_path;
 $disk_rows = array();
 $disk_helper_sizes = _system_disk_stats_helper_sizes();
 $disk_available_str = '—';
 foreach ($disk_targets as $label => $path) {
-  if (!is_dir($path)) continue;
-  $line = _system_run('df -BM --output=source,size,used,avail,pcent ' . escapeshellarg($path) . ' | tail -1');
+  $df_path = $path === '__daemon_datadirs_total__' ? '/' : $path;
+  if (!is_dir($df_path) && $path !== '__daemon_datadirs_total__') continue;
+  $line = _system_run('df -BM --output=source,size,used,avail,pcent ' . escapeshellarg($df_path) . ' | tail -1');
   if (!$line) continue;
   $parts = preg_split('/\s+/', trim($line));
   if (count($parts) < 5) continue;
   $fs_size_mb = (int)$parts[1];
   if ($disk_available_str === '—') $disk_available_str = _system_size_from_mb((int)$parts[3]);
-  $dir_size = _system_du_size_info($path, $disk_helper_sizes);
+  $dir_size = $path === '__daemon_datadirs_total__'
+    ? (isset($disk_helper_sizes[$path])
+        ? array('label' => _system_size_from_mb((int)$disk_helper_sizes[$path]), 'mb' => (int)$disk_helper_sizes[$path])
+        : array('label' => '—', 'mb' => null))
+    : _system_du_size_info($path, $disk_helper_sizes);
   $disk_rows[] = array(
     'label'   => $label,
-    'path'    => $path,
+    'path'    => $path === '__daemon_datadirs_total__' ? 'daemon data folders' : $path,
     'fs'      => $parts[0],
     'size'    => $parts[1],
     'fs_used' => $parts[2],
@@ -1357,6 +1502,11 @@ foreach ($processes as $label => $cmd) {
     'pid'    => trim($pid),
     'rss_mb' => $rss_kb !== '' ? round((int)$rss_kb / 1024, 1) : '',
   );
+}
+$daemon_proc_rows = _system_daemon_process_proc_rows();
+if (!$daemon_proc_rows) $daemon_proc_rows = _system_daemon_container_proc_rows();
+foreach ($daemon_proc_rows as $row) {
+  $proc_rows[] = $row;
 }
 
 // ---- Outbox state distribution -------------------------------------
