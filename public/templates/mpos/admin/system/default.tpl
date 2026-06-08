@@ -8,6 +8,9 @@
     margin-bottom: 14px;
     overflow: hidden;
   }
+  .bsx-system-page .services-card {
+    overflow: visible;
+  }
   .bsx-system-page .bsx-card > header {
     background: rgba(255,255,255,.05);
     padding: 6px 14px;
@@ -251,7 +254,24 @@
     line-height: 1.25;
     margin-top: 6px;
   }
-  .bsx-system-page .db-footnote span {
+  .bsx-system-page .db-footnote .db-foot-total {
+    display: grid;
+    grid-template-columns: 1fr 150px 90px;
+    gap: 8px;
+    align-items: baseline;
+    margin-bottom: 2px;
+  }
+  .bsx-system-page .db-footnote .db-foot-total span {
+    font-variant-numeric: tabular-nums;
+  }
+  .bsx-system-page .db-footnote .db-foot-total .num {
+    text-align: right;
+  }
+  .bsx-system-page .db-footnote .db-foot-total-label {
+    color: #aab;
+    margin-right: 8px;
+  }
+  .bsx-system-page .db-footnote .db-foot-meta {
     display: block;
     white-space: normal;
   }
@@ -358,16 +378,68 @@
   .bsx-system-page .memory-summary-table {
     margin-bottom: 4px;
   }
-  .bsx-system-page .process-rss-table {
+  .bsx-system-page .memory-card .bsx-card-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .bsx-system-page .process-rss-block {
     border-top: 1px solid rgba(255,255,255,.08);
+    min-height: 0;
+  }
+  .bsx-system-page .process-rss-table {
+    table-layout: fixed;
   }
   .bsx-system-page .process-rss-table thead th {
     padding-top: 6px;
   }
+  .bsx-system-page .process-sort-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: #4fc3f7;
+    cursor: pointer;
+    font: inherit;
+    letter-spacing: inherit;
+    padding: 0;
+    text-transform: inherit;
+  }
+  .bsx-system-page .process-sort-btn:hover,
+  .bsx-system-page .process-sort-btn[aria-pressed="true"] {
+    color: #80d6ff;
+  }
+  .bsx-system-page .process-rss-table th:nth-child(1),
+  .bsx-system-page .process-rss-table td:nth-child(1) { width: 48%; }
+  .bsx-system-page .process-rss-table th:nth-child(2),
+  .bsx-system-page .process-rss-table td:nth-child(2) { width: 27%; }
+  .bsx-system-page .process-rss-table th:nth-child(3),
+  .bsx-system-page .process-rss-table td:nth-child(3) { width: 25%; }
+  .bsx-system-page .process-rss-table th:nth-child(2),
+  .bsx-system-page .process-rss-table td:nth-child(2),
+  .bsx-system-page .process-rss-table th:nth-child(3),
+  .bsx-system-page .process-rss-table td:nth-child(3) {
+    text-align: center;
+  }
+  .bsx-system-page .process-rss-scroll {
+    max-height: 142px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .bsx-system-page .process-rss-scroll .process-rss-table td:first-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bsx-system-page .process-rss-scroll .process-rss-table tr:last-child td {
+    border-bottom: 1px solid rgba(255,255,255,.05);
+  }
   [data-theme="light"] .bsx-system-page .memory-card .resource-io-line,
   [data-theme="light"] .bsx-system-page .disk-card .resource-io-line,
-  [data-theme="light"] .bsx-system-page .process-rss-table {
+  [data-theme="light"] .bsx-system-page .process-rss-block {
     border-color: rgba(0,0,0,.10);
+  }
+  [data-theme="light"] .bsx-system-page .process-rss-scroll .process-rss-table tr:last-child td {
+    border-bottom-color: rgba(0,0,0,.06);
   }
   .bsx-system-page .network-card th,
   .bsx-system-page .network-card td {
@@ -549,6 +621,68 @@
   .bsx-system-page .services-head > h3            { justify-self: start; }
   .bsx-system-page .services-head > .version-row  { justify-self: center; }
   .bsx-system-page .services-head > .live-indicator { justify-self: end; }
+  .bsx-system-page .services-scroll {
+    max-height: 236px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    overflow-x: hidden;
+  }
+  .bsx-system-page .services-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #202020;
+  }
+  .bsx-system-page .service-sort-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    letter-spacing: inherit;
+    padding: 0;
+    text-transform: inherit;
+  }
+  .bsx-system-page .service-sort-btn:hover,
+  .bsx-system-page .service-sort-btn[aria-pressed="true"] {
+    color: #4fc3f7;
+  }
+  .bsx-system-page .services-scroll thead [data-tooltip]::after {
+    top: calc(100% + 8px);
+    bottom: auto;
+    z-index: 250;
+  }
+  .bsx-system-page .services-scroll thead [data-tooltip]::before {
+    top: calc(100% + 3px);
+    bottom: auto;
+    border: 0;
+    border-top: 1px solid rgba(79, 195, 247, 0.35);
+    border-left: 1px solid rgba(79, 195, 247, 0.35);
+    transform: rotate(45deg) translateY(-2px);
+    z-index: 251;
+  }
+  .bsx-system-page .services-scroll thead #sys-services-sort-name[data-tooltip]::after,
+  .bsx-system-page .services-scroll thead #sys-services-sort-state[data-tooltip]::after {
+    left: 0;
+    right: auto;
+  }
+  .bsx-system-page .services-scroll thead #sys-services-sort-name[data-tooltip]::before,
+  .bsx-system-page .services-scroll thead #sys-services-sort-state[data-tooltip]::before {
+    left: 14px;
+    right: auto;
+  }
+  .bsx-system-page .services-scroll thead [data-tooltip]:hover::after,
+  .bsx-system-page .services-scroll thead [data-tooltip]:focus-visible::after {
+    transform: translateY(0);
+  }
+  .bsx-system-page .services-scroll thead [data-tooltip]:hover::before,
+  .bsx-system-page .services-scroll thead [data-tooltip]:focus-visible::before {
+    transform: rotate(45deg) translateY(0);
+  }
+  [data-theme="light"] .bsx-system-page .services-scroll thead th {
+    background: #ffffff;
+  }
 
   /* MPOS version chip rail */
   .bsx-system-page .version-row {
@@ -878,8 +1012,9 @@
     </span>
   </header>
   <div class="bsx-card-body">
-    <table>
-        <thead><tr><th>Service</th><th>State</th><th>Up since</th></tr></thead>
+    <div class="services-scroll">
+      <table>
+        <thead><tr><th><button type="button" id="sys-services-sort-name" class="service-sort-btn" aria-pressed="true" data-tooltip="Sort alphabetically">Service</button></th><th><button type="button" id="sys-services-sort-state" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by state">State</button></th><th><button type="button" id="sys-services-sort-since" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by longest runtime">Up since</button></th><th><button type="button" id="sys-services-sort-duration" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by longest runtime">Duration</button></th></tr></thead>
         <tbody id="sys-tbody-services">
         {section name=s loop=$SYS_SERVICES}
           <tr>
@@ -898,10 +1033,12 @@
               {/if}
             </td>
             <td>{if $SYS_SERVICES[s].since}{$SYS_SERVICES[s].since|escape}{else}—{/if}</td>
+            <td>{if $SYS_SERVICES[s].duration}{$SYS_SERVICES[s].duration|escape}{else}—{/if}</td>
           </tr>
         {/section}
         </tbody>
       </table>
+    </div>
   </div>
 </article>
 
@@ -970,18 +1107,24 @@
         {/section}
         </tbody>
       </table>
-      <table class="process-rss-table">
-        <thead><tr><th>Process RSS</th><th class="num">PID</th><th class="num">MB</th></tr></thead>
-        <tbody id="sys-tbody-procs">
-        {section name=p loop=$SYS_PROCS}
-          <tr>
-            <td>{$SYS_PROCS[p].label|escape}</td>
-            <td class="num">{$SYS_PROCS[p].pid|escape|default:"—"}</td>
-            <td class="num">{if $SYS_PROCS[p].rss_mb !== ""}{$SYS_PROCS[p].rss_mb|escape}{else}—{/if}</td>
-          </tr>
-        {/section}
-        </tbody>
-      </table>
+      <div class="process-rss-block">
+        <table class="process-rss-table process-rss-head">
+          <thead><tr><th>Process RSS</th><th class="num">PID</th><th class="num"><button type="button" id="sys-procs-sort-mb" class="process-sort-btn" aria-pressed="false" data-tooltip="Click to sort largest to smallest">MB</button></th></tr></thead>
+        </table>
+        <div class="process-rss-scroll">
+          <table class="process-rss-table">
+            <tbody id="sys-tbody-procs">
+            {section name=p loop=$SYS_PROCS}
+              <tr>
+                <td>{$SYS_PROCS[p].label|escape}</td>
+                <td class="num">{$SYS_PROCS[p].pid|escape|default:"—"}</td>
+                <td class="num">{if $SYS_PROCS[p].rss_mb !== ""}{$SYS_PROCS[p].rss_mb|escape}{else}—{/if}</td>
+              </tr>
+            {/section}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </article>
 
@@ -1059,10 +1202,14 @@
         {/section}
         </tbody>
       </table>
-      <p class="footnote db-footnote" id="sys-db-footnote">
-        <span>Total {$SYS_DATABASE.total_size|escape} / {$SYS_DATABASE.total_rows|escape} rows</span>
-        <span>archive cap {$SYS_DATABASE.keep_recent_shares|escape} · oldest {$SYS_DATABASE.archive_oldest|escape} · newest {$SYS_DATABASE.archive_newest|escape} · prune {$SYS_DATABASE.prune_last_run_age|escape}{if $SYS_DATABASE.prune_last_deleted} · deleted {$SYS_DATABASE.prune_last_deleted|escape}{/if}</span>
-      </p>
+      <div class="footnote db-footnote" id="sys-db-footnote">
+        <div class="db-foot-total">
+          <span aria-hidden="true"></span>
+          <span class="num"><span class="db-foot-total-label">Total</span>{$SYS_DATABASE.total_rows|escape} rows</span>
+          <span class="num">{$SYS_DATABASE.total_size|escape}</span>
+        </div>
+        <span class="db-foot-meta">archive cap {$SYS_DATABASE.keep_recent_shares|escape} · oldest {$SYS_DATABASE.archive_oldest|escape} · newest {$SYS_DATABASE.archive_newest|escape} · prune {$SYS_DATABASE.prune_last_run_age|escape}{if $SYS_DATABASE.prune_last_deleted} · deleted {$SYS_DATABASE.prune_last_deleted|escape}{/if}</span>
+      </div>
     </div>
   </article>
 
@@ -1217,11 +1364,11 @@
 
 <script>
 (function () {
-  var POLL_MS = 10000;
+  var POLL_MS = 60000;
   var URL = '?page=admin&action=system&_partial=1';
   var indicator = document.getElementById('sys-live');
   if (!indicator) return;
-  indicator.textContent = 'live · 10s';
+  indicator.textContent = 'live · 60s';
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1229,7 +1376,7 @@
     });
   }
   function statePill(state) {
-    var s = String(state || '');
+    var s = String(state || '').trim();
     if (s === 'active')     return '<span class="pill pill-active">active</span>';
     if (s === 'failed')     return '<span class="pill pill-inactive">failed</span>';
     if (s === 'activating') return '<span class="pill pill-warn">activating</span>';
@@ -1256,6 +1403,179 @@
   }
   var currentOutboxFilter = '';
   var outboxFilterTouched = false;
+  var serviceSortMode = 'name';
+  var latestServiceRows = readCurrentServiceRows();
+  var processSortMode = 'name';
+  var latestProcessRows = readCurrentProcessRows();
+
+  function readCurrentServiceRows() {
+    var tbody = document.getElementById('sys-tbody-services');
+    if (!tbody) return [];
+    return Array.prototype.map.call(tbody.querySelectorAll('tr'), function (tr) {
+      var td = tr.querySelectorAll('td');
+      return {
+        label: td[0] ? td[0].textContent : '',
+        state: td[1] ? td[1].textContent : '',
+        since: td[2] ? td[2].textContent : '',
+        duration: td[3] ? td[3].textContent : '',
+        since_ts: ''
+      };
+    });
+  }
+
+  function serviceSinceValue(row) {
+    var n = parseInt(row && row.since_ts, 10);
+    if (!isNaN(n) && n > 0) return n;
+    var parsed = Date.parse(row && row.since ? row.since : '');
+    return isNaN(parsed) ? 0 : Math.floor(parsed / 1000);
+  }
+
+  function durationCompact(seconds) {
+    seconds = Math.max(0, Math.floor(seconds || 0));
+    var units = [
+      { label: 'y', seconds: 31536000 },
+      { label: 'mo', seconds: 2592000 },
+      { label: 'd', seconds: 86400 },
+      { label: 'h', seconds: 3600 },
+      { label: 'm', seconds: 60 }
+    ];
+    var parts = [];
+    units.forEach(function (unit) {
+      if (parts.length >= 3 || seconds < unit.seconds) return;
+      var n = Math.floor(seconds / unit.seconds);
+      seconds -= n * unit.seconds;
+      parts.push(n + unit.label);
+    });
+    return parts.length ? parts.join(' ') : 'now';
+  }
+
+  function serviceDuration(row) {
+    if (row && row.duration) return row.duration;
+    var ts = serviceSinceValue(row);
+    if (!ts) return '—';
+    return durationCompact((Date.now() / 1000) - ts);
+  }
+
+  function serviceStateRank(row) {
+    var s = String(row && row.state ? row.state : '').trim().toLowerCase();
+    if (s === 'failed') return 0;
+    if (s === 'activating') return 1;
+    if (s === 'inactive') return 2;
+    if (s === 'active') return 3;
+    return 4;
+  }
+
+  function sortedServiceRows(rows) {
+    return (rows || []).map(function (row, index) {
+      return { row: row, index: index };
+    }).sort(function (a, b) {
+      var an = String(a.row.label || '').toLowerCase();
+      var bn = String(b.row.label || '').toLowerCase();
+      if (serviceSortMode === 'since_oldest') {
+        var ao = serviceSinceValue(a.row) || 9007199254740991;
+        var bo = serviceSinceValue(b.row) || 9007199254740991;
+        if (ao !== bo) return ao - bo;
+      } else if (serviceSortMode === 'since_newest') {
+        var ay = serviceSinceValue(a.row) || -1;
+        var by = serviceSinceValue(b.row) || -1;
+        if (ay !== by) return by - ay;
+      } else if (serviceSortMode === 'state') {
+        var as = serviceStateRank(a.row);
+        var bs = serviceStateRank(b.row);
+        if (as !== bs) return as - bs;
+      }
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return a.index - b.index;
+    }).map(function (item) {
+      return item.row;
+    });
+  }
+
+  function updateServiceSortButtons() {
+    var nameBtn = document.getElementById('sys-services-sort-name');
+    var stateBtn = document.getElementById('sys-services-sort-state');
+    var sinceBtn = document.getElementById('sys-services-sort-since');
+    var durationBtn = document.getElementById('sys-services-sort-duration');
+    if (nameBtn) nameBtn.setAttribute('aria-pressed', serviceSortMode === 'name' ? 'true' : 'false');
+    if (stateBtn) stateBtn.setAttribute('aria-pressed', serviceSortMode === 'state' ? 'true' : 'false');
+    [sinceBtn, durationBtn].forEach(function (btn) {
+      if (!btn) return;
+      var sinceMode = serviceSortMode === 'since_oldest' || serviceSortMode === 'since_newest';
+      btn.setAttribute('aria-pressed', sinceMode ? 'true' : 'false');
+      btn.setAttribute('data-tooltip', serviceSortMode === 'since_oldest' ? 'Sort by shortest runtime' : 'Sort by longest runtime');
+    });
+  }
+
+  function toggleServiceRuntimeSort() {
+    serviceSortMode = serviceSortMode === 'since_oldest' ? 'since_newest' : 'since_oldest';
+    renderServiceRows(latestServiceRows);
+  }
+
+  function renderServiceRows(rows) {
+    latestServiceRows = (rows || []).slice();
+    fill('sys-tbody-services', sortedServiceRows(latestServiceRows).map(function (r) {
+      return '<tr><td>' + esc(r.label) + '</td><td>' + statePill(r.state) +
+             '</td><td>' + (r.since ? esc(r.since) : '—') +
+             '</td><td>' + esc(serviceDuration(r)) + '</td></tr>';
+    }).join(''));
+    updateServiceSortButtons();
+  }
+
+  function readCurrentProcessRows() {
+    var tbody = document.getElementById('sys-tbody-procs');
+    if (!tbody) return [];
+    return Array.prototype.map.call(tbody.querySelectorAll('tr'), function (tr) {
+      var td = tr.querySelectorAll('td');
+      return {
+        label: td[0] ? td[0].textContent : '',
+        pid: td[1] ? td[1].textContent : '',
+        rss_mb: td[2] ? td[2].textContent : ''
+      };
+    });
+  }
+
+  function processRssValue(row) {
+    var n = parseFloat(row && row.rss_mb);
+    return isNaN(n) ? -1 : n;
+  }
+
+  function sortedProcessRows(rows) {
+    return (rows || []).map(function (row, index) {
+      return { row: row, index: index };
+    }).sort(function (a, b) {
+      var an = String(a.row.label || '').toLowerCase();
+      var bn = String(b.row.label || '').toLowerCase();
+      if (processSortMode === 'rss_desc') {
+        var byRss = processRssValue(b.row) - processRssValue(a.row);
+        if (byRss !== 0) return byRss;
+      }
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return a.index - b.index;
+    }).map(function (item) {
+      return item.row;
+    });
+  }
+
+  function updateProcessSortButton() {
+    var btn = document.getElementById('sys-procs-sort-mb');
+    if (!btn) return;
+    var byRss = processSortMode === 'rss_desc';
+    btn.setAttribute('aria-pressed', byRss ? 'true' : 'false');
+    btn.setAttribute('data-tooltip', byRss ? 'Click to sort by process name' : 'Click to sort largest to smallest');
+  }
+
+  function renderProcessRows(rows) {
+    latestProcessRows = (rows || []).slice();
+    fill('sys-tbody-procs', sortedProcessRows(latestProcessRows).map(function (r) {
+      return '<tr><td>' + esc(r.label) + '</td><td class="num">' + esc(r.pid || '—') +
+             '</td><td class="num">' + (r.rss_mb === '' || r.rss_mb == null ? '—' : esc(r.rss_mb)) +
+             '</td></tr>';
+    }).join(''));
+    updateProcessSortButton();
+  }
+
   function outboxGroup(row) {
     var status = String((row && row.status) || '');
     var group = String((row && row.group) || '');
@@ -1439,10 +1759,7 @@
       }
     }
 
-    fill('sys-tbody-services', (data.services || []).map(function (r) {
-      return '<tr><td>' + esc(r.label) + '</td><td>' + statePill(r.state) +
-             '</td><td>' + (r.since ? esc(r.since) : '—') + '</td></tr>';
-    }).join(''));
+    renderServiceRows(data.services || []);
 
     fill('sys-tbody-cpu', (data.cpu || []).map(function (r) {
       return '<tr><td>' + esc(r.label) + '</td><td class="num">' + esc(r.value) + '</td></tr>';
@@ -1504,8 +1821,10 @@
       if (dbFoot) {
         var deleted = parseInt(data.database.prune_last_deleted, 10);
         dbFoot.innerHTML =
-          '<span>Total ' + esc(data.database.total_size || '—') + ' / ' + esc(data.database.total_rows || '—') + ' rows</span>' +
-          '<span>archive cap ' + esc(data.database.keep_recent_shares || '—') +
+          '<div class="db-foot-total"><span aria-hidden="true"></span>' +
+          '<span class="num"><span class="db-foot-total-label">Total</span>' + esc(data.database.total_rows || '—') + ' rows</span>' +
+          '<span class="num">' + esc(data.database.total_size || '—') + '</span></div>' +
+          '<span class="db-foot-meta">archive cap ' + esc(data.database.keep_recent_shares || '—') +
           ' · oldest ' + esc(data.database.archive_oldest || '—') +
           ' · newest ' + esc(data.database.archive_newest || '—') +
           ' · prune ' + esc(data.database.prune_last_run_age || 'never') +
@@ -1521,11 +1840,7 @@
     var netMiners = document.getElementById('sys-net-miners');
     if (netMiners && data.network_miners != null) netMiners.textContent = data.network_miners;
 
-    fill('sys-tbody-procs', (data.procs || []).map(function (r) {
-      return '<tr><td>' + esc(r.label) + '</td><td class="num">' + esc(r.pid || '—') +
-             '</td><td class="num">' + (r.rss_mb === '' || r.rss_mb == null ? '—' : esc(r.rss_mb)) +
-             '</td></tr>';
-    }).join(''));
+    renderProcessRows(data.procs || []);
 
     fill('sys-tbody-daemons', (data.daemons || []).map(function (r) {
       return '<tr><td>' + esc(r.sym) + '</td><td><code>' + esc(r.chain) +
@@ -1567,6 +1882,39 @@
     });
   });
   applyOutboxFilter(outboxCountsFromButtons());
+
+  var serviceSortNameButton = document.getElementById('sys-services-sort-name');
+  var serviceSortStateButton = document.getElementById('sys-services-sort-state');
+  var serviceSortSinceButton = document.getElementById('sys-services-sort-since');
+  var serviceSortDurationButton = document.getElementById('sys-services-sort-duration');
+  if (serviceSortNameButton) {
+    serviceSortNameButton.addEventListener('click', function () {
+      serviceSortMode = 'name';
+      renderServiceRows(latestServiceRows);
+    });
+  }
+  if (serviceSortStateButton) {
+    serviceSortStateButton.addEventListener('click', function () {
+      serviceSortMode = 'state';
+      renderServiceRows(latestServiceRows);
+    });
+  }
+  if (serviceSortSinceButton) {
+    serviceSortSinceButton.addEventListener('click', toggleServiceRuntimeSort);
+  }
+  if (serviceSortDurationButton) {
+    serviceSortDurationButton.addEventListener('click', toggleServiceRuntimeSort);
+  }
+  renderServiceRows(latestServiceRows);
+
+  var processSortButton = document.getElementById('sys-procs-sort-mb');
+  if (processSortButton) {
+    processSortButton.addEventListener('click', function () {
+      processSortMode = processSortMode === 'rss_desc' ? 'name' : 'rss_desc';
+      renderProcessRows(latestProcessRows);
+    });
+  }
+  renderProcessRows(latestProcessRows);
 
   function tick() {
     indicator.classList.add('is-pulsing');
