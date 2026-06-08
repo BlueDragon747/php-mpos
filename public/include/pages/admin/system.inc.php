@@ -70,6 +70,7 @@ function _system_status_empty_payload($state = 'warming', $message = 'System sta
     'logins'           => array('24hours' => 0, '7days' => 0, '1month' => 0, '6month' => 0, '1year' => 0),
     'invitations'      => null,
     'versions'         => array(),
+    'health'           => array(),
     'services'         => array(),
     'backup'           => array(
       'enabled' => 0, 'last_mtime' => 0, 'last_size' => 0, 'next_run' => 0,
@@ -85,6 +86,7 @@ function _system_status_empty_payload($state = 'warming', $message = 'System sta
       'prune_last_deleted' => 0, 'prune_last_status' => '',
     ),
     'cpu'              => array(),
+    'cpu_cores'        => '—',
     'swap'             => array(),
     'swap_available'   => '—',
     'swap_configured'  => 0,
@@ -282,6 +284,21 @@ function _system_docker_mem_to_mb($value) {
   return '';
 }
 
+function _system_process_metrics($pid) {
+  $pid = (int)$pid;
+  if ($pid <= 0) return array('pid' => '', 'cpu_pct' => '', 'rss_mb' => '');
+  $raw = _system_run('ps -p ' . (int)$pid . ' -o pcpu=,rss=', 4096);
+  if ($raw === '') return array('pid' => (string)$pid, 'cpu_pct' => '', 'rss_mb' => '');
+  $parts = preg_split('/\s+/', trim($raw));
+  $cpu = isset($parts[0]) && is_numeric($parts[0]) ? round((float)$parts[0], 1) : '';
+  $rss = isset($parts[1]) && is_numeric($parts[1]) ? round(((int)$parts[1]) / 1024, 1) : '';
+  return array(
+    'pid'     => (string)$pid,
+    'cpu_pct' => $cpu,
+    'rss_mb'  => $rss,
+  );
+}
+
 function _system_daemon_container_proc_rows() {
   $candidates = _system_configured_daemon_container_candidates();
   if (!$candidates) return array();
@@ -349,6 +366,7 @@ function _system_daemon_service_rows() {
     $seen[$slug] = true;
     $ts = strtotime($m[2]);
     $since_ts = $ts ? (int)$ts : 0;
+    $metrics = _system_process_metrics((int)$m[1]);
     $rows[] = array(
       'label'    => $slug,
       'unit'     => 'process:' . $m[1],
@@ -356,6 +374,9 @@ function _system_daemon_service_rows() {
       'since'    => $since_ts ? gmdate('D Y-m-d H:i:s \U\T\C', $since_ts) : $m[2],
       'since_ts' => $since_ts,
       'duration' => _system_duration_from_epoch($since_ts),
+      'pid'      => $metrics['pid'],
+      'cpu_pct'  => $metrics['cpu_pct'],
+      'rss_mb'   => $metrics['rss_mb'],
     );
   }
   usort($rows, function ($a, $b) {
@@ -421,6 +442,13 @@ function _system_unit_active_since($unit) {
   $ts = _system_run(_system_unit_cmd($best, 'show') . ' -p ActiveEnterTimestamp --value');
   if ($ts === '' || $ts === '0' || $ts === 'n/a') return '';
   return $ts;
+}
+
+function _system_unit_main_pid($unit) {
+  $best = _system_unit_best($unit);
+  if ($best['name'] === '' || substr($best['name'], -6) === '.timer') return 0;
+  $pid = trim(_system_run(_system_unit_cmd($best, 'show') . ' -p MainPID --value'));
+  return is_numeric($pid) ? (int)$pid : 0;
 }
 
 function _system_unit_selected_name($unit) {
@@ -666,6 +694,14 @@ function _system_bytes($n) {
   return sprintf($fmt, $b, $units[$i]);
 }
 
+function _system_bytes_words($n) {
+  if (!is_numeric($n) || $n < 0) return '—';
+  $b = (float)$n; $units = array('Bytes','KBytes','MBytes','GBytes','TBytes','PBytes'); $i = 0;
+  while ($b >= 1024 && $i < count($units) - 1) { $b /= 1024; $i++; }
+  $fmt = $b >= 100 ? '%.0f %s' : ($b >= 10 ? '%.1f %s' : '%.2f %s');
+  return sprintf($fmt, $b, $units[$i]);
+}
+
 function _system_db_prune_choices() {
   return array(
     array('value' => 0,   'label' => 'Disabled'),
@@ -786,6 +822,184 @@ function _system_boot_time_str() {
     return gmdate('Y-m-d H:i \U\T\C', (int)$m[1]);
   }
   return '';
+}
+
+function _system_health_chip($label, $value, $state = 'ok', $tooltip = '', $items = array()) {
+  $state = in_array($state, array('ok', 'warn', 'bad'), true) ? $state : 'warn';
+  if (!is_array($items)) $items = array();
+  return array(
+    'label'      => (string)$label,
+    'value'      => (string)$value,
+    'state'      => $state,
+    'tooltip'    => (string)$tooltip,
+    'items'      => $items,
+    'items_json' => json_encode($items),
+  );
+}
+
+function _system_db_scalar($mysqli, $sql) {
+  if (!isset($mysqli) || !is_object($mysqli)) return null;
+  $res = @$mysqli->query($sql);
+  if (!$res) return null;
+  $row = $res->fetch_row();
+  $res->free();
+  return $row ? $row[0] : null;
+}
+
+function _system_auxpow_health_chip() {
+  $payload = json_encode(array(
+    'jsonrpc' => '2.0',
+    'id'      => 1,
+    'method'  => 'getaux',
+    'params'  => array(),
+  ));
+  $ctx = stream_context_create(array(
+    'http' => array(
+      'method'        => 'POST',
+      'header'        => "Content-Type: application/json\r\n",
+      'content'       => $payload,
+      'timeout'       => 2,
+      'ignore_errors' => true,
+    ),
+  ));
+  $raw = @file_get_contents('http://127.0.0.1:19335/', false, $ctx);
+  if ($raw === false || trim($raw) === '') {
+    return _system_health_chip('Aux', 'down', 'bad', 'Merged-mine proxy getaux did not respond.');
+  }
+  $json = json_decode($raw, true);
+  if (!is_array($json) || !empty($json['error']) || empty($json['result']) || !is_array($json['result'])) {
+    return _system_health_chip('Aux', 'error', 'bad', 'Merged-mine proxy getaux returned an error.');
+  }
+  $result = $json['result'];
+  $ready = isset($result['ready_count']) ? (int)$result['ready_count'] : 0;
+  $total = isset($result['total_chains']) ? (int)$result['total_chains'] : 0;
+  if ($total <= 0 && !empty($result['readiness']) && is_array($result['readiness'])) {
+    $total = count($result['readiness']);
+  }
+  $failures = 0;
+  $parts = array();
+  $items = array();
+  if (!empty($result['readiness']) && is_array($result['readiness'])) {
+    foreach ($result['readiness'] as $row) {
+      if (!is_array($row)) continue;
+      $name = isset($row['chain']) ? (string)$row['chain'] : (isset($row['alias']) ? (string)$row['alias'] : 'aux');
+      $status = !empty($row['ready']) ? 'ready' : (isset($row['status']) ? (string)$row['status'] : 'waiting');
+      $f = isset($row['failures']) ? (int)$row['failures'] : 0;
+      $failures += $f;
+      $parts[] = $name . ' ' . $status . ' failures ' . $f;
+      $items[] = array(
+        'label' => $name,
+        'value' => $status,
+        'state' => (!empty($row['ready']) && $f === 0) ? 'ok' : 'warn',
+        'meta'  => 'failures ' . $f,
+      );
+    }
+  }
+  $state = ($total > 0 && $ready >= $total && $failures === 0) ? 'ok' : 'warn';
+  $tip = 'AuxPoW readiness';
+  if ($failures > 0) $tip .= ' — failures ' . $failures;
+  if ($parts) $tip .= ': ' . implode('; ', $parts);
+  return _system_health_chip('Aux', $ready . '/' . max(0, $total), $state, $tip, $items);
+}
+
+function _system_importer_health_chip() {
+  $log_path = '/var/log/blakestream-eliopool-25.2-go/shares.log';
+  $state_path = '/var/lib/blakestream-mpos/go-share-log-importer.state';
+  if (!is_file($log_path) || !is_readable($log_path)) {
+    return _system_health_chip('Importer', 'no log', 'warn', 'Share log is not readable.');
+  }
+  if (!is_file($state_path) || !is_readable($state_path)) {
+    return _system_health_chip('Importer', 'no state', 'warn', 'Share importer state file is not readable.');
+  }
+  $state = json_decode((string)@file_get_contents($state_path), true);
+  $st = @stat($log_path);
+  if (!is_array($state) || !is_array($st)) {
+    return _system_health_chip('Importer', 'unknown', 'warn', 'Could not compare share log and importer state.');
+  }
+  $same_file = isset($state['dev'], $state['ino']) && (int)$state['dev'] === (int)$st['dev'] && (int)$state['ino'] === (int)$st['ino'];
+  $offset = isset($state['offset']) ? (int)$state['offset'] : 0;
+  $size = isset($st['size']) ? (int)$st['size'] : 0;
+  $lag = $same_file ? max(0, $size - $offset) : $size;
+  $state_name = $lag <= 1048576 ? 'ok' : ($lag <= 10485760 ? 'warn' : 'bad');
+  $value = $lag <= 0 ? 'OK' : _system_bytes_words($lag);
+  $tip = 'Share-log importer lag: ' . _system_bytes_words($lag) . ' behind';
+  if (!$same_file) $tip .= ' after log rotation';
+  return _system_health_chip('Importer', $value, $state_name, $tip);
+}
+
+function _system_share_rate_health_chip($mysqli) {
+  $shares = _system_db_scalar(
+    $mysqli,
+    "SELECT IFNULL(SUM(valid_count), 0) FROM share_stats_recent WHERE last_share_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+  );
+  if ($shares === null) {
+    return _system_health_chip('Shares', '—', 'warn', 'Recent share summary is not available.');
+  }
+  $shares = (int)$shares;
+  $per_min = (int)round($shares / 5);
+  $state = $shares > 0 ? 'ok' : 'warn';
+  return _system_health_chip('Shares', number_format($per_min) . '/min', $state, number_format($shares) . ' accepted shares in the last 5 minutes.');
+}
+
+function _system_cron_health_chip($mysqli) {
+  if (!isset($mysqli) || !is_object($mysqli)) {
+    return _system_health_chip('Cron', '—', 'warn', 'Database connection unavailable.');
+  }
+  $bad = 0;
+  $last_end = 0;
+  $statuses = 0;
+  $jobs = array();
+  $res = @$mysqli->query("SELECT name, value FROM monitoring WHERE name LIKE '%\\_status' OR name LIKE '%\\_endtime'");
+  if (!$res) {
+    return _system_health_chip('Cron', '—', 'warn', 'Cron monitoring table is not readable.');
+  }
+  while ($row = $res->fetch_assoc()) {
+    $name = isset($row['name']) ? (string)$row['name'] : '';
+    $value = isset($row['value']) ? (string)$row['value'] : '';
+    if (substr($name, -7) === '_status') {
+      $statuses++;
+      $job = substr($name, 0, -7);
+      if (!isset($jobs[$job])) $jobs[$job] = array('status' => '', 'endtime' => 0);
+      $jobs[$job]['status'] = $value;
+      if ($value !== '' && $value !== '0') $bad++;
+    } elseif (substr($name, -8) === '_endtime' && is_numeric($value)) {
+      $job = substr($name, 0, -8);
+      if (!isset($jobs[$job])) $jobs[$job] = array('status' => '', 'endtime' => 0);
+      $jobs[$job]['endtime'] = (int)$value;
+      $last_end = max($last_end, (int)$value);
+    }
+  }
+  $res->free();
+  if ($statuses <= 0) {
+    return _system_health_chip('Cron', 'warming', 'warn', 'No cron job status rows have been recorded yet.');
+  }
+  $age = $last_end > 0 ? max(0, time() - $last_end) : 0;
+  $state = $bad === 0 && ($last_end <= 0 || $age <= 900) ? 'ok' : 'warn';
+  $value = $bad === 0 ? 'OK' : ($bad . ' bad');
+  $tip = 'Cron status rows: ' . $statuses . '; last completed job ' . ($last_end > 0 ? _system_duration_compact_seconds($age) . ' ago' : 'unknown');
+  ksort($jobs);
+  $items = array();
+  foreach ($jobs as $job => $row) {
+    $status_raw = isset($row['status']) ? (string)$row['status'] : '';
+    $ok = ($status_raw === '' || $status_raw === '0');
+    $end = isset($row['endtime']) ? (int)$row['endtime'] : 0;
+    $items[] = array(
+      'label' => str_replace('_', ' ', $job),
+      'value' => $ok ? 'OK' : ('exit ' . $status_raw),
+      'state' => $ok ? 'ok' : 'bad',
+      'meta'  => $end > 0 ? ('last ' . _system_duration_compact_seconds(max(0, time() - $end)) . ' ago') : 'last unknown',
+    );
+  }
+  return _system_health_chip('Cron', $value, $state, $tip, $items);
+}
+
+function _system_health_summary($mysqli) {
+  return array(
+    _system_auxpow_health_chip(),
+    _system_importer_health_chip(),
+    _system_share_rate_health_chip($mysqli),
+    _system_cron_health_chip($mysqli),
+  );
 }
 
 function _system_net_primary_iface() {
@@ -999,6 +1213,7 @@ $mpos_versions = array(
         'installed' => (string)$setting->getValue('DB_VERSION'),
         'match' => DB_VERSION === (string)$setting->getValue('DB_VERSION')),
 );
+$system_health = _system_health_summary(isset($mysqli) ? $mysqli : null);
 
 // ---- Services panel -------------------------------------------------
 $services = array(
@@ -1015,6 +1230,7 @@ $service_rows = array();
 foreach ($services as $label => $unit) {
   $since = _system_unit_active_since($unit);
   $since_ts = $since !== '' ? (int)strtotime($since) : 0;
+  $metrics = _system_process_metrics(_system_unit_main_pid($unit));
   $service_rows[] = array(
     'label'    => $label,
     'unit'     => _system_unit_selected_name($unit),
@@ -1022,6 +1238,9 @@ foreach ($services as $label => $unit) {
     'since'    => $since,
     'since_ts' => $since_ts,
     'duration' => _system_duration_from_epoch($since_ts),
+    'pid'      => $metrics['pid'],
+    'cpu_pct'  => $metrics['cpu_pct'],
+    'rss_mb'   => $metrics['rss_mb'],
   );
 }
 foreach (_system_daemon_service_rows() as $daemon_service_row) {
@@ -1374,10 +1593,8 @@ if ($network_now) {
 $network_boot_str = _system_boot_time_str();
 $network_totals_tip = $network_boot_str !== '' ? 'Since boot — ' . $network_boot_str : '';
 $network_rows = array(
-  array('label' => 'RX rate',  'value' => $network_rx_rate),
-  array('label' => 'TX rate',  'value' => $network_tx_rate),
-  array('label' => 'RX total', 'value' => $network_rx_total, 'tooltip' => $network_totals_tip),
-  array('label' => 'TX total', 'value' => $network_tx_total, 'tooltip' => $network_totals_tip),
+  array('label' => 'RX/TX rate',  'value' => $network_rx_rate . ' / ' . $network_tx_rate),
+  array('label' => 'RX/TX total', 'value' => $network_rx_total . ' / ' . $network_tx_total, 'tooltip' => $network_totals_tip),
 );
 // "Miners" = active workers (devices that submitted a share in the
 // last 120 s). TCP-connection counts on the stratum port over-count:
@@ -1401,12 +1618,12 @@ $cpu_ncpu = (int)_system_run('nproc');
 $cpu_pct = _system_cpu_busy_pct();
 
 $cpu_rows = array(
-  array('label' => 'Utilization', 'value' => $cpu_pct !== '' ? $cpu_pct . ' %' : '—'),
+  array('label' => 'System CPU', 'value' => $cpu_pct !== '' ? $cpu_pct . ' %' : '—'),
   array('label' => 'Load 1m',  'value' => $cpu_load1  !== '' ? $cpu_load1  : '—'),
   array('label' => 'Load 5m',  'value' => $cpu_load5  !== '' ? $cpu_load5  : '—'),
   array('label' => 'Load 15m', 'value' => $cpu_load15 !== '' ? $cpu_load15 : '—'),
-  array('label' => 'Cores',    'value' => $cpu_ncpu > 0 ? (string)$cpu_ncpu : '—'),
 );
+$cpu_cores_str = $cpu_ncpu > 0 ? (string)$cpu_ncpu : '—';
 
 // ---- System memory -------------------------------------------------
 $meminfo = array();
@@ -1728,10 +1945,12 @@ $system_status_payload = array(
   'logins'           => $logins_info,
   'invitations'      => $invitations_info,
   'versions'         => $mpos_versions,
+  'health'           => $system_health,
   'services'         => $service_rows,
   'backup'           => $sys_backup,
   'database'         => $sys_database,
   'cpu'              => $cpu_rows,
+  'cpu_cores'        => $cpu_cores_str,
   'swap'             => $swap_rows,
   'swap_available'   => $swap_available_str,
   'swap_configured'  => $swap_configured,
@@ -1768,12 +1987,27 @@ $users_info           = $system_status_payload['users'];
 $logins_info          = $system_status_payload['logins'];
 $invitations_info     = $system_status_payload['invitations'];
 $mpos_versions        = $system_status_payload['versions'];
+$system_health        = isset($system_status_payload['health']) && is_array($system_status_payload['health'])
+                          ? $system_status_payload['health']
+                          : array();
 $service_rows         = $system_status_payload['services'];
 $sys_backup           = $system_status_payload['backup'];
 $sys_database         = isset($system_status_payload['database'])
                           ? $system_status_payload['database']
                           : _system_status_empty_payload()['database'];
 $cpu_rows             = $system_status_payload['cpu'];
+$cpu_cores_str        = isset($system_status_payload['cpu_cores'])
+                          ? (string)$system_status_payload['cpu_cores']
+                          : '—';
+if ($cpu_cores_str === '—' && is_array($cpu_rows)) {
+  foreach ($cpu_rows as $idx => $row) {
+    if (isset($row['label']) && strcasecmp((string)$row['label'], 'Cores') === 0) {
+      $cpu_cores_str = isset($row['value']) ? (string)$row['value'] : '—';
+      unset($cpu_rows[$idx]);
+    }
+  }
+  $cpu_rows = array_values($cpu_rows);
+}
 $swap_rows            = $system_status_payload['swap'];
 $swap_available_str   = $system_status_payload['swap_available'];
 $swap_configured      = $system_status_payload['swap_configured'];
@@ -1806,10 +2040,12 @@ $smarty->assign('SYS_USERS',       $users_info);
 $smarty->assign('SYS_LOGINS',      $logins_info);
 $smarty->assign('SYS_INVITATIONS', $invitations_info);
 $smarty->assign('SYS_VERSIONS',    $mpos_versions);
+$smarty->assign('SYS_HEALTH',      $system_health);
 $smarty->assign('SYS_SERVICES', $service_rows);
 $smarty->assign('SYS_BACKUP',   $sys_backup);
 $smarty->assign('SYS_DATABASE', $sys_database);
 $smarty->assign('SYS_CPU',      $cpu_rows);
+$smarty->assign('SYS_CPU_CORES', $cpu_cores_str);
 $smarty->assign('SYS_SWAP',         $swap_rows);
 $smarty->assign('SYS_SWAP_AVAIL',   $swap_available_str);
 $smarty->assign('SYS_SWAP_OK',      $swap_configured);

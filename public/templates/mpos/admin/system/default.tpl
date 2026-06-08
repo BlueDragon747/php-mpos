@@ -63,8 +63,7 @@
       minmax(175px, .7fr)
       minmax(335px, 1.1fr)
       minmax(320px, 1fr)
-      minmax(390px, 1.35fr)
-      minmax(170px, .65fr);
+      minmax(390px, 1.35fr);
     gap: 12px;
   }
   @media (max-width: 1300px) {
@@ -221,12 +220,14 @@
   [data-theme="light"] .bsx-system-page .card-stat-v { color: #2e7d32; }
 
   /* CPU + Swap stack */
-  .bsx-system-page .cpu-stack {
+  .bsx-system-page .cpu-stack,
+  .bsx-system-page .memory-network-stack {
     display: flex; flex-direction: column; gap: 14px;
     min-width: 0;
     height: 100%;
   }
-  .bsx-system-page .cpu-stack > .bsx-card { margin-bottom: 0; }
+  .bsx-system-page .cpu-stack > .bsx-card,
+  .bsx-system-page .memory-network-stack > .bsx-card { margin-bottom: 0; }
 
   /* Stretch resources-row columns */
   .bsx-system-page .grid3 { align-items: stretch; }
@@ -254,22 +255,20 @@
     line-height: 1.25;
     margin-top: 6px;
   }
-  .bsx-system-page .db-footnote .db-foot-total {
-    display: grid;
-    grid-template-columns: 1fr 150px 90px;
-    gap: 8px;
+  .bsx-system-page .db-total-stat {
+    align-items: center;
+    gap: 6px;
+    min-width: max-content;
+  }
+  .bsx-system-page .db-total-v {
+    display: inline-flex;
     align-items: baseline;
-    margin-bottom: 2px;
+    gap: 8px;
+    line-height: 1;
   }
-  .bsx-system-page .db-footnote .db-foot-total span {
+  .bsx-system-page .db-total-v span {
     font-variant-numeric: tabular-nums;
-  }
-  .bsx-system-page .db-footnote .db-foot-total .num {
-    text-align: right;
-  }
-  .bsx-system-page .db-footnote .db-foot-total-label {
-    color: #aab;
-    margin-right: 8px;
+    white-space: nowrap;
   }
   .bsx-system-page .db-footnote .db-foot-meta {
     display: block;
@@ -360,86 +359,32 @@
   [data-theme="light"] .bsx-system-page .resource-io-line strong { color: #1f2933; }
   .bsx-system-page .memory-card .resource-io-line {
     flex-wrap: nowrap;
-    justify-content: flex-start;
-    gap: 0 6px;
-    padding-left: 14px;
+    justify-content: center;
+    gap: 0 8px;
+    padding-left: 0;
     padding-right: 0;
     padding-bottom: 6px;
     white-space: nowrap;
     border-bottom: 1px solid rgba(255,255,255,.08);
   }
   .bsx-system-page .memory-card .resource-io-line span + span {
-    padding-left: 6px;
+    padding-left: 8px;
   }
   .bsx-system-page .disk-card .resource-io-line {
     padding-bottom: 6px;
     border-bottom: 1px solid rgba(255,255,255,.08);
   }
   .bsx-system-page .memory-summary-table {
-    margin-bottom: 4px;
+    margin-bottom: 0;
   }
   .bsx-system-page .memory-card .bsx-card-body {
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
-  .bsx-system-page .process-rss-block {
-    border-top: 1px solid rgba(255,255,255,.08);
-    min-height: 0;
-  }
-  .bsx-system-page .process-rss-table {
-    table-layout: fixed;
-  }
-  .bsx-system-page .process-rss-table thead th {
-    padding-top: 6px;
-  }
-  .bsx-system-page .process-sort-btn {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: #4fc3f7;
-    cursor: pointer;
-    font: inherit;
-    letter-spacing: inherit;
-    padding: 0;
-    text-transform: inherit;
-  }
-  .bsx-system-page .process-sort-btn:hover,
-  .bsx-system-page .process-sort-btn[aria-pressed="true"] {
-    color: #80d6ff;
-  }
-  .bsx-system-page .process-rss-table th:nth-child(1),
-  .bsx-system-page .process-rss-table td:nth-child(1) { width: 48%; }
-  .bsx-system-page .process-rss-table th:nth-child(2),
-  .bsx-system-page .process-rss-table td:nth-child(2) { width: 27%; }
-  .bsx-system-page .process-rss-table th:nth-child(3),
-  .bsx-system-page .process-rss-table td:nth-child(3) { width: 25%; }
-  .bsx-system-page .process-rss-table th:nth-child(2),
-  .bsx-system-page .process-rss-table td:nth-child(2),
-  .bsx-system-page .process-rss-table th:nth-child(3),
-  .bsx-system-page .process-rss-table td:nth-child(3) {
-    text-align: center;
-  }
-  .bsx-system-page .process-rss-scroll {
-    max-height: 142px;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-  }
-  .bsx-system-page .process-rss-scroll .process-rss-table td:first-child {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .bsx-system-page .process-rss-scroll .process-rss-table tr:last-child td {
-    border-bottom: 1px solid rgba(255,255,255,.05);
-  }
   [data-theme="light"] .bsx-system-page .memory-card .resource-io-line,
-  [data-theme="light"] .bsx-system-page .disk-card .resource-io-line,
-  [data-theme="light"] .bsx-system-page .process-rss-block {
+  [data-theme="light"] .bsx-system-page .disk-card .resource-io-line {
     border-color: rgba(0,0,0,.10);
-  }
-  [data-theme="light"] .bsx-system-page .process-rss-scroll .process-rss-table tr:last-child td {
-    border-bottom-color: rgba(0,0,0,.06);
   }
   .bsx-system-page .network-card th,
   .bsx-system-page .network-card td {
@@ -613,6 +558,16 @@
   [data-theme="light"] .bsx-system-page .stat-warn { color: #b53d00; }
 
   /* Services header layout */
+  .bsx-system-page .services-status-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    gap: 12px;
+    margin-bottom: 14px;
+    align-items: stretch;
+  }
+  .bsx-system-page .services-status-grid > .bsx-card {
+    margin-bottom: 0;
+  }
   .bsx-system-page .services-head {
     display: grid !important;
     grid-template-columns: 1fr auto 1fr !important;
@@ -620,7 +575,15 @@
   }
   .bsx-system-page .services-head > h3            { justify-self: start; }
   .bsx-system-page .services-head > .version-row  { justify-self: center; }
-  .bsx-system-page .services-head > .live-indicator { justify-self: end; }
+  .bsx-system-page .services-head > .services-right {
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: visible;
+  }
   .bsx-system-page .services-scroll {
     max-height: 236px;
     overflow-y: auto;
@@ -648,6 +611,40 @@
   .bsx-system-page .service-sort-btn[aria-pressed="true"] {
     color: #4fc3f7;
   }
+  .bsx-system-page .service-sort-btn.metric-sort-btn {
+    color: #4fc3f7;
+  }
+  .bsx-system-page .service-sort-btn.metric-sort-btn:hover,
+  .bsx-system-page .service-sort-btn.metric-sort-btn[aria-pressed="true"] {
+    color: #80d6ff;
+  }
+  .bsx-system-page .services-table th.num,
+  .bsx-system-page .services-table td.num {
+    text-align: center;
+  }
+  .bsx-system-page .services-table tbody td {
+    transition: background-color 120ms ease;
+  }
+  .bsx-system-page .services-table tbody tr:hover td {
+    background: rgba(79, 195, 247, .055);
+  }
+  [data-theme="light"] .bsx-system-page .services-table tbody tr:hover td {
+    background: rgba(2, 136, 209, .06);
+  }
+  .bsx-system-page .services-table th:nth-child(1),
+  .bsx-system-page .services-table td:nth-child(1) { width: 10%; }
+  .bsx-system-page .services-table th:nth-child(2),
+  .bsx-system-page .services-table td:nth-child(2) { width: 20%; }
+  .bsx-system-page .services-table th:nth-child(3),
+  .bsx-system-page .services-table td:nth-child(3) { width: 9%; }
+  .bsx-system-page .services-table th:nth-child(4),
+  .bsx-system-page .services-table td:nth-child(4) { width: 8%; }
+  .bsx-system-page .services-table th:nth-child(5),
+  .bsx-system-page .services-table td:nth-child(5) { width: 8%; }
+  .bsx-system-page .services-table th:nth-child(6),
+  .bsx-system-page .services-table td:nth-child(6) { width: 29%; }
+  .bsx-system-page .services-table th:nth-child(7),
+  .bsx-system-page .services-table td:nth-child(7) { width: 16%; }
   .bsx-system-page .services-scroll thead [data-tooltip]::after {
     top: calc(100% + 8px);
     bottom: auto;
@@ -708,8 +705,180 @@
   [data-theme="light"] .bsx-system-page .version-tag-v.is-bad { color: #c62828; }
   [data-theme="light"] .bsx-system-page .version-tag-expected { color: #b53d00; }
 
+  .bsx-system-page .health-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-width: 0;
+    margin-bottom: 8px;
+    overflow: visible;
+  }
+  .bsx-system-page .health-chip {
+    appearance: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    flex: 0 0 auto;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(181,231,160,.35);
+    background: rgba(181,231,160,.08);
+    color: #cdd;
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+    line-height: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bsx-system-page .health-chip:hover,
+  .bsx-system-page .health-chip.is-selected {
+    border-color: rgba(79,195,247,.65);
+    background: rgba(79,195,247,.10);
+  }
+  .bsx-system-page .health-chip-k {
+    color: #aab;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-weight: 700;
+  }
+  .bsx-system-page .health-chip.is-warn {
+    border-color: rgba(255,214,110,.42);
+    background: rgba(255,214,110,.08);
+  }
+  .bsx-system-page .health-chip.is-bad {
+    border-color: rgba(229,115,115,.45);
+    background: rgba(229,115,115,.10);
+  }
+  [data-theme="light"] .bsx-system-page .health-chip {
+    border-color: rgba(46,125,50,.45);
+    background: rgba(46,125,50,.10);
+    color: #1f2933;
+  }
+  [data-theme="light"] .bsx-system-page .health-chip-k { color: #4a5568; }
+  [data-theme="light"] .bsx-system-page .health-chip.is-warn {
+    border-color: rgba(245,124,0,.45);
+    background: rgba(245,124,0,.12);
+  }
+  [data-theme="light"] .bsx-system-page .health-chip.is-bad {
+    border-color: rgba(198,40,40,.45);
+    background: rgba(198,40,40,.10);
+  }
+  .bsx-system-page .health-card {
+    overflow: visible;
+  }
+  .bsx-system-page .health-card .bsx-card-body {
+    height: 236px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .bsx-system-page .health-detail {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(0,0,0,.13);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: #cdd;
+    scrollbar-gutter: stable;
+  }
+  .bsx-system-page .health-detail-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    color: #aab;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .bsx-system-page .health-detail-value {
+    color: #b5e7a0;
+    font-variant-numeric: tabular-nums;
+  }
+  .bsx-system-page .health-detail.is-warn .health-detail-value { color: #ffd66e; }
+  .bsx-system-page .health-detail.is-bad .health-detail-value { color: #e57373; }
+  .bsx-system-page .health-detail-body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .bsx-system-page .health-detail-list {
+    display: grid;
+    gap: 5px;
+  }
+  .bsx-system-page .health-detail-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: baseline;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .bsx-system-page .health-detail-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .bsx-system-page .health-detail-row-k {
+    min-width: 0;
+    color: #cdd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bsx-system-page .health-detail-row-v {
+    color: #b5e7a0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .bsx-system-page .health-detail-row.is-warn .health-detail-row-v { color: #ffd66e; }
+  .bsx-system-page .health-detail-row.is-bad .health-detail-row-v { color: #e57373; }
+  .bsx-system-page .health-detail-row-meta {
+    grid-column: 1 / -1;
+    color: #99a;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  [data-theme="light"] .bsx-system-page .health-detail {
+    border-color: rgba(0,0,0,.12);
+    background: rgba(0,0,0,.03);
+    color: #1f2933;
+  }
+  [data-theme="light"] .bsx-system-page .health-detail-title { color: #4a5568; }
+  [data-theme="light"] .bsx-system-page .health-detail-value { color: #2e7d32; }
+  [data-theme="light"] .bsx-system-page .health-detail.is-warn .health-detail-value { color: #b53d00; }
+  [data-theme="light"] .bsx-system-page .health-detail.is-bad .health-detail-value { color: #c62828; }
+  [data-theme="light"] .bsx-system-page .health-detail-row-k { color: #1f2933; }
+  [data-theme="light"] .bsx-system-page .health-detail-row-v { color: #2e7d32; }
+  [data-theme="light"] .bsx-system-page .health-detail-row.is-warn .health-detail-row-v { color: #b53d00; }
+  [data-theme="light"] .bsx-system-page .health-detail-row.is-bad .health-detail-row-v { color: #c62828; }
+  [data-theme="light"] .bsx-system-page .health-detail-row-meta { color: #4a5568; }
+  @media (max-width: 1100px) {
+    .bsx-system-page .services-status-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 1500px) {
+    .bsx-system-page .health-card .bsx-card-body {
+      height: auto;
+      max-height: 236px;
+    }
+  }
+
   .bsx-system-page .live-indicator {
     display: inline-flex; align-items: center; gap: 6px;
+    flex: 0 0 auto;
     font-size: 10px; color: #99a; font-style: italic; letter-spacing: 0.04em;
   }
   .bsx-system-page .live-indicator::before {
@@ -986,7 +1155,8 @@
 
 </div>
 
-{* ===== Services (full width, version row + service list) ===== *}
+{* ===== Services + pool health ===== *}
+<div class="services-status-grid">
 <article class="bsx-card services-card">
   <header class="services-head">
     <h3>Services</h3>
@@ -1001,24 +1171,25 @@
         </span>
       {/section}
     </div>
-    <span class="live-indicator{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} is-stale{/if}" id="sys-live">
-      {if $SYS_STATUS_CACHE.state|default:"" == "warming"}
-        warming up
-      {elseif $SYS_STATUS_CACHE.state|default:"" == "stale"}
-        stale · {$SYS_STATUS_CACHE.age|default:0|escape}s old
-      {else}
-        live · cached
-      {/if}
-    </span>
+    <div class="services-right">
+      <span class="live-indicator{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} is-stale{/if}" id="sys-live">
+        {if $SYS_STATUS_CACHE.state|default:"" == "warming"}
+          warming up
+        {elseif $SYS_STATUS_CACHE.state|default:"" == "stale"}
+          stale · {$SYS_STATUS_CACHE.age|default:0|escape}s old
+        {else}
+          live · cached
+        {/if}
+      </span>
+    </div>
   </header>
   <div class="bsx-card-body">
     <div class="services-scroll">
-      <table>
-        <thead><tr><th><button type="button" id="sys-services-sort-name" class="service-sort-btn" aria-pressed="true" data-tooltip="Sort alphabetically">Service</button></th><th><button type="button" id="sys-services-sort-state" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by state">State</button></th><th><button type="button" id="sys-services-sort-since" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by longest runtime">Up since</button></th><th><button type="button" id="sys-services-sort-duration" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by longest runtime">Duration</button></th></tr></thead>
+      <table class="services-table">
+        <thead><tr><th><button type="button" id="sys-services-sort-state" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by state">State</button></th><th><button type="button" id="sys-services-sort-name" class="service-sort-btn" aria-pressed="true" data-tooltip="Sort alphabetically">Service</button></th><th class="num">PID</th><th class="num"><button type="button" id="sys-services-sort-cpu" class="service-sort-btn metric-sort-btn" aria-pressed="false" data-tooltip="Sort by highest per-core CPU">Core %</button></th><th class="num"><button type="button" id="sys-services-sort-mb" class="service-sort-btn metric-sort-btn" aria-pressed="false" data-tooltip="Sort by highest RAM">RAM</button></th><th><button type="button" id="sys-services-sort-duration" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by longest runtime">Duration</button></th><th><button type="button" id="sys-services-sort-since" class="service-sort-btn" aria-pressed="false" data-tooltip="Sort by longest runtime">Up since</button></th></tr></thead>
         <tbody id="sys-tbody-services">
         {section name=s loop=$SYS_SERVICES}
           <tr>
-            <td>{$SYS_SERVICES[s].label|escape}</td>
             <td>
               {if $SYS_SERVICES[s].state == "active"}
                 <span class="pill pill-active">active</span>
@@ -1032,8 +1203,12 @@
                 <span class="pill pill-disabled">{$SYS_SERVICES[s].state|escape|default:"—"}</span>
               {/if}
             </td>
-            <td>{if $SYS_SERVICES[s].since}{$SYS_SERVICES[s].since|escape}{else}—{/if}</td>
+            <td>{$SYS_SERVICES[s].label|escape}</td>
+            <td class="num">{if $SYS_SERVICES[s].pid}{$SYS_SERVICES[s].pid|escape}{else}—{/if}</td>
+            <td class="num">{if $SYS_SERVICES[s].cpu_pct !== ""}{$SYS_SERVICES[s].cpu_pct|escape}{else}—{/if}</td>
+            <td class="num">{if $SYS_SERVICES[s].rss_mb !== ""}{$SYS_SERVICES[s].rss_mb|escape}{else}—{/if}</td>
             <td>{if $SYS_SERVICES[s].duration}{$SYS_SERVICES[s].duration|escape}{else}—{/if}</td>
+            <td>{if $SYS_SERVICES[s].since}{$SYS_SERVICES[s].since|escape}{else}—{/if}</td>
           </tr>
         {/section}
         </tbody>
@@ -1042,7 +1217,39 @@
   </div>
 </article>
 
-{* ===== Resources (4-up): CPU · Memory · Disk · Network ===== *}
+<article class="bsx-card health-card">
+  <header><h3>Pool Health</h3></header>
+  <div class="bsx-card-body">
+    <div class="health-row" id="sys-health-row">
+      {section name=h loop=$SYS_HEALTH}
+        <button type="button"
+                class="health-chip health-chip-btn is-{$SYS_HEALTH[h].state|escape}{if $smarty.section.h.first} is-selected{/if}"
+                data-health-index="{$smarty.section.h.index}"
+                data-health-label="{$SYS_HEALTH[h].label|escape}"
+                data-health-value="{$SYS_HEALTH[h].value|escape}"
+                data-health-state="{$SYS_HEALTH[h].state|escape}"
+                data-health-detail="{$SYS_HEALTH[h].tooltip|escape}"
+                data-health-items="{$SYS_HEALTH[h].items_json|escape}">
+          <span class="health-chip-k">{$SYS_HEALTH[h].label|escape}</span>
+        </button>
+      {/section}
+    </div>
+    <div class="health-detail" id="sys-health-detail">
+      <div class="health-detail-title">
+        <span id="sys-health-detail-title">
+          {section name=h loop=$SYS_HEALTH}{if $smarty.section.h.first}{$SYS_HEALTH[h].label|escape}{/if}{/section}
+        </span>
+        <span class="health-detail-value" id="sys-health-detail-value">
+          {section name=h loop=$SYS_HEALTH}{if $smarty.section.h.first}{$SYS_HEALTH[h].value|escape}{/if}{/section}
+        </span>
+      </div>
+      <div class="health-detail-body" id="sys-health-detail-body"></div>
+    </div>
+  </div>
+</article>
+</div>
+
+{* ===== Resources: CPU/Swap · Memory/Network · Disk · DB ===== *}
 <div class="grid3 grid4">
 
   {* ===== CPU + Swap stack (one column in the 3-up resources row) ===== *}
@@ -1050,6 +1257,7 @@
     <article class="bsx-card">
       <header>
         <h3>CPU</h3>
+        <span class="card-stat"><span class="card-stat-k">Cores</span> <span id="sys-cpu-cores" class="card-stat-v">{$SYS_CPU_CORES|escape}</span></span>
       </header>
       <div class="bsx-card-body">
         <table class="kv-table">
@@ -1085,48 +1293,53 @@
     </article>
   </div>
 
-  {* ===== Memory ===== *}
-  <article class="bsx-card memory-card">
-    <header>
-      <h3>Memory</h3>
-      <span class="card-stat"><span class="card-stat-k">Available</span> <span id="sys-mem-avail" class="card-stat-v">{$SYS_MEM_AVAIL|escape}</span></span>
-    </header>
-    <div class="bsx-card-body">
-      <p class="resource-io-line">
-        <span>R/W <strong id="sys-mem-io-rw">{$SYS_MEMORY_IO_SUMMARY.rw|escape}</strong></span>
-        <span>I/O <strong id="sys-mem-io-util">{$SYS_MEMORY_IO_SUMMARY.util|escape}</strong></span>
-        <span>Ops <strong id="sys-mem-io-ops">{$SYS_MEMORY_IO_SUMMARY.ops|escape}</strong></span>
-      </p>
-      <table class="kv-table memory-summary-table">
-        <tbody id="sys-tbody-memory">
-        {section name=m loop=$SYS_MEMORY}
-          <tr>
-            <td>{$SYS_MEMORY[m].label|escape}</td>
-            <td class="num">{$SYS_MEMORY[m].value|escape}</td>
-          </tr>
-        {/section}
-        </tbody>
-      </table>
-      <div class="process-rss-block">
-        <table class="process-rss-table process-rss-head">
-          <thead><tr><th>Process RSS</th><th class="num">PID</th><th class="num"><button type="button" id="sys-procs-sort-mb" class="process-sort-btn" aria-pressed="false" data-tooltip="Click to sort largest to smallest">MB</button></th></tr></thead>
+  <div class="memory-network-stack">
+    {* ===== Memory ===== *}
+    <article class="bsx-card memory-card">
+      <header>
+        <h3>Memory</h3>
+        <span class="card-stat"><span class="card-stat-k">Available</span> <span id="sys-mem-avail" class="card-stat-v">{$SYS_MEM_AVAIL|escape}</span></span>
+      </header>
+      <div class="bsx-card-body">
+        <p class="resource-io-line">
+          <span>R/W <strong id="sys-mem-io-rw">{$SYS_MEMORY_IO_SUMMARY.rw|escape}</strong></span>
+          <span>I/O <strong id="sys-mem-io-util">{$SYS_MEMORY_IO_SUMMARY.util|escape}</strong></span>
+          <span>Ops <strong id="sys-mem-io-ops">{$SYS_MEMORY_IO_SUMMARY.ops|escape}</strong></span>
+        </p>
+        <table class="kv-table memory-summary-table">
+          <tbody id="sys-tbody-memory">
+          {section name=m loop=$SYS_MEMORY}
+            <tr>
+              <td>{$SYS_MEMORY[m].label|escape}</td>
+              <td class="num">{$SYS_MEMORY[m].value|escape}</td>
+            </tr>
+          {/section}
+          </tbody>
         </table>
-        <div class="process-rss-scroll">
-          <table class="process-rss-table">
-            <tbody id="sys-tbody-procs">
-            {section name=p loop=$SYS_PROCS}
-              <tr>
-                <td>{$SYS_PROCS[p].label|escape}</td>
-                <td class="num">{$SYS_PROCS[p].pid|escape|default:"—"}</td>
-                <td class="num">{if $SYS_PROCS[p].rss_mb !== ""}{$SYS_PROCS[p].rss_mb|escape}{else}—{/if}</td>
-              </tr>
-            {/section}
-            </tbody>
-          </table>
-        </div>
       </div>
-    </div>
-  </article>
+    </article>
+
+    {* ===== Network ===== *}
+    <article class="bsx-card network-card">
+      <header>
+        <h3>Network</h3>
+        <span class="card-stat"><span class="card-stat-k">Miners</span> <span id="sys-net-miners" class="card-stat-v">{$SYS_NET_MINERS|escape}</span></span>
+      </header>
+      <div class="bsx-card-body">
+        <table class="kv-table">
+          <tbody id="sys-tbody-network">
+          {section name=n loop=$SYS_NETWORK}
+            <tr>
+              <td>{$SYS_NETWORK[n].label|escape}</td>
+              <td class="num"{if $SYS_NETWORK[n].tooltip|default:""} data-tooltip="{$SYS_NETWORK[n].tooltip|escape}"{/if}>{$SYS_NETWORK[n].value|escape}</td>
+            </tr>
+          {/section}
+          </tbody>
+        </table>
+        <p class="footnote">Iface <code>{$SYS_NET_IFACE|escape}</code></p>
+      </div>
+    </article>
+  </div>
 
   {* ===== Disk ===== *}
   <article class="bsx-card disk-card">
@@ -1158,7 +1371,14 @@
   {* ===== Database ===== *}
   <article class="bsx-card">
     <header>
-      <h3>DB Status</h3>
+      <h3>MPOS DB Status</h3>
+      <span class="card-stat db-total-stat">
+        <span class="card-stat-k">Total</span>
+        <span class="card-stat-v db-total-v">
+          <span id="sys-db-total-rows">{$SYS_DATABASE.total_rows|escape} rows</span>
+          <span id="sys-db-total-size">{$SYS_DATABASE.total_size|escape}</span>
+        </span>
+      </span>
     </header>
     <div class="bsx-card-body">
       <form id="db-prune-form" method="POST" action="?page=admin&action=system" class="db-prune-form db-prune-toolbar">
@@ -1203,34 +1423,8 @@
         </tbody>
       </table>
       <div class="footnote db-footnote" id="sys-db-footnote">
-        <div class="db-foot-total">
-          <span aria-hidden="true"></span>
-          <span class="num"><span class="db-foot-total-label">Total</span>{$SYS_DATABASE.total_rows|escape} rows</span>
-          <span class="num">{$SYS_DATABASE.total_size|escape}</span>
-        </div>
         <span class="db-foot-meta">archive cap {$SYS_DATABASE.keep_recent_shares|escape} · oldest {$SYS_DATABASE.archive_oldest|escape} · newest {$SYS_DATABASE.archive_newest|escape} · prune {$SYS_DATABASE.prune_last_run_age|escape}{if $SYS_DATABASE.prune_last_deleted} · deleted {$SYS_DATABASE.prune_last_deleted|escape}{/if}</span>
       </div>
-    </div>
-  </article>
-
-  {* ===== Network ===== *}
-  <article class="bsx-card network-card">
-    <header>
-      <h3>Network</h3>
-      <span class="card-stat"><span class="card-stat-k">Miners</span> <span id="sys-net-miners" class="card-stat-v">{$SYS_NET_MINERS|escape}</span></span>
-    </header>
-    <div class="bsx-card-body">
-      <table class="kv-table">
-        <tbody id="sys-tbody-network">
-        {section name=n loop=$SYS_NETWORK}
-          <tr>
-            <td>{$SYS_NETWORK[n].label|escape}</td>
-            <td class="num"{if $SYS_NETWORK[n].tooltip|default:""} data-tooltip="{$SYS_NETWORK[n].tooltip|escape}"{/if}>{$SYS_NETWORK[n].value|escape}</td>
-          </tr>
-        {/section}
-        </tbody>
-      </table>
-      <p class="footnote">Iface <code>{$SYS_NET_IFACE|escape}</code></p>
     </div>
   </article>
 
@@ -1401,12 +1595,90 @@
     return '<a class="outbox-tx-link" href="' + esc(row.txurl) + '" target="_blank" rel="noopener">' +
            esc(row.txshort || row.txid) + '</a>';
   }
+  function normalizeHealthRow(row) {
+    row = row || {};
+    var state = String(row.state || 'warn');
+    if (state !== 'ok' && state !== 'warn' && state !== 'bad') state = 'warn';
+    var items = row.items || row.items_json || [];
+    if (typeof items === 'string' && items) {
+      try {
+        items = JSON.parse(items);
+      } catch (e) {
+        items = [];
+      }
+    }
+    if (!Array.isArray(items)) items = [];
+    return {
+      label: row.label || 'Health',
+      value: row.value || '—',
+      state: state,
+      tooltip: row.tooltip || row.detail || '',
+      items: items
+    };
+  }
+  function healthChip(row, index) {
+    row = normalizeHealthRow(row);
+    var selected = index === currentHealthIndex ? ' is-selected' : '';
+    return '<button type="button" class="health-chip health-chip-btn is-' + esc(row.state) + selected + '" data-health-index="' + esc(index) + '">' +
+           '<span class="health-chip-k">' + esc(row.label || 'Health') + '</span>' +
+           '</button>';
+  }
+  function readCurrentHealthRows() {
+    var row = document.getElementById('sys-health-row');
+    if (!row) return [];
+    return Array.prototype.map.call(row.querySelectorAll('.health-chip-btn'), function (btn) {
+      return normalizeHealthRow({
+        label: btn.getAttribute('data-health-label') || '',
+        value: btn.getAttribute('data-health-value') || '',
+        state: btn.getAttribute('data-health-state') || '',
+        tooltip: btn.getAttribute('data-health-detail') || '',
+        items_json: btn.getAttribute('data-health-items') || ''
+      });
+    });
+  }
+  function healthDetailItem(item) {
+    item = item || {};
+    var state = String(item.state || 'ok');
+    if (state !== 'ok' && state !== 'warn' && state !== 'bad') state = 'ok';
+    var meta = item.meta ? '<div class="health-detail-row-meta">' + esc(item.meta) + '</div>' : '';
+    return '<div class="health-detail-row is-' + esc(state) + '">' +
+           '<span class="health-detail-row-k">' + esc(item.label || 'Detail') + '</span>' +
+           '<span class="health-detail-row-v">' + esc(item.value || '—') + '</span>' +
+           meta +
+           '</div>';
+  }
+  function renderHealthDetail(row) {
+    row = normalizeHealthRow(row);
+    var detail = document.getElementById('sys-health-detail');
+    var title = document.getElementById('sys-health-detail-title');
+    var value = document.getElementById('sys-health-detail-value');
+    var body = document.getElementById('sys-health-detail-body');
+    if (detail) {
+      detail.classList.remove('is-ok', 'is-warn', 'is-bad');
+      detail.classList.add('is-' + row.state);
+    }
+    if (title) title.textContent = row.label;
+    if (value) value.textContent = row.value;
+    if (body) {
+      if (row.items.length) {
+        body.innerHTML = '<div class="health-detail-list">' + row.items.map(healthDetailItem).join('') + '</div>';
+      } else {
+        body.textContent = row.tooltip || 'No additional detail is available for this status.';
+      }
+    }
+  }
+  function renderHealth(rows) {
+    latestHealthRows = (rows || []).map(normalizeHealthRow);
+    if (currentHealthIndex >= latestHealthRows.length) currentHealthIndex = 0;
+    fill('sys-health-row', latestHealthRows.map(healthChip).join(''));
+    renderHealthDetail(latestHealthRows[currentHealthIndex] || {});
+  }
   var currentOutboxFilter = '';
   var outboxFilterTouched = false;
   var serviceSortMode = 'name';
   var latestServiceRows = readCurrentServiceRows();
-  var processSortMode = 'name';
-  var latestProcessRows = readCurrentProcessRows();
+  var currentHealthIndex = 0;
+  var latestHealthRows = readCurrentHealthRows();
 
   function readCurrentServiceRows() {
     var tbody = document.getElementById('sys-tbody-services');
@@ -1414,10 +1686,13 @@
     return Array.prototype.map.call(tbody.querySelectorAll('tr'), function (tr) {
       var td = tr.querySelectorAll('td');
       return {
-        label: td[0] ? td[0].textContent : '',
-        state: td[1] ? td[1].textContent : '',
-        since: td[2] ? td[2].textContent : '',
-        duration: td[3] ? td[3].textContent : '',
+        state: td[0] ? td[0].textContent : '',
+        label: td[1] ? td[1].textContent : '',
+        pid: td[2] ? td[2].textContent : '',
+        cpu_pct: td[3] ? td[3].textContent : '',
+        rss_mb: td[4] ? td[4].textContent : '',
+        duration: td[5] ? td[5].textContent : '',
+        since: td[6] ? td[6].textContent : '',
         since_ts: ''
       };
     });
@@ -1465,6 +1740,11 @@
     return 4;
   }
 
+  function serviceMetricValue(row, key) {
+    var n = parseFloat(row && row[key]);
+    return isNaN(n) ? -1 : n;
+  }
+
   function sortedServiceRows(rows) {
     return (rows || []).map(function (row, index) {
       return { row: row, index: index };
@@ -1483,6 +1763,26 @@
         var as = serviceStateRank(a.row);
         var bs = serviceStateRank(b.row);
         if (as !== bs) return as - bs;
+      } else if (serviceSortMode === 'cpu_desc') {
+        var ac = serviceMetricValue(a.row, 'cpu_pct');
+        var bc = serviceMetricValue(b.row, 'cpu_pct');
+        if (ac !== bc) return bc - ac;
+      } else if (serviceSortMode === 'cpu_asc') {
+        var acl = serviceMetricValue(a.row, 'cpu_pct');
+        var bcl = serviceMetricValue(b.row, 'cpu_pct');
+        if (acl < 0) acl = 9007199254740991;
+        if (bcl < 0) bcl = 9007199254740991;
+        if (acl !== bcl) return acl - bcl;
+      } else if (serviceSortMode === 'rss_desc') {
+        var ar = serviceMetricValue(a.row, 'rss_mb');
+        var br = serviceMetricValue(b.row, 'rss_mb');
+        if (ar !== br) return br - ar;
+      } else if (serviceSortMode === 'rss_asc') {
+        var arl = serviceMetricValue(a.row, 'rss_mb');
+        var brl = serviceMetricValue(b.row, 'rss_mb');
+        if (arl < 0) arl = 9007199254740991;
+        if (brl < 0) brl = 9007199254740991;
+        if (arl !== brl) return arl - brl;
       }
       if (an < bn) return -1;
       if (an > bn) return 1;
@@ -1495,10 +1795,22 @@
   function updateServiceSortButtons() {
     var nameBtn = document.getElementById('sys-services-sort-name');
     var stateBtn = document.getElementById('sys-services-sort-state');
+    var cpuBtn = document.getElementById('sys-services-sort-cpu');
+    var mbBtn = document.getElementById('sys-services-sort-mb');
     var sinceBtn = document.getElementById('sys-services-sort-since');
     var durationBtn = document.getElementById('sys-services-sort-duration');
     if (nameBtn) nameBtn.setAttribute('aria-pressed', serviceSortMode === 'name' ? 'true' : 'false');
     if (stateBtn) stateBtn.setAttribute('aria-pressed', serviceSortMode === 'state' ? 'true' : 'false');
+    if (cpuBtn) {
+      var cpuSorted = serviceSortMode === 'cpu_desc' || serviceSortMode === 'cpu_asc';
+      cpuBtn.setAttribute('aria-pressed', cpuSorted ? 'true' : 'false');
+      cpuBtn.setAttribute('data-tooltip', serviceSortMode === 'cpu_desc' ? 'Sort by lowest per-core CPU' : 'Sort by highest per-core CPU');
+    }
+    if (mbBtn) {
+      var rssSorted = serviceSortMode === 'rss_desc' || serviceSortMode === 'rss_asc';
+      mbBtn.setAttribute('aria-pressed', rssSorted ? 'true' : 'false');
+      mbBtn.setAttribute('data-tooltip', serviceSortMode === 'rss_desc' ? 'Sort by lowest RAM' : 'Sort by highest RAM');
+    }
     [sinceBtn, durationBtn].forEach(function (btn) {
       if (!btn) return;
       var sinceMode = serviceSortMode === 'since_oldest' || serviceSortMode === 'since_newest';
@@ -1515,65 +1827,14 @@
   function renderServiceRows(rows) {
     latestServiceRows = (rows || []).slice();
     fill('sys-tbody-services', sortedServiceRows(latestServiceRows).map(function (r) {
-      return '<tr><td>' + esc(r.label) + '</td><td>' + statePill(r.state) +
-             '</td><td>' + (r.since ? esc(r.since) : '—') +
-             '</td><td>' + esc(serviceDuration(r)) + '</td></tr>';
+      return '<tr><td>' + statePill(r.state) + '</td><td>' + esc(r.label) +
+             '</td><td class="num">' + esc(r.pid || '—') +
+             '</td><td class="num">' + (r.cpu_pct === '' || r.cpu_pct == null ? '—' : esc(r.cpu_pct)) +
+             '</td><td class="num">' + (r.rss_mb === '' || r.rss_mb == null ? '—' : esc(r.rss_mb)) +
+             '</td><td>' + esc(serviceDuration(r)) +
+             '</td><td>' + (r.since ? esc(r.since) : '—') + '</td></tr>';
     }).join(''));
     updateServiceSortButtons();
-  }
-
-  function readCurrentProcessRows() {
-    var tbody = document.getElementById('sys-tbody-procs');
-    if (!tbody) return [];
-    return Array.prototype.map.call(tbody.querySelectorAll('tr'), function (tr) {
-      var td = tr.querySelectorAll('td');
-      return {
-        label: td[0] ? td[0].textContent : '',
-        pid: td[1] ? td[1].textContent : '',
-        rss_mb: td[2] ? td[2].textContent : ''
-      };
-    });
-  }
-
-  function processRssValue(row) {
-    var n = parseFloat(row && row.rss_mb);
-    return isNaN(n) ? -1 : n;
-  }
-
-  function sortedProcessRows(rows) {
-    return (rows || []).map(function (row, index) {
-      return { row: row, index: index };
-    }).sort(function (a, b) {
-      var an = String(a.row.label || '').toLowerCase();
-      var bn = String(b.row.label || '').toLowerCase();
-      if (processSortMode === 'rss_desc') {
-        var byRss = processRssValue(b.row) - processRssValue(a.row);
-        if (byRss !== 0) return byRss;
-      }
-      if (an < bn) return -1;
-      if (an > bn) return 1;
-      return a.index - b.index;
-    }).map(function (item) {
-      return item.row;
-    });
-  }
-
-  function updateProcessSortButton() {
-    var btn = document.getElementById('sys-procs-sort-mb');
-    if (!btn) return;
-    var byRss = processSortMode === 'rss_desc';
-    btn.setAttribute('aria-pressed', byRss ? 'true' : 'false');
-    btn.setAttribute('data-tooltip', byRss ? 'Click to sort by process name' : 'Click to sort largest to smallest');
-  }
-
-  function renderProcessRows(rows) {
-    latestProcessRows = (rows || []).slice();
-    fill('sys-tbody-procs', sortedProcessRows(latestProcessRows).map(function (r) {
-      return '<tr><td>' + esc(r.label) + '</td><td class="num">' + esc(r.pid || '—') +
-             '</td><td class="num">' + (r.rss_mb === '' || r.rss_mb == null ? '—' : esc(r.rss_mb)) +
-             '</td></tr>';
-    }).join(''));
-    updateProcessSortButton();
   }
 
   function outboxGroup(row) {
@@ -1760,8 +2021,18 @@
     }
 
     renderServiceRows(data.services || []);
+    renderHealth(data.health || []);
 
-    fill('sys-tbody-cpu', (data.cpu || []).map(function (r) {
+    var cpuRows = data.cpu || [];
+    var cpuCores = data.cpu_cores || '—';
+    cpuRows = cpuRows.filter(function (r) {
+      if (String(r.label || '').toLowerCase() !== 'cores') return true;
+      cpuCores = r.value || cpuCores;
+      return false;
+    });
+    var cpuCoresEl = document.getElementById('sys-cpu-cores');
+    if (cpuCoresEl) cpuCoresEl.textContent = cpuCores || '—';
+    fill('sys-tbody-cpu', cpuRows.map(function (r) {
       return '<tr><td>' + esc(r.label) + '</td><td class="num">' + esc(r.value) + '</td></tr>';
     }).join(''));
 
@@ -1817,13 +2088,14 @@
                '<td class="num">' + esc(r.rows || '—') + '</td>' +
                '<td class="num">' + esc(r.size || '—') + '</td></tr>';
       }).join(''));
+      var dbTotalRows = document.getElementById('sys-db-total-rows');
+      var dbTotalSize = document.getElementById('sys-db-total-size');
+      if (dbTotalRows) dbTotalRows.textContent = (data.database.total_rows || '—') + ' rows';
+      if (dbTotalSize) dbTotalSize.textContent = data.database.total_size || '—';
       var dbFoot = document.getElementById('sys-db-footnote');
       if (dbFoot) {
         var deleted = parseInt(data.database.prune_last_deleted, 10);
         dbFoot.innerHTML =
-          '<div class="db-foot-total"><span aria-hidden="true"></span>' +
-          '<span class="num"><span class="db-foot-total-label">Total</span>' + esc(data.database.total_rows || '—') + ' rows</span>' +
-          '<span class="num">' + esc(data.database.total_size || '—') + '</span></div>' +
           '<span class="db-foot-meta">archive cap ' + esc(data.database.keep_recent_shares || '—') +
           ' · oldest ' + esc(data.database.archive_oldest || '—') +
           ' · newest ' + esc(data.database.archive_newest || '—') +
@@ -1839,8 +2111,6 @@
     }).join(''));
     var netMiners = document.getElementById('sys-net-miners');
     if (netMiners && data.network_miners != null) netMiners.textContent = data.network_miners;
-
-    renderProcessRows(data.procs || []);
 
     fill('sys-tbody-daemons', (data.daemons || []).map(function (r) {
       return '<tr><td>' + esc(r.sym) + '</td><td><code>' + esc(r.chain) +
@@ -1883,8 +2153,22 @@
   });
   applyOutboxFilter(outboxCountsFromButtons());
 
+  var healthRow = document.getElementById('sys-health-row');
+  if (healthRow) {
+    healthRow.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.health-chip-btn') : null;
+      if (!btn || !healthRow.contains(btn)) return;
+      var idx = parseInt(btn.getAttribute('data-health-index'), 10);
+      currentHealthIndex = isNaN(idx) ? 0 : idx;
+      renderHealth(latestHealthRows);
+    });
+  }
+  renderHealth(latestHealthRows);
+
   var serviceSortNameButton = document.getElementById('sys-services-sort-name');
   var serviceSortStateButton = document.getElementById('sys-services-sort-state');
+  var serviceSortCpuButton = document.getElementById('sys-services-sort-cpu');
+  var serviceSortMbButton = document.getElementById('sys-services-sort-mb');
   var serviceSortSinceButton = document.getElementById('sys-services-sort-since');
   var serviceSortDurationButton = document.getElementById('sys-services-sort-duration');
   if (serviceSortNameButton) {
@@ -1899,6 +2183,18 @@
       renderServiceRows(latestServiceRows);
     });
   }
+  if (serviceSortCpuButton) {
+    serviceSortCpuButton.addEventListener('click', function () {
+      serviceSortMode = serviceSortMode === 'cpu_desc' ? 'cpu_asc' : 'cpu_desc';
+      renderServiceRows(latestServiceRows);
+    });
+  }
+  if (serviceSortMbButton) {
+    serviceSortMbButton.addEventListener('click', function () {
+      serviceSortMode = serviceSortMode === 'rss_desc' ? 'rss_asc' : 'rss_desc';
+      renderServiceRows(latestServiceRows);
+    });
+  }
   if (serviceSortSinceButton) {
     serviceSortSinceButton.addEventListener('click', toggleServiceRuntimeSort);
   }
@@ -1906,15 +2202,6 @@
     serviceSortDurationButton.addEventListener('click', toggleServiceRuntimeSort);
   }
   renderServiceRows(latestServiceRows);
-
-  var processSortButton = document.getElementById('sys-procs-sort-mb');
-  if (processSortButton) {
-    processSortButton.addEventListener('click', function () {
-      processSortMode = processSortMode === 'rss_desc' ? 'name' : 'rss_desc';
-      renderProcessRows(latestProcessRows);
-    });
-  }
-  renderProcessRows(latestProcessRows);
 
   function tick() {
     indicator.classList.add('is-pulsing');
