@@ -90,8 +90,10 @@ function _system_status_empty_payload($state = 'warming', $message = 'System sta
     'swap_configured'  => 0,
     'memory'           => array(),
     'memory_available' => '—',
+    'memory_io_summary' => array('rw' => '— / —', 'util' => '—', 'ops' => '—'),
     'disk'             => array(),
     'disk_available'   => '—',
+    'disk_io_summary'  => array('rw' => '— / —', 'util' => '—', 'ops' => '—'),
     'network'          => array(),
     'network_miners'   => '—',
     'network_iface'    => '—',
@@ -182,19 +184,25 @@ if (!$system_status_collector_mode && @$_POST['do'] === 'update_backup_settings'
 }
 
 if (!$system_status_collector_mode && @$_POST['do'] === 'update_db_prune_settings') {
-  $choices = array(0, 30, 60, 90, 180, 365);
+  $choices = array(0, 1, 3, 7, 14, 30, 60, 90, 180, 365);
+  $raw_share_choices = array(250000, 500000, 1000000, 2000000, 5000000);
   $days = isset($_POST['db_prune_after_days']) && is_numeric($_POST['db_prune_after_days'])
     ? (int)$_POST['db_prune_after_days']
     : 0;
+  $keep_recent_shares = isset($_POST['db_prune_keep_recent_shares']) && is_numeric($_POST['db_prune_keep_recent_shares'])
+    ? (int)$_POST['db_prune_keep_recent_shares']
+    : 250000;
   if (!in_array($days, $choices, true)) $days = 0;
+  if (!in_array($keep_recent_shares, $raw_share_choices, true)) $keep_recent_shares = 250000;
 
   $setting->setValue('db_prune_enabled', $days > 0 ? '1' : '0');
   if ($days > 0) $setting->setValue('db_prune_after_days', (string)$days);
+  $setting->setValue('db_prune_keep_recent_shares', (string)$keep_recent_shares);
 
   _system_status_cache_delete($system_status_cache_key);
 
   $msg = $days > 0
-    ? "Database archive pruning set to {$days} days"
+    ? "Database archive pruning set to {$days} days / latest {$keep_recent_shares} raw shares"
     : 'Database archive pruning disabled';
   $log->log("warn", @$_SESSION['USERDATA']['username']
             . ' updated database prune settings via System Status: ' . $msg);
@@ -314,6 +322,11 @@ function _system_mb($kb) {
 function _system_pct($used, $total) {
   if ((int)$total <= 0) return '—';
   return number_format(100.0 * ((int)$used / (int)$total), 1) . ' %';
+}
+
+function _system_ops_rate($ops) {
+  $ops = max(0.0, (float)$ops);
+  return number_format((int)round($ops)) . '/s';
 }
 
 function _system_size_from_mb($mb) {
@@ -509,11 +522,27 @@ function _system_bytes($n) {
 function _system_db_prune_choices() {
   return array(
     array('value' => 0,   'label' => 'Disabled'),
+    array('value' => 1,   'label' => '1 day'),
+    array('value' => 3,   'label' => '3 days'),
+    array('value' => 7,   'label' => '7 days'),
+    array('value' => 14,  'label' => '14 days'),
     array('value' => 30,  'label' => '30 days'),
     array('value' => 60,  'label' => '60 days'),
     array('value' => 90,  'label' => '90 days'),
     array('value' => 180, 'label' => '180 days'),
     array('value' => 365, 'label' => '365 days'),
+  );
+}
+
+function _system_db_keep_recent_share_choices() {
+  return array(
+    // 250k is the lowest production-safe raw archive cap: enough for
+    // the active PPLNS window plus fill-up room for unaccounted blocks.
+    array('value' => 250000,  'label' => '250k shares'),
+    array('value' => 500000,  'label' => '500k shares'),
+    array('value' => 1000000, 'label' => '1M shares'),
+    array('value' => 2000000, 'label' => '2M shares'),
+    array('value' => 5000000, 'label' => '5M shares'),
   );
 }
 
@@ -630,6 +659,62 @@ function _system_net_read($iface) {
     }
   }
   return null;
+}
+
+function _system_disk_device_candidates($source) {
+  $source = trim((string)$source);
+  if ($source === '') return array();
+  $base = basename($source);
+  if ($base === '' || $base === '.' || $base === '..') return array();
+  $out = array($base);
+  if (preg_match('/^(nvme\d+n\d+)p\d+$/', $base, $m)) {
+    $out[] = $m[1];
+  } elseif (preg_match('/^(mmcblk\d+)p\d+$/', $base, $m)) {
+    $out[] = $m[1];
+  } elseif (preg_match('/^([A-Za-z]+)\d+$/', $base, $m)) {
+    $out[] = $m[1];
+  }
+  return array_values(array_unique($out));
+}
+
+function _system_diskstats_read_for_path($path) {
+  $source = trim(_system_run('df --output=source ' . escapeshellarg($path) . ' | tail -1'));
+  $candidates = _system_disk_device_candidates($source);
+  if (!$candidates) return null;
+  $wanted = array_fill_keys($candidates, true);
+  $lines = @file('/proc/diskstats', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+  if (!$lines) return null;
+  foreach ($lines as $line) {
+    $parts = preg_split('/\s+/', trim($line));
+    if (count($parts) < 14 || empty($wanted[$parts[2]])) continue;
+    return array(
+      'device'        => $parts[2],
+      'reads'         => (int)$parts[3],
+      'read_sectors'  => (int)$parts[5],
+      'writes'        => (int)$parts[7],
+      'write_sectors' => (int)$parts[9],
+      'io_ms'         => (int)$parts[12],
+      'ts'            => microtime(true),
+    );
+  }
+  return null;
+}
+
+function _system_vmstat_read() {
+  $lines = @file('/proc/vmstat', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+  if (!$lines) return null;
+  $wanted = array(
+    'pgpgin' => 0, 'pgpgout' => 0,
+    'pswpin' => 0, 'pswpout' => 0,
+    'pgfault' => 0, 'pgmajfault' => 0,
+  );
+  foreach ($lines as $line) {
+    $parts = preg_split('/\s+/', trim($line));
+    if (count($parts) !== 2 || !array_key_exists($parts[0], $wanted)) continue;
+    $wanted[$parts[0]] = (int)$parts[1];
+  }
+  $wanted['ts'] = microtime(true);
+  return $wanted;
 }
 
 function _system_net_stratum_port() {
@@ -850,6 +935,41 @@ foreach ($disk_targets as $label => $path) {
     'dirpct'  => _system_dir_pct_from_mb($dir_size['mb'], $fs_size_mb),
   );
 }
+$disk_io_device = '—';
+$disk_io_read_rate = '—';
+$disk_io_write_rate = '—';
+$disk_io_util = '—';
+$disk_io_ops = '—';
+$disk_io_now = _system_diskstats_read_for_path('/var/lib/mysql');
+if ($disk_io_now) {
+  $disk_io_device = $disk_io_now['device'];
+  $uid = function_exists('posix_geteuid') ? (string)posix_geteuid() : (string)getmyuid();
+  $state_file = sys_get_temp_dir() . '/blakestream-mpos-system-disk-io-' . $disk_io_device . '-' . $uid . '.json';
+  if (is_readable($state_file)) {
+    $prev = json_decode((string)@file_get_contents($state_file), true);
+    if (is_array($prev) &&
+        isset($prev['reads'], $prev['read_sectors'], $prev['writes'], $prev['write_sectors'], $prev['io_ms'], $prev['ts'])) {
+      $age = $disk_io_now['ts'] - (float)$prev['ts'];
+      if ($age >= 0.5 && $age < 300) {
+        $read_bytes = max(0, ((int)$disk_io_now['read_sectors'] - (int)$prev['read_sectors']) * 512);
+        $write_bytes = max(0, ((int)$disk_io_now['write_sectors'] - (int)$prev['write_sectors']) * 512);
+        $read_ops = max(0, (int)$disk_io_now['reads'] - (int)$prev['reads']);
+        $write_ops = max(0, (int)$disk_io_now['writes'] - (int)$prev['writes']);
+        $io_ms = max(0, (int)$disk_io_now['io_ms'] - (int)$prev['io_ms']);
+        $disk_io_read_rate = _system_bytes($read_bytes / $age) . '/s';
+        $disk_io_write_rate = _system_bytes($write_bytes / $age) . '/s';
+        $disk_io_util = number_format(min(999.9, ($io_ms / ($age * 1000)) * 100.0), 1) . ' %';
+        $disk_io_ops = _system_ops_rate(($read_ops + $write_ops) / $age);
+      }
+    }
+  }
+  @file_put_contents($state_file, json_encode($disk_io_now), LOCK_EX);
+}
+$disk_io_summary = array(
+  'rw'   => $disk_io_read_rate . ' / ' . $disk_io_write_rate,
+  'util' => $disk_io_util,
+  'ops'  => $disk_io_ops,
+);
 
 // ---- Database status + archive prune settings -----------------------
 $db_hot_tables = array('shares');
@@ -892,8 +1012,9 @@ $db_total = _system_db_sum_meta($db_meta, $db_all_groups);
 $db_archive_oldest = _system_db_archive_edge(isset($mysqli) ? $mysqli : null, $db_archive_tables, 'ASC');
 $db_archive_newest = _system_db_archive_edge(isset($mysqli) ? $mysqli : null, $db_archive_tables, 'DESC');
 $db_prune_enabled = trim((string)$setting->getValue('db_prune_enabled')) !== '0';
-$db_prune_after_days = _system_setting_int_value('db_prune_after_days', 180, 7, 3650);
+$db_prune_after_days = _system_setting_int_value('db_prune_after_days', 180, 1, 3650);
 if (!$db_prune_enabled) $db_prune_after_days = 0;
+$db_prune_keep_recent_shares = _system_setting_int_value('db_prune_keep_recent_shares', 250000, 250000, 5000000);
 $db_prune_last_run = _system_setting_int_value('db_prune_last_run', 0, 0, PHP_INT_MAX);
 $db_prune_last_deleted = _system_setting_int_value('db_prune_last_deleted', 0, 0, PHP_INT_MAX);
 $db_prune_last_status = (string)$setting->getValue('db_prune_last_status');
@@ -906,6 +1027,8 @@ $sys_database = array(
   'prune_enabled'       => $db_prune_after_days > 0 ? 1 : 0,
   'prune_after_days'    => $db_prune_after_days,
   'prune_choices'       => _system_db_prune_choices(),
+  'keep_recent_shares'  => $db_prune_keep_recent_shares,
+  'keep_recent_share_choices' => _system_db_keep_recent_share_choices(),
   'prune_last_run'      => $db_prune_last_run,
   'prune_last_run_age'  => $db_prune_last_run > 0
                             ? _system_age_compact(gmdate('Y-m-d H:i:s', $db_prune_last_run))
@@ -1167,8 +1290,7 @@ $swap_rows = $swap_configured
   ? array(
       array(
         'label' => 'Used',
-        'value' => _system_mb($swap_used) . ' / ' . _system_mb($swap_total)
-                   . ' (' . _system_pct($swap_used, $swap_total) . ')',
+        'value' => _system_mb($swap_used) . ' / ' . _system_mb($swap_total),
       ),
     )
   : array();
@@ -1177,6 +1299,41 @@ $swap_available_str = $swap_configured ? _system_mb($swap_free) : '—';
 // per-row table — operators glance at it more than the absolute used,
 // so it belongs as a top-right stat.
 $memory_available_str = $mem_avail > 0 ? _system_mb($mem_avail) : '—';
+$memory_io_read_rate = '—';
+$memory_io_write_rate = '—';
+$memory_swap_io_rate = '—';
+$memory_io_ops = '—';
+$memory_io_now = _system_vmstat_read();
+if ($memory_io_now) {
+  $uid = function_exists('posix_geteuid') ? (string)posix_geteuid() : (string)getmyuid();
+  $state_file = sys_get_temp_dir() . '/blakestream-mpos-system-memory-io-' . $uid . '.json';
+  if (is_readable($state_file)) {
+    $prev = json_decode((string)@file_get_contents($state_file), true);
+    if (is_array($prev) &&
+        isset($prev['pgpgin'], $prev['pgpgout'], $prev['pswpin'], $prev['pswpout'], $prev['pgfault'], $prev['pgmajfault'], $prev['ts'])) {
+      $age = $memory_io_now['ts'] - (float)$prev['ts'];
+      if ($age >= 0.5 && $age < 300) {
+        $page_size = 4096;
+        $page_in_bytes = max(0, (int)$memory_io_now['pgpgin'] - (int)$prev['pgpgin']) * 1024;
+        $page_out_bytes = max(0, (int)$memory_io_now['pgpgout'] - (int)$prev['pgpgout']) * 1024;
+        $swap_pages = max(0, (int)$memory_io_now['pswpin'] - (int)$prev['pswpin'])
+                    + max(0, (int)$memory_io_now['pswpout'] - (int)$prev['pswpout']);
+        $faults = max(0, (int)$memory_io_now['pgfault'] - (int)$prev['pgfault'])
+                + max(0, (int)$memory_io_now['pgmajfault'] - (int)$prev['pgmajfault']);
+        $memory_io_read_rate = _system_bytes($page_in_bytes / $age) . '/s';
+        $memory_io_write_rate = _system_bytes($page_out_bytes / $age) . '/s';
+        $memory_swap_io_rate = _system_bytes(($swap_pages * $page_size) / $age) . '/s';
+        $memory_io_ops = _system_ops_rate($faults / $age);
+      }
+    }
+  }
+  @file_put_contents($state_file, json_encode($memory_io_now), LOCK_EX);
+}
+$memory_io_summary = array(
+  'rw'   => $memory_io_read_rate . ' / ' . $memory_io_write_rate,
+  'util' => $memory_swap_io_rate,
+  'ops'  => $memory_io_ops,
+);
 
 // ---- Process RSS ---------------------------------------------------
 $processes = array(
@@ -1430,8 +1587,10 @@ $system_status_payload = array(
   'swap_configured'  => $swap_configured,
   'memory'           => $memory_rows,
   'memory_available' => $memory_available_str,
+  'memory_io_summary' => $memory_io_summary,
   'disk'             => $disk_rows,
   'disk_available'   => $disk_available_str,
+  'disk_io_summary'  => $disk_io_summary,
   'network'          => $network_rows,
   'network_miners'   => $network_miners_str,
   'network_iface'    => $network_iface,
@@ -1470,8 +1629,14 @@ $swap_available_str   = $system_status_payload['swap_available'];
 $swap_configured      = $system_status_payload['swap_configured'];
 $memory_rows          = $system_status_payload['memory'];
 $memory_available_str = $system_status_payload['memory_available'];
+$memory_io_summary    = isset($system_status_payload['memory_io_summary'])
+                          ? $system_status_payload['memory_io_summary']
+                          : _system_status_empty_payload()['memory_io_summary'];
 $disk_rows            = $system_status_payload['disk'];
 $disk_available_str   = $system_status_payload['disk_available'];
+$disk_io_summary      = isset($system_status_payload['disk_io_summary'])
+                          ? $system_status_payload['disk_io_summary']
+                          : _system_status_empty_payload()['disk_io_summary'];
 $network_rows         = $system_status_payload['network'];
 $network_miners_str   = $system_status_payload['network_miners'];
 $network_iface        = $system_status_payload['network_iface'];
@@ -1500,8 +1665,10 @@ $smarty->assign('SYS_SWAP_AVAIL',   $swap_available_str);
 $smarty->assign('SYS_SWAP_OK',      $swap_configured);
 $smarty->assign('SYS_MEMORY',       $memory_rows);
 $smarty->assign('SYS_MEM_AVAIL',    $memory_available_str);
+$smarty->assign('SYS_MEMORY_IO_SUMMARY', $memory_io_summary);
 $smarty->assign('SYS_DISK',     $disk_rows);
 $smarty->assign('SYS_DISK_AVAIL', $disk_available_str);
+$smarty->assign('SYS_DISK_IO_SUMMARY', $disk_io_summary);
 $smarty->assign('SYS_NETWORK',         $network_rows);
 $smarty->assign('SYS_NET_MINERS',      $network_miners_str);
 $smarty->assign('SYS_NET_IFACE',       $network_iface);

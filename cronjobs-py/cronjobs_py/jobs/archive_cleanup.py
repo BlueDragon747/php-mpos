@@ -1,20 +1,22 @@
 """Port of `cronjobs/archive_cleanup.php`.
 
-Bounds the growth of `shares_archive` by deleting rows older than a
-configurable retention window. Without this, every archived share
-accumulates forever and pplns_payout's archive-fill query slows
+Bounds the growth of `shares_archive` by deleting rows beyond the
+configured raw-share retention window. Without this, every archived
+share accumulates forever and pplns_payout's archive-fill query slows
 down linearly with the table size.
 
 The PHP version's algorithm trims a percentage of oldest rows that
-predate either NOW − 30min OR the Nth-most-recent block's first
-share. Effectively a "delete the oldest few percent" knob.
+predate either NOW − 30min OR the Nth-most-recent block's first share.
+Effectively a "delete the oldest few percent" knob.
 
-We use a simpler, more predictable rule: delete archive rows older
-than the configured prune window. The Nth-most-recent block is also
-retained, even if older than the cutoff, by gating on `block_id NOT IN
-(the N most recent block ids)`. This means archive rows linked to recent
-blocks survive past the cutoff, preserving full PPLNS history within
-the active window.
+We use a more predictable rule: delete archive rows below a safe
+`share_id` cutoff. The desired cutoff is the newer of:
+
+- rows older than the configured prune window, and
+- rows outside the configured "keep latest raw shares" cap.
+
+That cutoff is then clamped below any unaccounted block's PPLNS window
+across all configured slots.
 
 Per-slot — each tick trims the per-slot `shares_archive_<slot>`
 table independently. (In our merge-mining setup only the parent
@@ -26,12 +28,19 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from ..errors import Skip
 from ..logger import get
 from ..scheduler import JobContext
 
 log = get(__name__)
+
+
+# Keep at least 250k raw archived shares on production pools. That
+# preserves the active PPLNS window plus fill-up room for unaccounted
+# blocks while still bounding high-volume archive growth.
+DEFAULT_KEEP_RECENT_SHARES = 250_000
 
 
 @dataclass
@@ -54,16 +63,21 @@ class ArchiveCleanup:
         # Prefer live DB settings so the System Status page can tune retention
         # without a redeploy. Config values remain deploy-time defaults before
         # the settings rows are seeded.
-        # 180 days keeps roughly six months of history while bounding archive growth.
+        # 180 days keeps roughly six months of history for lower-volume pools.
+        # High-volume pools are additionally bounded by db_prune_keep_recent_shares
+        # so a short burst cannot create a multi-million-row archive.
         retention_days = db.get_setting_int(
             "db_prune_after_days",
             default=int(archive_cfg.get("retention_days", 180) or 180),
-            floor=7,
-        )
-        keep_recent_blocks = db.get_setting_int(
-            "db_prune_keep_recent_blocks",
-            default=int(archive_cfg.get("keep_recent_blocks", 100) or 100),
             floor=1,
+        )
+        keep_recent_shares = db.get_setting_int(
+            "db_prune_keep_recent_shares",
+            default=int(
+                archive_cfg.get("keep_recent_shares", DEFAULT_KEEP_RECENT_SHARES)
+                or DEFAULT_KEEP_RECENT_SHARES
+            ),
+            floor=DEFAULT_KEEP_RECENT_SHARES,
         )
         batch_size = db.get_setting_int(
             "db_prune_batch_size",
@@ -83,27 +97,42 @@ class ArchiveCleanup:
 
         # Slot-aware table names via the existing helpers.
         archive_table = db._shares_archive_table(self.slot)
-        block_table = db._blocks_table(self.slot)
+
+        max_share_id = self._max_archive_share_id(db, archive_table)
+        if max_share_id <= 0:
+            self._record_success(db, slot_label, 0, retention_days,
+                                 keep_recent_shares, 0)
+            log.debug("[%s/%s] no archived shares to purge",
+                      self.name, slot_label)
+            return
+
+        age_cutoff = self._age_cutoff_share_id(db, archive_table, retention_days)
+        cap_cutoff = max(0, max_share_id - keep_recent_shares)
+        wanted_cutoff = max(age_cutoff, cap_cutoff)
+        safety_cutoff = self._safety_cutoff_share_id(ctx, db, max_share_id,
+                                                     keep_recent_shares)
+        delete_cutoff = min(wanted_cutoff, safety_cutoff)
+
+        if delete_cutoff <= 0:
+            self._record_success(db, slot_label, 0, retention_days,
+                                 keep_recent_shares, 0)
+            log.debug("[%s/%s] no archived shares to purge",
+                      self.name, slot_label)
+            return
 
         # Delete in bounded oldest-first batches. That keeps an oversized
         # archive cleanup from creating one long-running DELETE and lets the
         # hourly scheduler make steady progress under load.
         sql = (
             f"DELETE FROM {archive_table} "
-            f"WHERE time < DATE_SUB(NOW(), INTERVAL %s DAY) "
-            f"  AND IFNULL(block_id, 0) NOT IN ("
-            f"    SELECT id FROM ("
-            f"      SELECT id FROM {block_table} "
-            f"      ORDER BY height DESC LIMIT %s"
-            f"    ) AS keep"
-            f"  ) "
-            f"ORDER BY time ASC "
+            f"WHERE share_id <= %s "
+            f"ORDER BY share_id ASC "
             f"LIMIT %s"
         )
         total_deleted = 0
         try:
             for _ in range(max_batches):
-                deleted = db.execute(sql, (retention_days, keep_recent_blocks, batch_size))
+                deleted = db.execute(sql, (delete_cutoff, batch_size))
                 total_deleted += deleted
                 if deleted < batch_size:
                     break
@@ -112,16 +141,82 @@ class ArchiveCleanup:
             db.set_setting("db_prune_last_status", f"{slot_label}: failed: {exc}")
             raise Skip(f"archive cleanup query failed: {exc}")
 
-        db.set_setting("db_prune_last_run", str(int(time.time())))
-        db.set_setting("db_prune_last_deleted", str(total_deleted))
-        db.set_setting(
-            "db_prune_last_status",
-            f"{slot_label}: deleted {total_deleted} older than {retention_days}d",
-        )
+        self._record_success(db, slot_label, total_deleted, retention_days,
+                             keep_recent_shares, delete_cutoff)
 
         if total_deleted:
-            log.info("[%s/%s] purged %d archived shares older than %d days",
-                     self.name, slot_label, total_deleted, retention_days)
+            log.info(
+                "[%s/%s] purged %d archived shares up to share_id %d "
+                "(older than %dd or outside latest %d shares)",
+                self.name, slot_label, total_deleted, delete_cutoff,
+                retention_days, keep_recent_shares,
+            )
         else:
             log.debug("[%s/%s] no archived shares to purge",
                       self.name, slot_label)
+
+    def _record_success(self, db: Any, slot_label: str, deleted: int,
+                        retention_days: int, keep_recent_shares: int,
+                        delete_cutoff: int) -> None:
+        db.set_setting("db_prune_last_run", str(int(time.time())))
+        db.set_setting("db_prune_last_deleted", str(deleted))
+        if delete_cutoff > 0:
+            status = (
+                f"{slot_label}: deleted {deleted} through share_id {delete_cutoff}; "
+                f"target latest {keep_recent_shares} raw shares / {retention_days}d"
+            )
+        else:
+            status = (
+                f"{slot_label}: deleted {deleted}; target latest "
+                f"{keep_recent_shares} raw shares / {retention_days}d"
+            )
+        db.set_setting("db_prune_last_status", status)
+
+    def _max_archive_share_id(self, db: Any, archive_table: str) -> int:
+        row = db.fetchone(
+            f"SELECT IFNULL(MAX(share_id), 0) AS max_share_id FROM {archive_table}"
+        )
+        return int((row or {}).get("max_share_id") or 0)
+
+    def _age_cutoff_share_id(self, db: Any, archive_table: str,
+                             retention_days: int) -> int:
+        row = db.fetchone(
+            f"SELECT IFNULL(MAX(share_id), 0) AS cutoff_share_id "
+            f"FROM {archive_table} "
+            f"WHERE time < DATE_SUB(NOW(), INTERVAL %s DAY)",
+            (retention_days,),
+        )
+        return int((row or {}).get("cutoff_share_id") or 0)
+
+    def _safety_cutoff_share_id(self, ctx: JobContext, db: Any,
+                                max_share_id: int,
+                                keep_recent_shares: int) -> int:
+        min_unaccounted = self._min_unaccounted_share_id(ctx, db)
+        if min_unaccounted <= 0:
+            return max_share_id
+        return max(0, min_unaccounted - keep_recent_shares)
+
+    def _min_unaccounted_share_id(self, ctx: JobContext, db: Any) -> int:
+        block_tables = self._block_tables_for_safety(ctx, db)
+        if not block_tables:
+            return 0
+        selects = [
+            f"SELECT MIN(share_id) AS share_id FROM {table} "
+            f"WHERE accounted = 0 AND share_id IS NOT NULL"
+            for table in block_tables
+        ]
+        row = db.fetchone(
+            "SELECT MIN(share_id) AS min_share_id FROM ("
+            + " UNION ALL ".join(selects)
+            + ") AS unaccounted"
+        )
+        return int((row or {}).get("min_share_id") or 0)
+
+    def _block_tables_for_safety(self, ctx: JobContext, db: Any) -> list[str]:
+        coins = getattr(getattr(ctx, "settings", None), "coins", None) or []
+        slots = []
+        for coin in coins:
+            slots.append(getattr(coin, "slot", "") or "")
+        if not slots:
+            slots = [self.slot]
+        return sorted({db._blocks_table(slot) for slot in slots})
