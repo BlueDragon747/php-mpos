@@ -64,6 +64,16 @@ INSERT IGNORE INTO settings (name, value)
 VALUES ('backups_enabled', '1');
 SQL
 
+# ---- Vue v2 frontend ----
+if [ -f "${MPOS_REPO}/frontend/package.json" ]; then
+    if ! command -v bun >/dev/null 2>&1; then
+        echo "bun is required to build the Vue v2 frontend assets" >&2
+        exit 1
+    fi
+    say "building Vue v2 frontend assets"
+    ( cd "${MPOS_REPO}/frontend" && bun install --silent && bun run build:fast )
+fi
+
 # ---- web tree ----
 say "syncing MPOS web tree to ${WEB_ROOT}"
 mkdir -p "${WEB_ROOT}"

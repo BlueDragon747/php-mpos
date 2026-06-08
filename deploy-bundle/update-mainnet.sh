@@ -521,6 +521,7 @@ if [ "$build_daemon_images" = "1" ]; then
     [ "$MPOS_IMAGE_TAG" != "25.2" ] || export MPOS_IMAGE_TAG=25.2-local
     export SKIP_DAEMON_IMAGE_BUILD=0
     export MPOS_BUILD_AFTER_STOP=1
+    export MPOS_FORCE_REBUILD="${MPOS_FORCE_REBUILD:-1}"
     export BUILD_CONCURRENCY="${BUILD_CONCURRENCY:-2}"
     say "daemon build mode selected; containers will stop before building ${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG} with concurrency ${BUILD_CONCURRENCY}"
 fi

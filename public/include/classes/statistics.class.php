@@ -551,8 +551,9 @@ class Statistics extends Base {
     if ($this->getGetCache() && $data = $this->memcache->getStatic(STATISTICS_ALL_USER_HASHRATES)) {
       if (array_key_exists($account_id, $data['data']))
         return $data['data'][$account_id]['hashrate'];
-      // We have no cached value, we return defaults
-      return 0;
+      // Cache can be warm before this user is present. Fall through to the
+      // per-user cache / summary SQL so the dashboard does not show 0 while
+      // worker-level hashrate is already available.
     }
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
     if ($this->shareStatsRecentReady()) {
@@ -621,8 +622,8 @@ class Statistics extends Base {
     if ($this->getGetCache() && $data = $this->memcache->getStatic(STATISTICS_ALL_USER_HASHRATES)) {
       if (array_key_exists($account_id, $data['data']))
         return $data['data'][$account_id]['avgsharediff'];
-      // We have no cached value, we return defaults
-      return 0;
+      // Cache can be warm before this user is present. Fall through to the
+      // per-user cache / summary SQL for consistency with getUserHashrate().
     }
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
     if ($this->shareStatsRecentReady()) {
@@ -664,8 +665,8 @@ class Statistics extends Base {
     if ($this->getGetCache() && $data = $this->memcache->getStatic(STATISTICS_ALL_USER_HASHRATES)) {
       if (array_key_exists($account_id, $data['data']))
         return $data['data'][$account_id]['sharerate'];
-      // We have no cached value, we return defaults
-      return 0;
+      // Cache can be warm before this user is present. Fall through to the
+      // per-user cache / summary SQL for consistency with getUserHashrate().
     }
     if ($this->getGetCache() && $data = $this->memcache->get(__FUNCTION__ . $account_id)) return $data;
     if ($this->shareStatsRecentReady()) {
