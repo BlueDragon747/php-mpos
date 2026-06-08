@@ -57,11 +57,11 @@
   .bsx-system-page .grid4 {
     display: grid;
     grid-template-columns:
-      minmax(205px, .9fr)
-      minmax(300px, 1.1fr)
+      minmax(175px, .7fr)
+      minmax(335px, 1.1fr)
       minmax(320px, 1fr)
-      minmax(320px, 1fr)
-      minmax(205px, .9fr);
+      minmax(390px, 1.35fr)
+      minmax(170px, .65fr);
     gap: 12px;
   }
   @media (max-width: 1300px) {
@@ -194,11 +194,25 @@
     .bsx-system-page .grid3 { grid-template-columns: 1fr; }
   }
   /* Card header right-side stat */
-  .bsx-system-page .card-stat { font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
-  .bsx-system-page .card-stat-k { color: #aab; text-transform: uppercase; letter-spacing: 0.06em; }
+  .bsx-system-page .card-stat {
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .bsx-system-page .card-stat-k {
+    color: #aab;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
   .bsx-system-page .card-stat-v {
     color: #b5e7a0; font-weight: 700;
     font-variant-numeric: tabular-nums;
+    font-size: inherit;
+    white-space: nowrap;
   }
   [data-theme="light"] .bsx-system-page .card-stat-k { color: #4a5568; }
   [data-theme="light"] .bsx-system-page .card-stat-v { color: #2e7d32; }
@@ -239,7 +253,7 @@
   }
   .bsx-system-page .db-footnote span {
     display: block;
-    white-space: nowrap;
+    white-space: normal;
   }
   /* Empty-state message */
   .bsx-system-page .empty-state {
@@ -263,9 +277,34 @@
     margin: 0; padding: 0;
   }
   .bsx-system-page .db-prune-form {
-    display: inline-flex; align-items: center; gap: 6px;
-    margin: 0; padding: 0;
+    display: flex; align-items: center; gap: 26px;
+    justify-content: center;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin: 0 0 6px; padding: 0;
     font-size: 11px;
+  }
+  .bsx-system-page .db-prune-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .bsx-system-page .db-prune-form .card-stat-k {
+    white-space: nowrap;
+  }
+  .bsx-system-page .db-prune-form .inline-select {
+    width: 92px;
+    min-width: 0;
+  }
+  .bsx-system-page .db-prune-form select[name="db_prune_keep_recent_shares"] {
+    width: 96px;
+  }
+  .bsx-system-page .db-prune-toolbar {
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+    margin-bottom: 4px;
   }
   .bsx-system-page .inline-select {
     font: inherit;
@@ -275,6 +314,69 @@
     border: 1px solid rgba(255,255,255,.18);
     background: rgba(0,0,0,.20);
     color: #cdd;
+  }
+  .bsx-system-page .resource-io-line {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+    gap: 4px 10px;
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: #99a;
+    line-height: 1.35;
+  }
+  .bsx-system-page .resource-io-line span + span {
+    border-left: 1px solid rgba(255,255,255,.10);
+    padding-left: 10px;
+  }
+  .bsx-system-page .resource-io-line strong {
+    color: #cdd;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  [data-theme="light"] .bsx-system-page .resource-io-line { color: #4a5568; }
+  [data-theme="light"] .bsx-system-page .resource-io-line span + span { border-left-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .bsx-system-page .resource-io-line strong { color: #1f2933; }
+  .bsx-system-page .memory-card .resource-io-line {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 0 6px;
+    padding-left: 14px;
+    padding-right: 0;
+    padding-bottom: 6px;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .bsx-system-page .memory-card .resource-io-line span + span {
+    padding-left: 6px;
+  }
+  .bsx-system-page .disk-card .resource-io-line {
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .bsx-system-page .memory-summary-table {
+    margin-bottom: 4px;
+  }
+  .bsx-system-page .process-rss-table {
+    border-top: 1px solid rgba(255,255,255,.08);
+  }
+  .bsx-system-page .process-rss-table thead th {
+    padding-top: 6px;
+  }
+  [data-theme="light"] .bsx-system-page .memory-card .resource-io-line,
+  [data-theme="light"] .bsx-system-page .disk-card .resource-io-line,
+  [data-theme="light"] .bsx-system-page .process-rss-table {
+    border-color: rgba(0,0,0,.10);
+  }
+  .bsx-system-page .network-card th,
+  .bsx-system-page .network-card td {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .bsx-system-page .network-card .bsx-card-body {
+    padding-left: 10px;
+    padding-right: 10px;
   }
   [data-theme="light"] .bsx-system-page .inline-select {
     border-color: rgba(0,0,0,.20);
@@ -847,13 +949,18 @@
   </div>
 
   {* ===== Memory ===== *}
-  <article class="bsx-card">
+  <article class="bsx-card memory-card">
     <header>
       <h3>Memory</h3>
       <span class="card-stat"><span class="card-stat-k">Available</span> <span id="sys-mem-avail" class="card-stat-v">{$SYS_MEM_AVAIL|escape}</span></span>
     </header>
     <div class="bsx-card-body">
-      <table class="kv-table">
+      <p class="resource-io-line">
+        <span>R/W <strong id="sys-mem-io-rw">{$SYS_MEMORY_IO_SUMMARY.rw|escape}</strong></span>
+        <span>I/O <strong id="sys-mem-io-util">{$SYS_MEMORY_IO_SUMMARY.util|escape}</strong></span>
+        <span>Ops <strong id="sys-mem-io-ops">{$SYS_MEMORY_IO_SUMMARY.ops|escape}</strong></span>
+      </p>
+      <table class="kv-table memory-summary-table">
         <tbody id="sys-tbody-memory">
         {section name=m loop=$SYS_MEMORY}
           <tr>
@@ -863,7 +970,7 @@
         {/section}
         </tbody>
       </table>
-      <table>
+      <table class="process-rss-table">
         <thead><tr><th>Process RSS</th><th class="num">PID</th><th class="num">MB</th></tr></thead>
         <tbody id="sys-tbody-procs">
         {section name=p loop=$SYS_PROCS}
@@ -879,12 +986,17 @@
   </article>
 
   {* ===== Disk ===== *}
-  <article class="bsx-card">
+  <article class="bsx-card disk-card">
     <header>
       <h3>Disk</h3>
       <span class="card-stat"><span class="card-stat-k">Available</span> <span id="sys-disk-avail" class="card-stat-v">{$SYS_DISK_AVAIL|escape}</span></span>
     </header>
     <div class="bsx-card-body">
+      <p class="resource-io-line">
+        <span>R/W <strong id="sys-disk-io-rw">{$SYS_DISK_IO_SUMMARY.rw|escape}</strong></span>
+        <span>I/O <strong id="sys-disk-io-util">{$SYS_DISK_IO_SUMMARY.util|escape}</strong></span>
+        <span>Ops <strong id="sys-disk-io-ops">{$SYS_DISK_IO_SUMMARY.ops|escape}</strong></span>
+      </p>
       <table>
         <thead><tr><th>Path</th><th class="num">Dir Size</th><th class="num">Dir %</th></tr></thead>
         <tbody id="sys-tbody-disk">
@@ -904,24 +1016,37 @@
   <article class="bsx-card">
     <header>
       <h3>DB Status</h3>
-      <form id="db-prune-form" method="POST" action="?page=admin&action=system" class="db-prune-form">
+    </header>
+    <div class="bsx-card-body">
+      <form id="db-prune-form" method="POST" action="?page=admin&action=system" class="db-prune-form db-prune-toolbar">
         <input type="hidden" name="page"   value="admin">
         <input type="hidden" name="action" value="system">
         <input type="hidden" name="do"     value="update_db_prune_settings">
         <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
-        <span class="card-stat-k">Prune after</span>
-        <select class="inline-select" name="db_prune_after_days" onchange="this.form.submit()">
-          {section name=c loop=$SYS_DATABASE.prune_choices}
-            <option value="{$SYS_DATABASE.prune_choices[c].value|escape}"
-              {if $SYS_DATABASE.prune_choices[c].value == $SYS_DATABASE.prune_after_days}selected{/if}>
-              {$SYS_DATABASE.prune_choices[c].label|escape}
-            </option>
-          {/section}
-        </select>
+        <span class="db-prune-control">
+          <span class="card-stat-k">Prune</span>
+          <select class="inline-select" name="db_prune_after_days" onchange="this.form.submit()">
+            {section name=c loop=$SYS_DATABASE.prune_choices}
+              <option value="{$SYS_DATABASE.prune_choices[c].value|escape}"
+                {if $SYS_DATABASE.prune_choices[c].value == $SYS_DATABASE.prune_after_days}selected{/if}>
+                {$SYS_DATABASE.prune_choices[c].label|escape}
+              </option>
+            {/section}
+          </select>
+        </span>
+        <span class="db-prune-control">
+          <span class="card-stat-k">Archive cap</span>
+          <select class="inline-select" name="db_prune_keep_recent_shares" onchange="this.form.submit()">
+            {section name=s loop=$SYS_DATABASE.keep_recent_share_choices}
+              <option value="{$SYS_DATABASE.keep_recent_share_choices[s].value|escape}"
+                {if $SYS_DATABASE.keep_recent_share_choices[s].value == $SYS_DATABASE.keep_recent_shares}selected{/if}>
+                {$SYS_DATABASE.keep_recent_share_choices[s].label|escape}
+              </option>
+            {/section}
+          </select>
+        </span>
         <noscript><button type="submit" class="bsx-btn-sm">Save</button></noscript>
       </form>
-    </header>
-    <div class="bsx-card-body">
       <table>
         <thead><tr><th>Area</th><th class="num">Rows</th><th class="num">Size</th></tr></thead>
         <tbody id="sys-tbody-db">
@@ -936,13 +1061,13 @@
       </table>
       <p class="footnote db-footnote" id="sys-db-footnote">
         <span>Total {$SYS_DATABASE.total_size|escape} / {$SYS_DATABASE.total_rows|escape} rows</span>
-        <span>archive oldest {$SYS_DATABASE.archive_oldest|escape} · newest {$SYS_DATABASE.archive_newest|escape} · last prune {$SYS_DATABASE.prune_last_run_age|escape}{if $SYS_DATABASE.prune_last_deleted} · deleted {$SYS_DATABASE.prune_last_deleted|escape}{/if}</span>
+        <span>archive cap {$SYS_DATABASE.keep_recent_shares|escape} · oldest {$SYS_DATABASE.archive_oldest|escape} · newest {$SYS_DATABASE.archive_newest|escape} · prune {$SYS_DATABASE.prune_last_run_age|escape}{if $SYS_DATABASE.prune_last_deleted} · deleted {$SYS_DATABASE.prune_last_deleted|escape}{/if}</span>
       </p>
     </div>
   </article>
 
   {* ===== Network ===== *}
-  <article class="bsx-card">
+  <article class="bsx-card network-card">
     <header>
       <h3>Network</h3>
       <span class="card-stat"><span class="card-stat-k">Miners</span> <span id="sys-net-miners" class="card-stat-v">{$SYS_NET_MINERS|escape}</span></span>
@@ -1342,6 +1467,14 @@
     }).join(''));
     var memAvail = document.getElementById('sys-mem-avail');
     if (memAvail && data.memory_available) memAvail.textContent = data.memory_available;
+    if (data.memory_io_summary) {
+      var memIoRw = document.getElementById('sys-mem-io-rw');
+      var memIoUtil = document.getElementById('sys-mem-io-util');
+      var memIoOps = document.getElementById('sys-mem-io-ops');
+      if (memIoRw) memIoRw.textContent = data.memory_io_summary.rw || '— / —';
+      if (memIoUtil) memIoUtil.textContent = data.memory_io_summary.util || '—';
+      if (memIoOps) memIoOps.textContent = data.memory_io_summary.ops || '—';
+    }
     var diskAvail = document.getElementById('sys-disk-avail');
     if (diskAvail && data.disk_available) diskAvail.textContent = data.disk_available;
 
@@ -1352,6 +1485,14 @@
              '</td><td class="num">' + esc(r.dirpct || '—') +
              '</td></tr>';
     }).join(''));
+    if (data.disk_io_summary) {
+      var diskIoRw = document.getElementById('sys-disk-io-rw');
+      var diskIoUtil = document.getElementById('sys-disk-io-util');
+      var diskIoOps = document.getElementById('sys-disk-io-ops');
+      if (diskIoRw) diskIoRw.textContent = data.disk_io_summary.rw || '— / —';
+      if (diskIoUtil) diskIoUtil.textContent = data.disk_io_summary.util || '—';
+      if (diskIoOps) diskIoOps.textContent = data.disk_io_summary.ops || '—';
+    }
 
     if (data.database) {
       fill('sys-tbody-db', (data.database.tables || []).map(function (r) {
@@ -1364,9 +1505,10 @@
         var deleted = parseInt(data.database.prune_last_deleted, 10);
         dbFoot.innerHTML =
           '<span>Total ' + esc(data.database.total_size || '—') + ' / ' + esc(data.database.total_rows || '—') + ' rows</span>' +
-          '<span>archive oldest ' + esc(data.database.archive_oldest || '—') +
+          '<span>archive cap ' + esc(data.database.keep_recent_shares || '—') +
+          ' · oldest ' + esc(data.database.archive_oldest || '—') +
           ' · newest ' + esc(data.database.archive_newest || '—') +
-          ' · last prune ' + esc(data.database.prune_last_run_age || 'never') +
+          ' · prune ' + esc(data.database.prune_last_run_age || 'never') +
           (!isNaN(deleted) && deleted > 0 ? ' · deleted ' + esc(deleted) : '') +
           '</span>';
       }

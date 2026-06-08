@@ -65,6 +65,12 @@ INSERT IGNORE INTO settings (name, value)
 INSERT IGNORE INTO settings (name, value)
   VALUES ('db_prune_keep_recent_blocks', '100');
 INSERT IGNORE INTO settings (name, value)
+  VALUES ('db_prune_keep_recent_shares', '250000');
+UPDATE settings
+   SET value = '250000'
+ WHERE name = 'db_prune_keep_recent_shares'
+   AND CAST(value AS UNSIGNED) < 250000;
+INSERT IGNORE INTO settings (name, value)
   VALUES ('db_prune_batch_size', '50000');
 INSERT IGNORE INTO settings (name, value)
   VALUES ('db_prune_max_batches', '4');
