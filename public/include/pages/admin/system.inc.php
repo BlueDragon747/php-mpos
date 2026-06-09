@@ -148,6 +148,35 @@ function _system_status_last_good_payload($state = 'warming', $message = 'System
   return $payload;
 }
 
+function _system_status_apply_live_backup_settings($payload) {
+  global $setting;
+  if (!is_array($payload)) return $payload;
+  if (!isset($payload['backup']) || !is_array($payload['backup'])) {
+    $payload['backup'] = _system_status_empty_payload()['backup'];
+  }
+
+  $enabled_value = trim((string)$setting->getValue('backups_enabled'));
+  $hour = max(0, min(23, (int)($setting->getValue('backup_schedule_hour') ?: 3)));
+  $minute = max(0, min(59, (int)($setting->getValue('backup_schedule_minute') ?: 30)));
+  $retention_days = max(1, min(365, (int)($setting->getValue('backup_retention_days') ?: 14)));
+
+  $now = time();
+  $target_today = gmmktime($hour, $minute, 0,
+    (int)gmdate('n', $now), (int)gmdate('j', $now), (int)gmdate('Y', $now));
+  $next_is_today = $target_today > $now;
+  $next_epoch = $next_is_today ? $target_today : ($target_today + 86400);
+
+  $payload['backup']['enabled'] = $enabled_value === '0' ? 0 : 1;
+  $payload['backup']['schedule_hour'] = $hour;
+  $payload['backup']['schedule_minute'] = $minute;
+  $payload['backup']['schedule_time'] = sprintf('%02d:%02d', $hour, $minute);
+  $payload['backup']['retention_days'] = $retention_days;
+  $payload['backup']['next_run'] = gmdate('Y-m-d H:i', $next_epoch) . ' UTC';
+  $payload['backup']['next_day_label'] = $next_is_today ? 'today' : 'tomorrow';
+
+  return $payload;
+}
+
 function _system_status_respond_payload($payload) {
   while (ob_get_level() > 0) ob_end_clean();
   if (defined('BSX_SYSTEM_STATUS_QUIET') && BSX_SYSTEM_STATUS_QUIET) {
@@ -2128,6 +2157,10 @@ _system_status_cache_set(
     @fclose($lock_fp);
   }
   _system_status_respond_payload($system_status_payload);
+}
+
+if (!$system_status_collector_mode) {
+  $system_status_payload = _system_status_apply_live_backup_settings($system_status_payload);
 }
 
 $users_info           = $system_status_payload['users'];

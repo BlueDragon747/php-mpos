@@ -473,7 +473,7 @@ bootstrap_remote_file() {
     local coin="$1"
     local prefix="${BOOTSTRAP_PREFIX[$coin]}"
     printf '%s' "$BOOTSTRAP_INDEX_HTML" \
-        | sed -nE "s/.*href=[\"'](${prefix}-bootstrap-[0-9]+\\.dat\\.xz)[\"'].*/\\1/p" \
+        | { grep -Eo "${prefix}-bootstrap-[0-9]+\\.dat\\.xz" || true; } \
         | sort -V \
         | tail -1
 }
