@@ -495,7 +495,7 @@ fi
 require_pattern MPOS_ADMIN_USER   "${MPOS_ADMIN_USER}"   '[A-Za-z0-9_]{1,32}'
 require_pattern MPOS_ADMIN_PASS   "${MPOS_ADMIN_PASS}"   '[A-Za-z0-9_+=:,.@%/-]{8,128}'
 require_pattern MPOS_ADMIN_PIN    "${MPOS_ADMIN_PIN}"    '[0-9]{4}'
-require_pattern MPOS_ADMIN_EMAIL  "${MPOS_ADMIN_EMAIL}"  '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+'
+require_pattern MPOS_ADMIN_EMAIL  "${MPOS_ADMIN_EMAIL}"  '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
 require_pattern MPOS_SALT         "${MPOS_SALT}"         '[A-Fa-f0-9]{8,128}'
 require_pattern MPOS_SALTY        "${MPOS_SALTY}"        '[A-Fa-f0-9]{8,128}'
 require_pattern MPOS_API_TOKEN    "${MPOS_API_TOKEN}"    '[A-Fa-f0-9]{8,128}'
