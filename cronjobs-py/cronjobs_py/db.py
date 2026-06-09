@@ -187,7 +187,7 @@ class Db:
         Used by cron jobs that need to react in real time to admin
         edits on the Settings page — the row is queried fresh every
         call, no caching. Returns `default` if the row is missing or
-        the stored value isn't a positive integer; clamps the result
+        the stored value isn't a non-negative integer; clamps the result
         to at least `floor` so an admin typo (e.g. `1`) can't crater
         a SQL window divisor.
         """
@@ -198,7 +198,7 @@ class Db:
             )
             if row and row.get("value") is not None:
                 v = int(row["value"])
-                if v > 0:
+                if v >= 0:
                     return max(floor, v)
         except Exception:
             pass

@@ -37,10 +37,12 @@ from ..scheduler import JobContext
 log = get(__name__)
 
 
-# Keep at least 250k raw archived shares on production pools. That
-# preserves the active PPLNS window plus fill-up room for unaccounted
-# blocks while still bounding high-volume archive growth.
-DEFAULT_KEEP_RECENT_SHARES = 250_000
+# Keep 1M raw archived shares by default. Low-difficulty pools can produce
+# enough valid shares that 250k becomes a thin history window even though it
+# remains the absolute accounting safety floor.
+MIN_KEEP_RECENT_SHARES = 250_000
+DEFAULT_KEEP_RECENT_SHARES = 1_000_000
+DEFAULT_MAX_BATCHES = 20
 
 
 @dataclass
@@ -77,7 +79,7 @@ class ArchiveCleanup:
                 archive_cfg.get("keep_recent_shares", DEFAULT_KEEP_RECENT_SHARES)
                 or DEFAULT_KEEP_RECENT_SHARES
             ),
-            floor=DEFAULT_KEEP_RECENT_SHARES,
+            floor=MIN_KEEP_RECENT_SHARES,
         )
         batch_size = db.get_setting_int(
             "db_prune_batch_size",
@@ -86,7 +88,7 @@ class ArchiveCleanup:
         )
         max_batches = db.get_setting_int(
             "db_prune_max_batches",
-            default=int(archive_cfg.get("max_batches", 4) or 4),
+            default=int(archive_cfg.get("max_batches", DEFAULT_MAX_BATCHES) or DEFAULT_MAX_BATCHES),
             floor=1,
         )
 
@@ -109,13 +111,20 @@ class ArchiveCleanup:
         age_cutoff = self._age_cutoff_share_id(db, archive_table, retention_days)
         cap_cutoff = max(0, max_share_id - keep_recent_shares)
         wanted_cutoff = max(age_cutoff, cap_cutoff)
-        safety_cutoff = self._safety_cutoff_share_id(ctx, db, max_share_id,
-                                                     keep_recent_shares)
+        min_unaccounted_share_id = self._min_unaccounted_share_id(ctx, db)
+        safety_cutoff = self._safety_cutoff_share_id(max_share_id,
+                                                     keep_recent_shares,
+                                                     min_unaccounted_share_id)
         delete_cutoff = min(wanted_cutoff, safety_cutoff)
 
         if delete_cutoff <= 0:
-            self._record_success(db, slot_label, 0, retention_days,
-                                 keep_recent_shares, 0)
+            if wanted_cutoff > 0 and min_unaccounted_share_id > 0:
+                self._record_blocked(db, slot_label, retention_days,
+                                     keep_recent_shares,
+                                     min_unaccounted_share_id)
+            else:
+                self._record_success(db, slot_label, 0, retention_days,
+                                     keep_recent_shares, 0)
             log.debug("[%s/%s] no archived shares to purge",
                       self.name, slot_label)
             return
@@ -172,6 +181,18 @@ class ArchiveCleanup:
             )
         db.set_setting("db_prune_last_status", status)
 
+    def _record_blocked(self, db: Any, slot_label: str, retention_days: int,
+                        keep_recent_shares: int,
+                        min_unaccounted_share_id: int) -> None:
+        db.set_setting("db_prune_last_run", str(int(time.time())))
+        db.set_setting("db_prune_last_deleted", "0")
+        db.set_setting(
+            "db_prune_last_status",
+            f"{slot_label}: blocked by unaccounted block at share_id "
+            f"{min_unaccounted_share_id}; target latest "
+            f"{keep_recent_shares} raw shares / {retention_days}d",
+        )
+
     def _max_archive_share_id(self, db: Any, archive_table: str) -> int:
         row = db.fetchone(
             f"SELECT IFNULL(MAX(share_id), 0) AS max_share_id FROM {archive_table}"
@@ -188,10 +209,9 @@ class ArchiveCleanup:
         )
         return int((row or {}).get("cutoff_share_id") or 0)
 
-    def _safety_cutoff_share_id(self, ctx: JobContext, db: Any,
-                                max_share_id: int,
-                                keep_recent_shares: int) -> int:
-        min_unaccounted = self._min_unaccounted_share_id(ctx, db)
+    def _safety_cutoff_share_id(self, max_share_id: int,
+                                keep_recent_shares: int,
+                                min_unaccounted: int) -> int:
         if min_unaccounted <= 0:
             return max_share_id
         return max(0, min_unaccounted - keep_recent_shares)

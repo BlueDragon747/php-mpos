@@ -41,6 +41,16 @@ install -m 750 -o root -g root \
     "${MPOS_REPO}/deploy-bundle/scripts/backup.sh" \
     "${INSTALL_ROOT}/bin/backup.sh"
 
+say "install manual backup web helper"
+install -m 755 -o root -g root \
+    "${MPOS_REPO}/deploy-bundle/scripts/backup-now-helper.sh" \
+    /usr/local/sbin/blakestream-mpos-backup-now
+install -d -o root -g root -m 0750 /etc/sudoers.d
+install -m 440 -o root -g root \
+    "${MPOS_REPO}/deploy-bundle/sudoers/blakestream-mpos-backup" \
+    /etc/sudoers.d/blakestream-mpos-backup
+visudo -cf /etc/sudoers.d/blakestream-mpos-backup >/dev/null
+
 say "install systemd unit + timer"
 install -m 644 -o root -g root \
     "${MPOS_REPO}/deploy-bundle/systemd/blakestream-mpos-backup.service" \

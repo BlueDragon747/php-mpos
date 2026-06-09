@@ -10,6 +10,7 @@ $oldtoken_cp = (isset($_POST['cp_token']) && $_POST['cp_token'] !== '') ? $_POST
 $oldtoken_wf = (isset($_POST['wf_token']) && $_POST['wf_token'] !== '') ? $_POST['wf_token'] : @$_GET['wf_token'];
 $updating = (@$_POST['do']) ? 1 : 0;
 $_ae_ajax_quote = null;
+if (!defined('AE_TX_EXPLORER_MIN_CONFIRMATIONS')) define('AE_TX_EXPLORER_MIN_CONFIRMATIONS', 2);
 
 function _ae_coin_amount_str($amount) {
   return number_format(max(0, (float)$amount), 8, '.', '');
@@ -26,6 +27,44 @@ function _ae_wallet_max_weight_message($currency) {
   $coin = trim((string)$currency);
   $prefix = $coin !== '' ? $coin . ' ' : '';
   return $prefix . 'pool wallet has too many small UTXOs to quote this cash-out as one transaction. No payout was queued; the pool operator needs to consolidate the wallet UTXOs before this cash-out can proceed.';
+}
+
+function _ae_tx_explorer_url($currency, $txid) {
+  global $setting;
+
+  $txid = trim((string)$txid);
+  if ($txid === '' || empty($setting) || !empty($setting->getValue('website_transactionexplorer_disabled'))) return '';
+  $base = trim((string)$setting->getValue('website_transactionexplorer_url'));
+  if ($base === '' || stripos($base, 'explorer.litecoin.net') !== false) {
+    $base = 'https://explorer.blakestream.io/{coin}?tx=';
+  }
+  if (strpos($base, '{coin}') !== false) {
+    $base = str_replace('{coin}', rawurlencode(strtolower((string)$currency)), $base);
+  }
+  if (strpos($base, '{txid}') !== false) {
+    return str_replace('{txid}', rawurlencode($txid), $base);
+  }
+  return $base . rawurlencode($txid);
+}
+
+function _ae_tx_confirmations($wallet, $txid) {
+  $txid = trim((string)$txid);
+  if (!is_object($wallet) || $txid === '') return 0;
+
+  $old_timeout = ini_get('default_socket_timeout');
+  ini_set('default_socket_timeout', 2);
+  try {
+    $tx = $wallet->gettransaction($txid);
+    ini_set('default_socket_timeout', $old_timeout);
+    if (is_array($tx) && isset($tx['confirmations']) && is_numeric($tx['confirmations'])) {
+      return max(0, (int)$tx['confirmations']);
+    }
+  } catch (Exception $e) {
+    ini_set('default_socket_timeout', $old_timeout);
+    return 0;
+  }
+  ini_set('default_socket_timeout', $old_timeout);
+  return 0;
 }
 
 function _ae_slot_payout_max($slot_key) {
@@ -207,7 +246,11 @@ function _ae_queue_cashout($slot_key, $currency, $tx_obj, $wallet, $addr_col, $t
   $uid = (int)$_SESSION['USERDATA']['id'];
   $log->log("info", $_SESSION['USERDATA']['username']." requesting manual payout");
   if (method_exists($oPayout, $create_method) && $iPayoutId = $oPayout->{$create_method}($uid, $token)) {
-    $_SESSION['POPUP'][] = array('CONTENT' => 'Created new manual payout request with ID #' . $iPayoutId, 'COIN' => $slot_key, 'TYPE' => 'success');
+    $_SESSION['POPUP'][] = array(
+      'CONTENT' => 'Created new manual payout request. Queued, awaiting broadcast.',
+      'COIN'    => $slot_key,
+      'TYPE'    => 'success',
+    );
   } else {
     $_SESSION['POPUP'][] = array('CONTENT' => $oPayout->getError(), 'TYPE' => 'errormsg', 'COIN' => $slot_key);
   }
@@ -466,7 +509,9 @@ function _ae_balance($tx, $uid) {
 }
 
 // Per-slot pending-payout state. Returned as
-// ['active' => bool, 'requestedAt' => ISO-ish string|null, 'txid' => string|null].
+// ['active' => bool, 'historyId' => int|null, 'feeHistoryId' => int|null,
+//  'requestedAt' => ISO-ish string|null, 'txid' => string|null,
+//  'txConfirmations' => int, 'txExplorerUrl' => string].
 //   - `active` is true while either:
 //      * a payouts_<slot> row with completed=0 exists (the moment after
 //        the user clicked Cash Out, before cronjobs-py picks it up), or
@@ -478,11 +523,17 @@ function _ae_balance($tx, $uid) {
 //        (defensive — covers the gap if outbox row is missing).
 //   - `requestedAt` prefers the outbox.created_at (broadcast time); if
 //     no outbox row exists yet, falls back to the payouts row time.
+//   - `historyId` is the Debit_MP/Debit_AP row id users see in Transaction
+//     History; this is the user-facing payout id once a transaction row exists.
+//   - `feeHistoryId` is the paired TXFee history row id, when present.
+//   - `txExplorerUrl` is only populated after wallet RPC reports
+//     AE_TX_EXPLORER_MIN_CONFIRMATIONS, so queued/broadcast payouts do
+//     not look settled.
 //   - `txid` comes from the outbox row, null until cronjobs-py broadcasts.
 // Slot key is restricted to a known whitelist so this can't become an
 // SQL injection vector.
-function _ae_pending_payout($mysqli, $slotKey, $uid) {
-  $base = array('active' => false, 'requestedAt' => null, 'txid' => null, 'amount' => null, 'kind' => null);
+function _ae_pending_payout($mysqli, $slotKey, $uid, $wallet = null, $currency = '') {
+  $base = array('active' => false, 'historyId' => null, 'feeHistoryId' => null, 'requestedAt' => null, 'txid' => null, 'txConfirmations' => 0, 'txExplorerUrl' => '', 'amount' => null, 'kind' => null);
   $payoutsTable = array(
     'main' => 'payouts',
     'mm'   => 'payouts_mm',
@@ -504,13 +555,13 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
 
   // 1) Outbox-backed pending: cronjobs-py is about to broadcast or has
   //    broadcast and is waiting for reconciliation confirmations.
-  $sql = "SELECT txid, status, created_at, amount FROM transactions_outbox
+  $sql = "SELECT id, txid, status, created_at, amount FROM transactions_outbox
           WHERE account_id = ? AND slot = ?
             AND status IN ('pending', 'broadcast')
           ORDER BY id DESC LIMIT 1";
   if ($stmt = $mysqli->prepare($sql)) {
     if ($stmt->bind_param('is', $uid, $outboxSlot) && $stmt->execute()) {
-      $stmt->bind_result($otxid, $ostatus, $ocreated, $oamount);
+      $stmt->bind_result($oid, $otxid, $ostatus, $ocreated, $oamount);
       if ($stmt->fetch()) {
         $base['active']      = true;
         $base['requestedAt'] = (string)$ocreated;
@@ -521,18 +572,23 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
     $stmt->close();
   }
   if ($base['active']) {
-    // Look up the kind from the matching debit row in
+    // Look up the visible Transaction History ids from the matching rows in
     // transactions_<slot>: Debit_MP = manual cash-out request,
     // Debit_AP = auto-payout fired by the cronjobs-py threshold job.
     if ($base['txid'] !== null) {
-      $sql = "SELECT type FROM " . $txTable[$slotKey]
-           . " WHERE account_id = ? AND txid = ? AND type IN ('Debit_MP','Debit_AP')
-              ORDER BY id DESC LIMIT 1";
+      $sql = "SELECT id, type FROM " . $txTable[$slotKey]
+           . " WHERE account_id = ? AND txid = ? AND type IN ('Debit_MP','Debit_AP','TXFee')
+              ORDER BY id ASC";
       if ($stmt = $mysqli->prepare($sql)) {
         if ($stmt->bind_param('is', $uid, $base['txid']) && $stmt->execute()) {
-          $stmt->bind_result($ttype);
-          if ($stmt->fetch()) {
-            $base['kind'] = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
+          $stmt->bind_result($thid, $ttype);
+          while ($stmt->fetch()) {
+            if ($ttype === 'Debit_MP' || $ttype === 'Debit_AP') {
+              $base['historyId'] = (int)$thid;
+              $base['kind'] = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
+            } elseif ($ttype === 'TXFee') {
+              $base['feeHistoryId'] = (int)$thid;
+            }
           }
         }
         $stmt->close();
@@ -552,6 +608,12 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
         $stmt->close();
       }
     }
+    if ($base['txid'] !== null) {
+      $base['txConfirmations'] = _ae_tx_confirmations($wallet, $base['txid']);
+      if ($base['txConfirmations'] >= AE_TX_EXPLORER_MIN_CONFIRMATIONS) {
+        $base['txExplorerUrl'] = _ae_tx_explorer_url($currency, $base['txid']);
+      }
+    }
     return $base;
   }
 
@@ -560,11 +622,11 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
   //    manual cash-outs go through the payouts_<slot> queue —
   //    auto-payouts skip it and write Debit_AP + outbox directly,
   //    so we can hard-code kind='manual' here.
-  $sql = "SELECT time FROM " . $payoutsTable[$slotKey]
+  $sql = "SELECT id, time FROM " . $payoutsTable[$slotKey]
        . " WHERE completed = 0 AND account_id = ? ORDER BY id DESC LIMIT 1";
   if ($stmt = $mysqli->prepare($sql)) {
     if ($stmt->bind_param('i', $uid) && $stmt->execute()) {
-      $stmt->bind_result($ptime);
+      $stmt->bind_result($pid, $ptime);
       if ($stmt->fetch()) {
         $base['active']      = true;
         $base['requestedAt'] = (string)$ptime;
@@ -575,19 +637,36 @@ function _ae_pending_payout($mysqli, $slotKey, $uid) {
   }
   if ($base['active']) return $base;
 
-  // 3) Defensive: unarchived Debit_MP / Debit_AP without an outbox
-  //    row (legacy payouts the cronjobs-py reconciler hasn't touched
-  //    yet). Type tells us the kind.
-  $sql = "SELECT txid, type FROM " . $txTable[$slotKey]
-       . " WHERE account_id = ? AND type IN ('Debit_MP','Debit_AP') AND archived = 0
-          ORDER BY id DESC LIMIT 1";
+  // 3) Defensive: unarchived Debit_MP / Debit_AP without any outbox
+  //    row. If an outbox row exists, even reconciled, that state is
+  //    authoritative and the card should not stay in pending mode.
+  $sql = "SELECT t.id, t.txid, t.type, t.amount, t.timestamp FROM " . $txTable[$slotKey] . " t
+          WHERE t.account_id = ?
+            AND t.type IN ('Debit_MP','Debit_AP')
+            AND t.archived = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM transactions_outbox o
+              WHERE o.account_id = t.account_id
+                AND o.slot = ?
+                AND o.txid = t.txid
+            )
+          ORDER BY t.id DESC LIMIT 1";
   if ($stmt = $mysqli->prepare($sql)) {
-    if ($stmt->bind_param('i', $uid) && $stmt->execute()) {
-      $stmt->bind_result($tx, $ttype);
+    if ($stmt->bind_param('is', $uid, $outboxSlot) && $stmt->execute()) {
+      $stmt->bind_result($tid, $tx, $ttype, $tamount, $ttime);
       if ($stmt->fetch()) {
-        $base['active'] = true;
+        $base['active']      = true;
+        $base['historyId']   = (int)$tid;
+        $base['requestedAt'] = (string)$ttime;
         if ($tx !== null && $tx !== '') $base['txid'] = (string)$tx;
-        $base['kind']   = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
+        if ($tamount !== null && $tamount !== '') $base['amount'] = (string)$tamount;
+        $base['kind']        = ($ttype === 'Debit_AP') ? 'auto' : 'manual';
+        if ($base['txid'] !== null) {
+          $base['txConfirmations'] = _ae_tx_confirmations($wallet, $base['txid']);
+          if ($base['txConfirmations'] >= AE_TX_EXPLORER_MIN_CONFIRMATIONS) {
+            $base['txExplorerUrl'] = _ae_tx_explorer_url($currency, $base['txid']);
+          }
+        }
       }
     }
     $stmt->close();
@@ -613,14 +692,14 @@ require_once dirname(__DIR__) . '/admin/_wallet_coin_meta.inc.php';
 
 $coins = array();
 foreach (array(
-  array('main', 'currency',     isset($transaction)     ? $transaction     : null, 'paymentAddress',     'payoutThreshold',     'cashOut',     'coin_address',     'ap_threshold'),
-  array('mm',   'currency_mm',  isset($transaction_mm)  ? $transaction_mm  : null, 'paymentAddress_mm',  'payoutThreshold_mm',  'cashOut_mm',  'coin_address_mm',  'ap_threshold_mm'),
-  array('mm1',  'currency_mm1', isset($transaction_mm1) ? $transaction_mm1 : null, 'paymentAddress_mm1', 'payoutThreshold_mm1', 'cashOut_mm1', 'coin_address_mm1', 'ap_threshold_mm1'),
-  array('mm3',  'currency_mm3', isset($transaction_mm3) ? $transaction_mm3 : null, 'paymentAddress_mm3', 'payoutThreshold_mm3', 'cashOut_mm3', 'coin_address_mm3', 'ap_threshold_mm3'),
-  array('mm4',  'currency_mm4', isset($transaction_mm4) ? $transaction_mm4 : null, 'paymentAddress_mm4', 'payoutThreshold_mm4', 'cashOut_mm4', 'coin_address_mm4', 'ap_threshold_mm4'),
-  array('mm5',  'currency_mm5', isset($transaction_mm5) ? $transaction_mm5 : null, 'paymentAddress_mm5', 'payoutThreshold_mm5', 'cashOut_mm5', 'coin_address_mm5', 'ap_threshold_mm5'),
+  array('main', 'currency',     isset($transaction)     ? $transaction     : null, isset($bitcoin)     ? $bitcoin     : null, 'paymentAddress',     'payoutThreshold',     'cashOut',     'coin_address',     'ap_threshold'),
+  array('mm',   'currency_mm',  isset($transaction_mm)  ? $transaction_mm  : null, isset($bitcoin_mm)  ? $bitcoin_mm  : null, 'paymentAddress_mm',  'payoutThreshold_mm',  'cashOut_mm',  'coin_address_mm',  'ap_threshold_mm'),
+  array('mm1',  'currency_mm1', isset($transaction_mm1) ? $transaction_mm1 : null, isset($bitcoin_mm1) ? $bitcoin_mm1 : null, 'paymentAddress_mm1', 'payoutThreshold_mm1', 'cashOut_mm1', 'coin_address_mm1', 'ap_threshold_mm1'),
+  array('mm3',  'currency_mm3', isset($transaction_mm3) ? $transaction_mm3 : null, isset($bitcoin_mm3) ? $bitcoin_mm3 : null, 'paymentAddress_mm3', 'payoutThreshold_mm3', 'cashOut_mm3', 'coin_address_mm3', 'ap_threshold_mm3'),
+  array('mm4',  'currency_mm4', isset($transaction_mm4) ? $transaction_mm4 : null, isset($bitcoin_mm4) ? $bitcoin_mm4 : null, 'paymentAddress_mm4', 'payoutThreshold_mm4', 'cashOut_mm4', 'coin_address_mm4', 'ap_threshold_mm4'),
+  array('mm5',  'currency_mm5', isset($transaction_mm5) ? $transaction_mm5 : null, isset($bitcoin_mm5) ? $bitcoin_mm5 : null, 'paymentAddress_mm5', 'payoutThreshold_mm5', 'cashOut_mm5', 'coin_address_mm5', 'ap_threshold_mm5'),
 ) as $row) {
-  list($key, $cfg_key, $tx_obj, $addr_field, $thr_field, $cash_action, $addr_col, $thr_col) = $row;
+  list($key, $cfg_key, $tx_obj, $wallet_obj, $addr_field, $thr_field, $cash_action, $addr_col, $thr_col) = $row;
   $currency = isset($config[$cfg_key]) ? $config[$cfg_key] : '';
   if ($currency === '' && $key !== 'main') continue;   // slot not configured on this pool
   $tk = strtoupper($currency);
@@ -648,7 +727,7 @@ foreach (array(
     // SPA flips header to "Pending payout" while one is in flight,
     // then offers a click-through to the body details (requestedAt +
     // txid once the cronjobs-py payouts worker broadcasts).
-    'pendingPayout'    => _ae_pending_payout($mysqli, $key, $_uid),
+    'pendingPayout'    => _ae_pending_payout($mysqli, $key, $_uid, $wallet_obj, $currency),
   );
 }
 

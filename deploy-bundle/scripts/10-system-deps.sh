@@ -54,6 +54,8 @@ systemctl disable apache2 2>/dev/null || true
 
 say "starting services"
 systemctl enable --now mariadb >/dev/null
+say "configuring MariaDB for MPOS"
+bash "${SCRIPT_DIR}/configure-mariadb-pool.sh"
 systemctl enable --now memcached >/dev/null
 systemctl enable --now "php${PHP_VER}-fpm" >/dev/null
 systemctl enable --now nginx >/dev/null

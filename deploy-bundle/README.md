@@ -263,6 +263,24 @@ export SKIP_DAEMON_IMAGE_BUILD=1
 sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 
+### MariaDB tuning
+
+Deploy and `update-mainnet.sh --mpos` install an idempotent MariaDB drop-in at
+`/etc/mysql/mariadb.conf.d/99-blakestream-pool.cnf`. The default is
+conservative: InnoDB buffer pool auto-sizes to 25% of host RAM capped at
+4096 MiB, and redo log size defaults to 256, 512, or 1024 MiB based on buffer
+pool size.
+This keeps recent share, PPLNS, dashboard, and prune queries in memory while
+leaving RAM for the coin daemon containers.
+
+Override only when the host has known headroom:
+
+```bash
+export MPOS_MARIADB_BUFFER_POOL_MB=4096
+export MPOS_MARIADB_LOG_FILE_MB=512
+sudo -E bash deploy-bundle/deploy-mainnet.sh
+```
+
 ## Mainnet Updates
 
 `update-mainnet.sh` is for long-running pools that already have a working
@@ -290,6 +308,9 @@ sudo bash deploy-bundle/update-mainnet.sh --all
 # Full update with stop/remove/build/recreate daemon container rotation.
 sudo bash deploy-bundle/update-mainnet.sh --all --build
 ```
+
+`--mpos` also reapplies the MariaDB tuning drop-in and runs database
+migrations. MariaDB restarts only when the rendered tuning file changes.
 
 `--wallets` is accepted as an alias for `--daemons`. During daemon updates,
 the script stops Stratum first, cleanly stops daemon containers, updates the

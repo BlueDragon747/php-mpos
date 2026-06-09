@@ -18,6 +18,7 @@ $_GET = array();
 $_POST = array();
 
 $interval = 10;
+$max_failures = 3;
 $loop = in_array('--loop', $argv, true);
 $quiet = in_array('--quiet', $argv, true);
 if ($quiet) define('BSX_SYSTEM_STATUS_QUIET', true);
@@ -25,13 +26,33 @@ foreach ($argv as $i => $arg) {
   if ($arg === '--interval' && isset($argv[$i + 1]) && is_numeric($argv[$i + 1])) {
     $interval = max(1, (int)$argv[$i + 1]);
   }
+  if ($arg === '--max-failures' && isset($argv[$i + 1]) && is_numeric($argv[$i + 1])) {
+    $max_failures = max(1, (int)$argv[$i + 1]);
+  }
 }
 
 if ($loop) {
+  $failures = 0;
   while (true) {
     $started = time();
-    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__FILE__) . ' --once --quiet';
-    passthru($cmd);
+    $timeout = max(30, $interval > 5 ? $interval - 5 : $interval);
+    $cmd = 'timeout --kill-after=5s ' . escapeshellarg((string)$timeout . 's')
+      . ' ' . escapeshellarg(PHP_BINARY)
+      . ' ' . escapeshellarg(__FILE__)
+      . ' --once --quiet';
+    $rc = 0;
+    passthru($cmd, $rc);
+    if ($rc === 0) {
+      $failures = 0;
+    } else {
+      $failures++;
+      fwrite(STDERR, 'system status collector pass failed rc=' . $rc
+        . ' failures=' . $failures . '/' . $max_failures . PHP_EOL);
+      if ($failures >= $max_failures) {
+        fwrite(STDERR, 'system status collector exiting for systemd restart' . PHP_EOL);
+        exit(1);
+      }
+    }
     $elapsed = time() - $started;
     sleep(max(1, $interval - $elapsed));
   }

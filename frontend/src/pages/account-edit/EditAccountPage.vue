@@ -139,8 +139,12 @@ function pinReady(coinKey: string): boolean {
 
 type PendingPayout = {
   active: boolean;
+  historyId: number | null;
+  feeHistoryId: number | null;
   requestedAt: string | null;
   txid: string | null;
+  txConfirmations: number;
+  txExplorerUrl: string;
   amount: string | null;
   kind: 'manual' | 'auto' | null;
 };
@@ -168,7 +172,7 @@ function pendingLabel(kind: 'manual' | 'auto' | null | undefined): string {
 // Trim seconds off "YYYY-MM-DD HH:MM:SS" for the inline-details readout.
 function fmtRequestedAt(s: string | null | undefined): string {
   if (!s) return '—';
-  return s.slice(0, 16).replace('T', ' ');
+  return `${s.slice(0, 10)} | ${s.slice(11, 16)} UTC`;
 }
 
 const pendingPayout = ref<Record<string, PendingPayout>>(
@@ -246,8 +250,12 @@ function handleCashOutPopups(data: { popups?: PopupMessage[] }, coinKey: string)
             ...pendingPayout.value,
             [p.coin]: {
               active: true,
+              historyId: null,
+              feeHistoryId: null,
               requestedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
               txid: null,
+              txConfirmations: 0,
+              txExplorerUrl: '',
               amount: null,
               kind: 'manual',
             },
@@ -903,6 +911,14 @@ async function copyApiKey() {
                 class="cashout-msg-block cashout-msg-info cashout-details-block cashout-overlay"
                 role="status"
               >
+                <p v-if="pendingPayout[coin.key]?.historyId !== null" class="cashout-detail-line">
+                  <span class="muted">Payout ID:</span>
+                  <strong>{{ pendingPayout[coin.key]?.historyId }}</strong>
+                  <template v-if="pendingPayout[coin.key]?.feeHistoryId !== null">
+                    <span class="muted">&nbsp;&nbsp;Fee ID:</span>
+                    <strong>{{ pendingPayout[coin.key]?.feeHistoryId }}</strong>
+                  </template>
+                </p>
                 <p class="cashout-detail-line">
                   <span class="muted">Requested:</span>
                   <strong>{{ fmtRequestedAt(pendingPayout[coin.key]?.requestedAt) }}</strong>
@@ -913,9 +929,15 @@ async function copyApiKey() {
                 </p>
                 <p class="cashout-detail-line">
                   <span class="muted">{{ pendingPayout[coin.key]?.txid ? 'Txid:' : 'Status:' }}</span>
-                  <strong v-if="pendingPayout[coin.key]?.txid"
+                  <a v-if="pendingPayout[coin.key]?.txid && pendingPayout[coin.key]?.txExplorerUrl"
+                     class="cashout-detail-txid cashout-detail-txid-link"
+                     :href="pendingPayout[coin.key]!.txExplorerUrl"
+                     :title="`${pendingPayout[coin.key]!.txid!} (${pendingPayout[coin.key]!.txConfirmations} confirmations)`"
+                     target="_blank"
+                     rel="noopener">{{ pendingPayout[coin.key]!.txid }}</a>
+                  <strong v-else-if="pendingPayout[coin.key]?.txid"
                           class="cashout-detail-txid"
-                          :title="pendingPayout[coin.key]!.txid!">{{ pendingPayout[coin.key]!.txid }}</strong>
+                          :title="`${pendingPayout[coin.key]!.txid!} (${pendingPayout[coin.key]!.txConfirmations} confirmations)`">{{ pendingPayout[coin.key]!.txid }}</strong>
                   <strong v-else>Queued, awaiting broadcast</strong>
                 </p>
               </div>
@@ -1594,6 +1616,15 @@ async function copyApiKey() {
   word-break: break-all;
   white-space: normal;
   max-width: 100%;
+}
+.cashout-detail-txid-link {
+  color: #8ed1ff;
+  font-weight: 700;
+  text-decoration: none;
+}
+.cashout-detail-txid-link:hover {
+  color: #ffffff;
+  text-decoration: underline;
 }
 .cashout-details-block {
   gap: 4px;

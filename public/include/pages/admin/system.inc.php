@@ -16,8 +16,10 @@ require_once __DIR__ . '/_daemon_rule_status.inc.php';
 if (!$system_status_collector_mode) _require_admin_csrf($csrftoken);
 
 $system_status_cache_key = 'ADMIN_SYSTEM_STATUS_V1';
+$system_status_cache_last_good_key = $system_status_cache_key . '_LAST_GOOD';
 $system_status_cache_fresh_ttl = 60;
 $system_status_cache_stale_ttl = 180;
+$system_status_cache_last_good_ttl = 86400;
 
 function _system_status_cache_full_key($key) {
   global $config;
@@ -78,13 +80,7 @@ function _system_status_empty_payload($state = 'warming', $message = 'System sta
       'schedule_hour' => 0, 'schedule_minute' => 0, 'wallets' => array(),
       'tarball_path' => '', 'database' => '', 'database_size' => 0,
     ),
-    'database'         => array(
-      'tables' => array(), 'total_size' => '—', 'total_rows' => '—',
-      'archive_oldest' => '—', 'archive_newest' => '—',
-      'prune_enabled' => 0, 'prune_after_days' => 0,
-      'prune_choices' => array(), 'prune_last_run' => 0,
-      'prune_last_deleted' => 0, 'prune_last_status' => '',
-    ),
+    'database'         => _system_status_empty_database_payload(),
     'cpu'              => array(),
     'cpu_cores'        => '—',
     'swap'             => array(),
@@ -108,7 +104,7 @@ function _system_status_empty_payload($state = 'warming', $message = 'System sta
   );
 }
 
-function _system_status_cached_payload($key) {
+function _system_status_cached_payload($key, $max_age = null) {
   global $system_status_cache_fresh_ttl, $system_status_cache_stale_ttl;
   $cached_payload = _system_status_cache_get($key);
   if (!is_array($cached_payload) ||
@@ -118,7 +114,8 @@ function _system_status_cached_payload($key) {
   }
 
   $age = max(0, time() - (int)$cached_payload['ts']);
-  if ($age > $system_status_cache_stale_ttl) return false;
+  $allowed_age = $max_age === null ? $system_status_cache_stale_ttl : (int)$max_age;
+  if ($age > $allowed_age) return false;
 
   $payload = $cached_payload['payload'];
   $state = $age <= $system_status_cache_fresh_ttl ? 'fresh' : 'stale';
@@ -127,8 +124,26 @@ function _system_status_cached_payload($key) {
     'state' => $state,
     'age' => $age,
     'ttl' => $system_status_cache_fresh_ttl,
-    'stale_ttl' => $system_status_cache_stale_ttl,
+    'stale_ttl' => $allowed_age,
     'message' => $state === 'stale' ? 'System status stale' : 'System status fresh',
+  );
+  return $payload;
+}
+
+function _system_status_last_good_payload($state = 'warming', $message = 'System status warming up') {
+  global $system_status_cache_last_good_key, $system_status_cache_fresh_ttl, $system_status_cache_last_good_ttl;
+  $payload = _system_status_cached_payload($system_status_cache_last_good_key, $system_status_cache_last_good_ttl);
+  if (!is_array($payload)) return false;
+
+  $age = isset($payload['cache']['age']) ? (int)$payload['cache']['age'] : 0;
+  $payload['cache'] = array(
+    'hit' => true,
+    'state' => $state,
+    'age' => $age,
+    'ttl' => $system_status_cache_fresh_ttl,
+    'stale_ttl' => $system_status_cache_last_good_ttl,
+    'message' => $message,
+    'last_good' => true,
   );
   return $payload;
 }
@@ -142,6 +157,37 @@ function _system_status_respond_payload($payload) {
   header('Cache-Control: no-store');
   echo json_encode($payload, JSON_UNESCAPED_SLASHES);
   exit;
+}
+
+function _system_status_ajax_request() {
+  if (!empty($_REQUEST['_ajax'])) return true;
+  if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+      strtolower((string)$_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    return true;
+  }
+  return false;
+}
+
+function _system_status_json_response($payload) {
+  while (ob_get_level() > 0) ob_end_clean();
+  header('Content-Type: application/json; charset=utf-8');
+  header('Cache-Control: no-store');
+  echo json_encode($payload, JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
+function _system_run_manual_backup() {
+  $helper = '/usr/local/sbin/blakestream-mpos-backup-now';
+  if (!is_executable($helper)) {
+    return array(false, 'Manual backup helper is not installed yet.');
+  }
+  $cmd = 'sudo -n ' . escapeshellarg($helper) . ' 2>&1';
+  $out = array();
+  $rc = 1;
+  @exec($cmd, $out, $rc);
+  $msg = trim(implode("\n", $out));
+  if ($rc === 0) return array(true, $msg !== '' ? $msg : 'Backup queued.');
+  return array(false, $msg !== '' ? $msg : 'Backup could not be queued.');
 }
 
 // Single mutation supported here: toggle backups_enabled. Reuses the
@@ -177,6 +223,16 @@ if (!$system_status_collector_mode && @$_POST['do'] === 'update_backup_settings'
 
   $log->log("warn", @$_SESSION['USERDATA']['username']
             . ' updated backup settings via System Status: ' . implode(', ', $msgs));
+  if (_system_status_ajax_request()) {
+    _system_status_json_response(array(
+      'ok' => true,
+      'message' => 'Backup settings saved (' . implode(', ', $msgs) . ').',
+      'csrf_token' => (string)$smarty->getTemplateVars('CTOKEN'),
+      'backup' => array(
+        'enabled' => $new_val === '1' ? 1 : 0,
+      ),
+    ));
+  }
   $_SESSION['POPUP'][] = array(
     'CONTENT' => 'Backup settings saved (' . implode(', ', $msgs) . ').',
     'TYPE'    => 'success',
@@ -185,17 +241,37 @@ if (!$system_status_collector_mode && @$_POST['do'] === 'update_backup_settings'
   exit;
 }
 
+if (!$system_status_collector_mode && @$_POST['do'] === 'run_backup_now') {
+  list($ok, $msg) = _system_run_manual_backup();
+  _system_status_cache_delete($system_status_cache_key);
+  $log->log($ok ? "warn" : "error", @$_SESSION['USERDATA']['username']
+            . ' requested manual backup via System Status: ' . $msg);
+  if (_system_status_ajax_request()) {
+    _system_status_json_response(array(
+      'ok' => $ok,
+      'message' => $msg,
+      'csrf_token' => (string)$smarty->getTemplateVars('CTOKEN'),
+    ));
+  }
+  $_SESSION['POPUP'][] = array(
+    'CONTENT' => $msg,
+    'TYPE'    => $ok ? 'success' : 'danger',
+  );
+  header('Location: ?page=admin&action=system');
+  exit;
+}
+
 if (!$system_status_collector_mode && @$_POST['do'] === 'update_db_prune_settings') {
   $choices = array(0, 1, 3, 7, 14, 30, 60, 90, 180, 365);
-  $raw_share_choices = array(250000, 500000, 1000000, 2000000, 5000000);
+  $raw_share_choices = array(250000, 500000, 1000000, 2000000, 5000000, 10000000, 20000000, 40000000);
   $days = isset($_POST['db_prune_after_days']) && is_numeric($_POST['db_prune_after_days'])
     ? (int)$_POST['db_prune_after_days']
     : 0;
   $keep_recent_shares = isset($_POST['db_prune_keep_recent_shares']) && is_numeric($_POST['db_prune_keep_recent_shares'])
     ? (int)$_POST['db_prune_keep_recent_shares']
-    : 250000;
+    : 1000000;
   if (!in_array($days, $choices, true)) $days = 0;
-  if (!in_array($keep_recent_shares, $raw_share_choices, true)) $keep_recent_shares = 250000;
+  if (!in_array($keep_recent_shares, $raw_share_choices, true)) $keep_recent_shares = 1000000;
 
   $setting->setValue('db_prune_enabled', $days > 0 ? '1' : '0');
   if ($days > 0) $setting->setValue('db_prune_after_days', (string)$days);
@@ -208,6 +284,18 @@ if (!$system_status_collector_mode && @$_POST['do'] === 'update_db_prune_setting
     : 'Database archive pruning disabled';
   $log->log("warn", @$_SESSION['USERDATA']['username']
             . ' updated database prune settings via System Status: ' . $msg);
+  if (_system_status_ajax_request()) {
+    _system_status_json_response(array(
+      'ok' => true,
+      'message' => $msg,
+      'csrf_token' => (string)$smarty->getTemplateVars('CTOKEN'),
+      'database' => array(
+        'prune_enabled' => $days > 0 ? 1 : 0,
+        'prune_after_days' => $days,
+        'keep_recent_shares' => $keep_recent_shares,
+      ),
+    ));
+  }
   $_SESSION['POPUP'][] = array('CONTENT' => $msg . '.', 'TYPE' => 'success');
   header('Location: ?page=admin&action=system');
   exit;
@@ -719,13 +807,16 @@ function _system_db_prune_choices() {
 
 function _system_db_keep_recent_share_choices() {
   return array(
-    // 250k is the lowest production-safe raw archive cap: enough for
-    // the active PPLNS window plus fill-up room for unaccounted blocks.
-    array('value' => 250000,  'label' => '250k shares'),
-    array('value' => 500000,  'label' => '500k shares'),
-    array('value' => 1000000, 'label' => '1M shares'),
-    array('value' => 2000000, 'label' => '2M shares'),
-    array('value' => 5000000, 'label' => '5M shares'),
+    // 250k is the absolute accounting floor; 1M is the recommended
+    // production default for low and mixed-difficulty pools.
+    array('value' => 250000,   'label' => '250k shares'),
+    array('value' => 500000,   'label' => '500k shares'),
+    array('value' => 1000000,  'label' => '1M shares'),
+    array('value' => 2000000,  'label' => '2M shares'),
+    array('value' => 5000000,  'label' => '5M shares'),
+    array('value' => 10000000, 'label' => '10M shares'),
+    array('value' => 20000000, 'label' => '20M shares'),
+    array('value' => 40000000, 'label' => '40M shares'),
   );
 }
 
@@ -734,6 +825,35 @@ function _system_setting_int_value($name, $default, $min, $max) {
   $raw = $setting->getValue($name);
   if ($raw === null || $raw === '' || !is_numeric($raw)) return (int)$default;
   return max((int)$min, min((int)$max, (int)$raw));
+}
+
+function _system_status_empty_database_payload() {
+  global $setting;
+
+  $enabled_raw = isset($setting) ? trim((string)$setting->getValue('db_prune_enabled')) : '1';
+  $prune_enabled = $enabled_raw !== '0';
+  $prune_after_days = _system_setting_int_value('db_prune_after_days', 180, 1, 3650);
+  if (!$prune_enabled) $prune_after_days = 0;
+  $keep_recent_shares = _system_setting_int_value('db_prune_keep_recent_shares', 1000000, 250000, 40000000);
+  $prune_last_run = _system_setting_int_value('db_prune_last_run', 0, 0, PHP_INT_MAX);
+  $prune_last_deleted = _system_setting_int_value('db_prune_last_deleted', 0, 0, PHP_INT_MAX);
+  $prune_last_status = isset($setting) ? (string)$setting->getValue('db_prune_last_status') : '';
+
+  return array(
+    'tables' => array(), 'total_size' => '—', 'total_rows' => '—',
+    'archive_oldest' => '—', 'archive_newest' => '—',
+    'prune_enabled' => $prune_after_days > 0 ? 1 : 0,
+    'prune_after_days' => $prune_after_days,
+    'prune_choices' => _system_db_prune_choices(),
+    'keep_recent_shares' => $keep_recent_shares,
+    'keep_recent_share_choices' => _system_db_keep_recent_share_choices(),
+    'prune_last_run' => $prune_last_run,
+    'prune_last_run_age' => $prune_last_run > 0
+      ? _system_age_compact(gmdate('Y-m-d H:i:s', $prune_last_run))
+      : 'never',
+    'prune_last_deleted' => $prune_last_deleted,
+    'prune_last_status' => $prune_last_status,
+  );
 }
 
 function _system_db_ident($name) {
@@ -1159,7 +1279,10 @@ function _system_cpu_busy_pct() {
 $system_status_payload = _system_status_cached_payload($system_status_cache_key);
 if (!$system_status_collector_mode) {
   if (!is_array($system_status_payload)) {
-    $system_status_payload = _system_status_empty_payload();
+    $system_status_payload = _system_status_last_good_payload('warming', 'System status warming up');
+    if (!is_array($system_status_payload)) {
+      $system_status_payload = _system_status_empty_payload();
+    }
   }
 } else {
   $lock_file = sys_get_temp_dir() . '/blakestream-mpos-system-status-cache.lock';
@@ -1169,6 +1292,10 @@ if (!$system_status_collector_mode) {
       $system_status_payload['cache']['state'] = 'refreshing';
       $system_status_payload['cache']['message'] = 'System status refresh already running';
       _system_status_respond_payload($system_status_payload);
+    }
+    $last_good_payload = _system_status_last_good_payload('refreshing', 'System status refresh already running');
+    if (is_array($last_good_payload)) {
+      _system_status_respond_payload($last_good_payload);
     }
     _system_status_respond_payload(_system_status_empty_payload('warming', 'System status refresh already running'));
   }
@@ -1200,6 +1327,18 @@ if ($invitations_enabled && isset($invitation)) {
   );
 }
 
+function _system_mariadb_version_label($mysqli) {
+  if (!isset($mysqli) || !is_object($mysqli)) return '—';
+  $server_info = '';
+  if (isset($mysqli->server_info)) $server_info = (string)$mysqli->server_info;
+  if ($server_info === '' && function_exists('mysqli_get_server_info')) {
+    $server_info = (string)@mysqli_get_server_info($mysqli);
+  }
+  if ($server_info === '') return '—';
+  if (preg_match('/\d+\.\d+(?:\.\d+)?/', $server_info, $m)) return $m[0];
+  return $server_info;
+}
+
 // ---- MPOS version (migrated from admin Dashboard, shown inside the
 //      Services panel header so it lives next to the runtime list) ---
 $mpos_versions = array(
@@ -1209,9 +1348,12 @@ $mpos_versions = array(
   array('label' => 'Config',   'current' => CONFIG_VERSION,
         'installed' => (string)$config['version'],
         'match' => CONFIG_VERSION === (string)$config['version']),
-  array('label' => 'Database', 'current' => DB_VERSION,
+  array('label' => 'Schema',   'current' => DB_VERSION,
         'installed' => (string)$setting->getValue('DB_VERSION'),
         'match' => DB_VERSION === (string)$setting->getValue('DB_VERSION')),
+  array('label' => 'MariaDB',  'current' => _system_mariadb_version_label(isset($mysqli) ? $mysqli : null),
+        'installed' => _system_mariadb_version_label(isset($mysqli) ? $mysqli : null),
+        'match' => true),
 );
 $system_health = _system_health_summary(isset($mysqli) ? $mysqli : null);
 
@@ -1378,7 +1520,7 @@ $db_archive_newest = _system_db_archive_edge(isset($mysqli) ? $mysqli : null, $d
 $db_prune_enabled = trim((string)$setting->getValue('db_prune_enabled')) !== '0';
 $db_prune_after_days = _system_setting_int_value('db_prune_after_days', 180, 1, 3650);
 if (!$db_prune_enabled) $db_prune_after_days = 0;
-$db_prune_keep_recent_shares = _system_setting_int_value('db_prune_keep_recent_shares', 250000, 250000, 5000000);
+$db_prune_keep_recent_shares = _system_setting_int_value('db_prune_keep_recent_shares', 1000000, 250000, 40000000);
 $db_prune_last_run = _system_setting_int_value('db_prune_last_run', 0, 0, PHP_INT_MAX);
 $db_prune_last_deleted = _system_setting_int_value('db_prune_last_deleted', 0, 0, PHP_INT_MAX);
 $db_prune_last_status = (string)$setting->getValue('db_prune_last_status');
@@ -1976,6 +2118,11 @@ _system_status_cache_set(
   array('ts' => time(), 'payload' => $system_status_payload),
   $system_status_cache_stale_ttl + $system_status_cache_fresh_ttl
 );
+_system_status_cache_set(
+  $system_status_cache_last_good_key,
+  array('ts' => time(), 'payload' => $system_status_payload),
+  $system_status_cache_last_good_ttl
+);
   if (isset($lock_fp) && is_resource($lock_fp)) {
     @flock($lock_fp, LOCK_UN);
     @fclose($lock_fp);
@@ -2033,6 +2180,7 @@ $outbox_counts        = $system_status_payload['outbox_counts'];
 
 // ---- _partial=1: JSON for the live-poll endpoint -------------------
 if (!empty($_GET['_partial'])) {
+  $system_status_payload['csrf_token'] = (string)$smarty->getTemplateVars('CTOKEN');
   _system_status_respond_payload($system_status_payload);
 }
 
