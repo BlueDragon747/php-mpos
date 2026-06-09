@@ -158,6 +158,10 @@ export MPOS_DB_NAME="${MPOS_DB_NAME:-mpos}"
 export MPOS_DB_USER="${MPOS_DB_USER:-mpos}"
 export MPOS_DB_HOST="${MPOS_DB_HOST:-127.0.0.1}"
 export MPOS_DB_PORT="${MPOS_DB_PORT:-3306}"
+export MPOS_MARIADB_BUFFER_POOL_MB="${MPOS_MARIADB_BUFFER_POOL_MB:-}"
+export MPOS_MARIADB_BUFFER_POOL_MIN_MB="${MPOS_MARIADB_BUFFER_POOL_MIN_MB:-512}"
+export MPOS_MARIADB_BUFFER_POOL_MAX_MB="${MPOS_MARIADB_BUFFER_POOL_MAX_MB:-4096}"
+export MPOS_MARIADB_LOG_FILE_MB="${MPOS_MARIADB_LOG_FILE_MB:-}"
 
 export MPOS_ADMIN_USER="${MPOS_ADMIN_USER:-admin}"
 export MPOS_RUN_USER="${MPOS_RUN_USER:-www-data}"
@@ -206,6 +210,14 @@ require_pattern MPOS_DB_PASS "${MPOS_DB_PASS}" '[A-Za-z0-9_\-]{8,128}' \
     "regenerate via 'export MPOS_DB_PASS=\$(head -c 32 /dev/urandom | xxd -p -c 256 | head -c 32)'"
 require_pattern MPOS_DB_HOST "${MPOS_DB_HOST}" '[A-Za-z0-9._\-]{1,253}'
 require_pattern MPOS_DB_PORT "${MPOS_DB_PORT}" '[1-9][0-9]{0,4}'
+if [ -n "$MPOS_MARIADB_BUFFER_POOL_MB" ]; then
+    require_pattern MPOS_MARIADB_BUFFER_POOL_MB "${MPOS_MARIADB_BUFFER_POOL_MB}" '[1-9][0-9]{0,6}'
+fi
+require_pattern MPOS_MARIADB_BUFFER_POOL_MIN_MB "${MPOS_MARIADB_BUFFER_POOL_MIN_MB}" '[1-9][0-9]{0,6}'
+require_pattern MPOS_MARIADB_BUFFER_POOL_MAX_MB "${MPOS_MARIADB_BUFFER_POOL_MAX_MB}" '[1-9][0-9]{0,6}'
+if [ -n "$MPOS_MARIADB_LOG_FILE_MB" ]; then
+    require_pattern MPOS_MARIADB_LOG_FILE_MB "${MPOS_MARIADB_LOG_FILE_MB}" '[1-9][0-9]{0,6}'
+fi
 
 # Salts are sed-substituted into PHP single-quoted strings.
 # Hex-only is the simplest safe alphabet.
@@ -296,6 +308,8 @@ ENVRC="${MPOS_INSTALL_ROOT}/.deploy.env"
                MPOS_DAEMON_SOURCE_REF MPOS_DAEMON_BUILD_ROOT \
                MPOS_LOCAL_DAEMON_REPO_ROOT MPOS_DAEMON_BUILD_JOBS MPOS_DAEMON_HARDENED_RELEASE \
                MPOS_DB_NAME MPOS_DB_USER MPOS_DB_HOST MPOS_DB_PORT MPOS_DB_PASS \
+               MPOS_MARIADB_BUFFER_POOL_MB MPOS_MARIADB_BUFFER_POOL_MIN_MB \
+               MPOS_MARIADB_BUFFER_POOL_MAX_MB MPOS_MARIADB_LOG_FILE_MB \
                MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_PIN \
                MPOS_RUN_USER MPOS_RUN_GROUP \
                MPOS_SALT MPOS_SALTY MPOS_API_TOKEN \

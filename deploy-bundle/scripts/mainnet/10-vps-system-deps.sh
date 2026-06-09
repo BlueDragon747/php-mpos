@@ -65,6 +65,12 @@ fi
 # MariaDB on
 systemctl enable --now mariadb
 say "mariadb: $(systemctl is-active mariadb)"
+say "configuring MariaDB for MPOS"
+MARIADB_TUNE_SCRIPT="$(dirname "$0")/../configure-mariadb-pool.sh"
+if [ ! -f "$MARIADB_TUNE_SCRIPT" ] && [ -f /tmp/configure-mariadb-pool.sh ]; then
+    MARIADB_TUNE_SCRIPT=/tmp/configure-mariadb-pool.sh
+fi
+bash "$MARIADB_TUNE_SCRIPT"
 
 # memcached on
 systemctl enable --now memcached

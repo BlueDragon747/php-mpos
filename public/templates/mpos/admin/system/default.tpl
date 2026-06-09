@@ -20,6 +20,74 @@
   .bsx-system-page .bsx-card > header h3 {
     margin: 0; font-size: 13px; letter-spacing: 0.04em; color: #cdd; font-weight: 700;
   }
+  #system-time-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    margin-right: 16px;
+    color: #cdd;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  #secondary_bar #system-time-toggle {
+    float: right;
+  }
+  #system-time-toggle .time-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+  }
+  #system-time-toggle input[type=checkbox] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    border: 0;
+  }
+  #system-time-toggle .time-toggle-track {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    border-radius: 999px;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    transition: background 180ms, border-color 180ms;
+    display: inline-block;
+  }
+  #system-time-toggle .time-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #cdd;
+    transition: transform 180ms, background 180ms;
+  }
+  #system-time-toggle input:checked + .time-toggle-track {
+    background: rgba(79, 195, 247, 0.55);
+    border-color: rgba(79, 195, 247, 0.65);
+  }
+  #system-time-toggle input:checked + .time-toggle-track::after {
+    transform: translateX(16px);
+    background: #ffffff;
+  }
+  [data-theme="light"] #system-time-toggle { color: #1f2933; }
+  [data-theme="light"] #system-time-toggle .time-toggle-track {
+    background: rgba(0,0,0,.08);
+    border-color: rgba(0,0,0,.20);
+  }
+  [data-theme="light"] #system-time-toggle .time-toggle-track::after { background: #ffffff; }
   .bsx-system-page .bsx-card-body { padding: 8px 14px 12px; }
   .bsx-system-page table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .bsx-system-page th, .bsx-system-page td {
@@ -292,8 +360,25 @@
   /* Backups card */
   .bsx-system-page .backup-card { margin-bottom: 14px; }
   .bsx-system-page .backup-form {
-    display: inline-flex; align-items: center; gap: 10px;
+    display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 10px;
     margin: 0; padding: 0;
+  }
+  .bsx-system-page .backup-action-row {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .bsx-system-page .backup-auto-label {
+    color: #b9c8e6;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .bsx-system-page .backup-run-btn {
+    min-width: 88px;
+    text-align: center;
   }
   .bsx-system-page .db-prune-form {
     display: flex; align-items: center; gap: 26px;
@@ -319,6 +404,16 @@
   }
   .bsx-system-page .db-prune-form select[name="db_prune_keep_recent_shares"] {
     width: 96px;
+  }
+  .bsx-system-page .db-prune-form .inline-select:disabled {
+    opacity: .55;
+    cursor: default;
+  }
+  .bsx-system-page .db-prune-form.is-control-locked .inline-select {
+    opacity: .55;
+    cursor: default;
+    border-color: rgba(255,255,255,.12);
+    color: #9aa;
   }
   .bsx-system-page .db-prune-toolbar {
     padding-bottom: 6px;
@@ -409,7 +504,8 @@
     overflow: hidden; clip: rect(0 0 0 0); border: 0;
   }
   .bsx-system-page .backup-toggle .bsx-toggle {
-    position: relative; width: 36px; height: 20px; border-radius: 999px;
+    position: relative; width: 34px; height: 18px; border-radius: 999px;
+    box-sizing: border-box;
     background: rgba(255, 255, 255, 0.10);
     border: 1px solid rgba(255, 255, 255, 0.14);
     transition: background 180ms, border-color 180ms;
@@ -417,7 +513,7 @@
   }
   .bsx-system-page .backup-toggle .bsx-toggle::after {
     content: ''; position: absolute; top: 2px; left: 2px;
-    width: 14px; height: 14px; border-radius: 50%; background: #cdd;
+    width: 12px; height: 12px; border-radius: 50%; background: #cdd;
     transition: transform 180ms, background 180ms;
   }
   .bsx-system-page .backup-toggle input:checked + .bsx-toggle {
@@ -684,7 +780,8 @@
   /* MPOS version chip rail */
   .bsx-system-page .version-row {
     display: inline-flex; flex-wrap: wrap; gap: 25px;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.2;
   }
   .bsx-system-page .version-tag { display: inline-flex; align-items: center; gap: 4px; }
   .bsx-system-page .version-tag-k {
@@ -698,7 +795,7 @@
   .bsx-system-page .version-tag-expected {
     color: #f5cba7;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 10px;
+    font-size: inherit;
   }
   [data-theme="light"] .bsx-system-page .version-tag-k { color: #4a5568; }
   [data-theme="light"] .bsx-system-page .version-tag-v.is-ok  { color: #2e7d32; }
@@ -879,7 +976,11 @@
   .bsx-system-page .live-indicator {
     display: inline-flex; align-items: center; gap: 6px;
     flex: 0 0 auto;
-    font-size: 10px; color: #99a; font-style: italic; letter-spacing: 0.04em;
+    font-size: 12px; line-height: 1.2; color: #99a; font-style: italic; letter-spacing: 0.04em;
+  }
+  .bsx-system-page .live-indicator.is-warming {
+    color: #cdd;
+    font-weight: 700;
   }
   .bsx-system-page .live-indicator::before {
     content: ''; display: inline-block; width: 6px; height: 6px;
@@ -962,33 +1063,48 @@
   [data-theme="light"] .bsx-system-page .daemon-rule-note { color: #b71c1c; }
 </style>
 
+<div id="system-time-toggle" role="group" aria-label="System Status timestamp display">
+  <label class="time-toggle-label" for="system-time-local-toggle">
+    <input id="system-time-local-toggle" type="checkbox" autocomplete="off">
+    <span class="time-toggle-track" aria-hidden="true"></span>
+    <span id="system-time-mode-label">UTC</span>
+  </label>
+</div>
+
 {* ===== Backups (full-width top section, with inline settings) ===== *}
 <article class="bsx-card backup-card">
   <header>
     <h3>Backups</h3>
-    <form id="backup-settings-form" method="POST" action="?page=admin&action=system" class="backup-form">
+    <form id="backup-settings-form" method="POST" action="?page=admin&action=system" class="backup-form"
+          data-status-ready="{if $SYS_STATUS_CACHE.state|default:"" == "fresh"}1{else}0{/if}"
+          onsubmit="submitBackupSettingsForm(this); return false;">
       <input type="hidden" name="page"   value="admin">
       <input type="hidden" name="action" value="system">
       <input type="hidden" name="do"     value="update_backup_settings">
       <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
       <button type="submit" id="backup-save-btn" class="bsx-btn-sm backup-save-btn" hidden>Save</button>
+      <span class="backup-auto-label">Auto Backup</span>
       <label class="backup-toggle">
-        <input type="checkbox" name="backups_enabled" value="1"
+        <input id="backup-enabled-input" type="checkbox" name="backups_enabled" value="1"
                {if $SYS_BACKUP.enabled}checked{/if}
-               onchange="this.form.submit()">
+               onchange="submitBackupSettingsForm(this.form)">
         <span class="bsx-toggle" aria-hidden="true"></span>
-        <span class="backup-toggle-text">{if $SYS_BACKUP.enabled}Enabled{else}Disabled{/if}</span>
+        <span id="backup-toggle-text" class="backup-toggle-text">{if $SYS_BACKUP.enabled}Enabled{else}Disabled{/if}</span>
       </label>
+      <button type="button" id="backup-run-btn" class="bsx-btn-sm backup-run-btn"
+              onclick="runManualBackup(this.form)">Backup Now</button>
       <noscript><button type="submit" class="bsx-btn-sm">Save</button></noscript>
     </form>
   </header>
   <div class="bsx-card-body backup-body">
     <dl class="backup-meta">
       <dt>Last run:</dt>
-      <dd>{if $SYS_BACKUP.last_mtime}{$SYS_BACKUP.last_mtime|date_format:"%Y-%m-%d %H:%M UTC"}{else}<em>never</em>{/if}</dd>
+      <dd id="sys-backup-last-run"
+          data-utc-epoch="{if $SYS_BACKUP.last_mtime}{$SYS_BACKUP.last_mtime|escape}{/if}"
+          data-time-format="minute">{if $SYS_BACKUP.last_mtime}{$SYS_BACKUP.last_mtime|date_format:"%Y-%m-%d %H:%M UTC"}{else}<em>never</em>{/if}</dd>
 
       <dt>Size:</dt>
-      <dd>{if $SYS_BACKUP.last_size}{($SYS_BACKUP.last_size / 1024 / 1024)|string_format:"%.1f"} MB{else}—{/if}</dd>
+      <dd id="sys-backup-size">{if $SYS_BACKUP.last_size}{($SYS_BACKUP.last_size / 1024 / 1024)|string_format:"%.1f"} MB{else}—{/if}</dd>
     </dl>
 
     <details class="backup-extra">
@@ -1001,7 +1117,10 @@
                  value="{$SYS_BACKUP.schedule_time|escape}"
                  step="1800"
                  data-tooltip="Click to change daily backup time">
-          UTC <span class="muted">({$SYS_BACKUP.next_day_label|escape})</span>
+          <span id="sys-backup-next-time"
+                data-utc-text="{$SYS_BACKUP.next_run|escape}"
+                data-time-format="minute"
+                data-utc-original="UTC{if $SYS_BACKUP.next_day_label} ({$SYS_BACKUP.next_day_label|escape}){/if}">UTC <span class="muted">({$SYS_BACKUP.next_day_label|escape})</span></span>
         </dd>
 
         <dt>Retention:</dt>
@@ -1172,7 +1291,7 @@
       {/section}
     </div>
     <div class="services-right">
-      <span class="live-indicator{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} is-stale{/if}" id="sys-live">
+      <span class="live-indicator{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} is-stale{/if}{if $SYS_STATUS_CACHE.state|default:"" == "warming"} is-warming{/if}" id="sys-live">
         {if $SYS_STATUS_CACHE.state|default:"" == "warming"}
           warming up
         {elseif $SYS_STATUS_CACHE.state|default:"" == "stale"}
@@ -1208,7 +1327,8 @@
             <td class="num">{if $SYS_SERVICES[s].cpu_pct !== ""}{$SYS_SERVICES[s].cpu_pct|escape}{else}—{/if}</td>
             <td class="num">{if $SYS_SERVICES[s].rss_mb !== ""}{$SYS_SERVICES[s].rss_mb|escape}{else}—{/if}</td>
             <td>{if $SYS_SERVICES[s].duration}{$SYS_SERVICES[s].duration|escape}{else}—{/if}</td>
-            <td>{if $SYS_SERVICES[s].since}{$SYS_SERVICES[s].since|escape}{else}—{/if}</td>
+            <td data-utc-epoch="{if $SYS_SERVICES[s].since_ts}{$SYS_SERVICES[s].since_ts|escape}{/if}"
+                data-time-format="service">{if $SYS_SERVICES[s].since}{$SYS_SERVICES[s].since|escape}{else}—{/if}</td>
           </tr>
         {/section}
         </tbody>
@@ -1381,14 +1501,15 @@
       </span>
     </header>
     <div class="bsx-card-body">
-      <form id="db-prune-form" method="POST" action="?page=admin&action=system" class="db-prune-form db-prune-toolbar">
+      <form id="db-prune-form" method="POST" action="?page=admin&action=system" class="db-prune-form db-prune-toolbar"
+            data-status-ready="{if $SYS_STATUS_CACHE.state|default:"" == "fresh"}1{else}0{/if}">
         <input type="hidden" name="page"   value="admin">
         <input type="hidden" name="action" value="system">
         <input type="hidden" name="do"     value="update_db_prune_settings">
         <input type="hidden" name="ctoken" value="{$CTOKEN|escape|default:""}">
         <span class="db-prune-control">
           <span class="card-stat-k">Prune</span>
-          <select class="inline-select" name="db_prune_after_days" onchange="this.form.submit()">
+          <select class="inline-select" name="db_prune_after_days" onchange="submitDbPruneForm(this.form)"{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} disabled{/if}>
             {section name=c loop=$SYS_DATABASE.prune_choices}
               <option value="{$SYS_DATABASE.prune_choices[c].value|escape}"
                 {if $SYS_DATABASE.prune_choices[c].value == $SYS_DATABASE.prune_after_days}selected{/if}>
@@ -1399,7 +1520,7 @@
         </span>
         <span class="db-prune-control">
           <span class="card-stat-k">Archive cap</span>
-          <select class="inline-select" name="db_prune_keep_recent_shares" onchange="this.form.submit()">
+          <select class="inline-select" name="db_prune_keep_recent_shares" onchange="submitDbPruneForm(this.form)"{if $SYS_STATUS_CACHE.state|default:"" != "fresh"} disabled{/if}>
             {section name=s loop=$SYS_DATABASE.keep_recent_share_choices}
               <option value="{$SYS_DATABASE.keep_recent_share_choices[s].value|escape}"
                 {if $SYS_DATABASE.keep_recent_share_choices[s].value == $SYS_DATABASE.keep_recent_shares}selected{/if}>
@@ -1563,6 +1684,10 @@
   var indicator = document.getElementById('sys-live');
   if (!indicator) return;
   indicator.textContent = 'live · 60s';
+  var warmingRetryTimer = null;
+  var activeRefreshUntil = 0;
+  var tickInFlight = false;
+  var localTimeMode = false;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1693,7 +1818,7 @@
         rss_mb: td[4] ? td[4].textContent : '',
         duration: td[5] ? td[5].textContent : '',
         since: td[6] ? td[6].textContent : '',
-        since_ts: ''
+        since_ts: td[6] ? (td[6].getAttribute('data-utc-epoch') || '') : ''
       };
     });
   }
@@ -1827,12 +1952,15 @@
   function renderServiceRows(rows) {
     latestServiceRows = (rows || []).slice();
     fill('sys-tbody-services', sortedServiceRows(latestServiceRows).map(function (r) {
+      var sinceTs = serviceSinceValue(r);
+      var sinceText = sinceTs ? formatEpochTime(sinceTs, 'service', localTimeMode) : (r.since || '—');
       return '<tr><td>' + statePill(r.state) + '</td><td>' + esc(r.label) +
              '</td><td class="num">' + esc(r.pid || '—') +
              '</td><td class="num">' + (r.cpu_pct === '' || r.cpu_pct == null ? '—' : esc(r.cpu_pct)) +
              '</td><td class="num">' + (r.rss_mb === '' || r.rss_mb == null ? '—' : esc(r.rss_mb)) +
              '</td><td>' + esc(serviceDuration(r)) +
-             '</td><td>' + (r.since ? esc(r.since) : '—') + '</td></tr>';
+             '</td><td data-utc-epoch="' + (sinceTs ? esc(sinceTs) : '') + '" data-time-format="service" data-utc-original="' + esc(sinceTs ? formatEpochTime(sinceTs, 'service', false) : (r.since || '—')) + '">' +
+             esc(sinceText) + '</td></tr>';
     }).join(''));
     updateServiceSortButtons();
   }
@@ -1945,14 +2073,241 @@
 
   function setText(el, txt) { if (el) el.textContent = txt; }
 
+  function scheduleWarmRetry(delayMs, keepAliveMs) {
+    if (keepAliveMs) activeRefreshUntil = Math.max(activeRefreshUntil, Date.now() + keepAliveMs);
+    if (warmingRetryTimer) clearTimeout(warmingRetryTimer);
+    warmingRetryTimer = setTimeout(function () {
+      warmingRetryTimer = null;
+      tick();
+    }, delayMs || 3000);
+  }
+
+  function setDbPruneControlsReady(cache) {
+    var state = cache && cache.state ? cache.state : 'fresh';
+    var ready = state === 'fresh';
+    var form = document.getElementById('db-prune-form');
+    if (form) {
+      form.setAttribute('data-status-ready', ready ? '1' : '0');
+      form.setAttribute('data-status-state', state);
+      form.classList.toggle('is-control-locked', !ready);
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('#db-prune-form select'), function (select) {
+      select.disabled = !ready;
+      select.setAttribute('aria-disabled', ready ? 'false' : 'true');
+      if (!ready && document.activeElement === select) select.blur();
+    });
+  }
+
+  function setBackupControlsReady(cache) {
+    var state = cache && cache.state ? cache.state : 'fresh';
+    var ready = state === 'fresh';
+    var form = document.getElementById('backup-settings-form');
+    var enabledInput = document.getElementById('backup-enabled-input');
+    var enabledText = document.getElementById('backup-toggle-text');
+    if (form) form.setAttribute('data-status-ready', ready ? '1' : '0');
+    if (enabledInput) enabledInput.disabled = false;
+    var backupBtn = document.getElementById('backup-run-btn');
+    if (backupBtn) backupBtn.disabled = false;
+    if (enabledText && enabledInput) enabledText.textContent = enabledInput.checked ? 'Enabled' : 'Disabled';
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function weekdayShort(day) {
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day] || '';
+  }
+
+  function browserTimeZoneLabel(date) {
+    date = date || new Date();
+    try {
+      var parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(date);
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i].type === 'timeZoneName' && parts[i].value) return parts[i].value;
+      }
+    } catch (e) {}
+    var offset = -date.getTimezoneOffset();
+    var sign = offset >= 0 ? '+' : '-';
+    offset = Math.abs(offset);
+    return 'GMT' + sign + pad2(Math.floor(offset / 60)) + ':' + pad2(offset % 60);
+  }
+
+  function formatEpochTime(epoch, format, useLocal) {
+    epoch = Number(epoch || 0);
+    if (!epoch) return 'never';
+    var d = new Date(epoch * 1000);
+    var yyyy = useLocal ? d.getFullYear() : d.getUTCFullYear();
+    var mm = pad2((useLocal ? d.getMonth() : d.getUTCMonth()) + 1);
+    var dd = pad2(useLocal ? d.getDate() : d.getUTCDate());
+    var hh = pad2(useLocal ? d.getHours() : d.getUTCHours());
+    var mi = pad2(useLocal ? d.getMinutes() : d.getUTCMinutes());
+    var ss = pad2(useLocal ? d.getSeconds() : d.getUTCSeconds());
+    var zone = useLocal ? browserTimeZoneLabel(d) : 'UTC';
+    if (format === 'service') {
+      var day = weekdayShort(useLocal ? d.getDay() : d.getUTCDay());
+      return day + ' ' + yyyy + '-' + mm + '-' + dd + ' ' + hh + ':' + mi + ':' + ss + ' ' + zone;
+    }
+    return yyyy + '-' + mm + '-' + dd + ' ' + hh + ':' + mi + ' ' + zone;
+  }
+
+  function parseUtcTextEpoch(text) {
+    text = String(text || '').trim();
+    var m = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?\s+UTC$/);
+    if (m) {
+      return Math.floor(Date.UTC(
+        parseInt(m[1], 10),
+        parseInt(m[2], 10) - 1,
+        parseInt(m[3], 10),
+        parseInt(m[4], 10),
+        parseInt(m[5], 10),
+        parseInt(m[6] || '0', 10)
+      ) / 1000);
+    }
+    var parsed = Date.parse(text);
+    return isNaN(parsed) ? 0 : Math.floor(parsed / 1000);
+  }
+
+  function applyTimestampElement(el) {
+    if (!el) return;
+    var raw = el.getAttribute('data-utc-epoch') || '';
+    var epoch = parseInt(raw, 10);
+    if (!epoch) epoch = parseUtcTextEpoch(el.getAttribute('data-utc-text') || '');
+    if (!epoch) {
+      var original = el.getAttribute('data-utc-original');
+      if (original) el.textContent = original;
+      return;
+    }
+    if (!el.getAttribute('data-utc-original')) {
+      el.setAttribute('data-utc-original', el.textContent);
+    }
+    if (localTimeMode) {
+      el.textContent = formatEpochTime(epoch, el.getAttribute('data-time-format') || 'minute', true);
+    } else {
+      var utcOriginal = el.getAttribute('data-utc-original');
+      el.textContent = utcOriginal || formatEpochTime(epoch, el.getAttribute('data-time-format') || 'minute', false);
+    }
+  }
+
+  function refreshTimestampDisplays() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-utc-epoch], [data-utc-text]'), applyTimestampElement);
+  }
+
+  function setLocalTimeMode(enabled) {
+    localTimeMode = !!enabled;
+    var toggle = document.getElementById('system-time-local-toggle');
+    var label = document.getElementById('system-time-mode-label');
+    if (toggle) toggle.checked = localTimeMode;
+    if (label) label.textContent = localTimeMode ? browserTimeZoneLabel(new Date()) : 'UTC';
+    refreshTimestampDisplays();
+  }
+
+  function installTimeToggle() {
+    var control = document.getElementById('system-time-toggle');
+    var bar = document.getElementById('secondary_bar');
+    if (control && bar && control.parentNode !== bar) bar.appendChild(control);
+    var toggle = document.getElementById('system-time-local-toggle');
+    if (toggle) {
+      toggle.addEventListener('change', function () {
+        setLocalTimeMode(toggle.checked);
+      });
+    }
+    setLocalTimeMode(false);
+  }
+
+  function formatMb(bytes) {
+    bytes = Number(bytes || 0);
+    if (!bytes) return '—';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function renderBackup(data) {
+    if (!data) return;
+    var enabledInput = document.getElementById('backup-enabled-input');
+    var enabledText = document.getElementById('backup-toggle-text');
+    var lastRun = document.getElementById('sys-backup-last-run');
+    var size = document.getElementById('sys-backup-size');
+    if (typeof data.enabled !== 'undefined' && enabledInput) enabledInput.checked = !!Number(data.enabled);
+    if (enabledText && enabledInput) enabledText.textContent = enabledInput.checked ? 'Enabled' : 'Disabled';
+    if (lastRun && typeof data.last_mtime !== 'undefined') {
+      lastRun.setAttribute('data-utc-epoch', Number(data.last_mtime || 0) ? String(data.last_mtime) : '');
+      lastRun.setAttribute('data-time-format', 'minute');
+      lastRun.setAttribute('data-utc-original', Number(data.last_mtime || 0)
+        ? formatEpochTime(data.last_mtime, 'minute', false)
+        : 'never');
+      applyTimestampElement(lastRun);
+    }
+    var nextRun = document.getElementById('sys-backup-next-time');
+    if (nextRun && typeof data.next_run !== 'undefined') {
+      var nextOriginal = 'UTC' + (data.next_day_label ? ' (' + data.next_day_label + ')' : '');
+      nextRun.setAttribute('data-utc-text', data.next_run || '');
+      nextRun.setAttribute('data-time-format', 'minute');
+      nextRun.setAttribute('data-utc-original', nextOriginal);
+      applyTimestampElement(nextRun);
+    }
+    if (size && typeof data.last_size !== 'undefined') size.textContent = formatMb(data.last_size);
+    setBackupControlsReady({ state: 'fresh' });
+  }
+
+  function refreshCsrfTokens(token) {
+    if (!token) return;
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="ctoken"]'), function (input) {
+      input.value = token;
+    });
+  }
+
+  function isPlaceholderPayload(data) {
+    var state = data && data.cache ? data.cache.state : '';
+    if (state !== 'warming' && state !== 'refreshing') return false;
+    return !(data.services && data.services.length) &&
+           !(data.database && data.database.tables && data.database.tables.length) &&
+           !(data.disk && data.disk.length);
+  }
+
+  function fetchFreshCsrfToken() {
+    return fetch(URL, { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        refreshCsrfTokens(data.csrf_token);
+        return data;
+      });
+  }
+
+  function dbPruneControlsAreReady() {
+    var form = document.getElementById('db-prune-form');
+    return !!form && form.getAttribute('data-status-ready') === '1';
+  }
+
+  ['pointerdown', 'mousedown', 'click', 'focusin', 'keydown'].forEach(function (eventName) {
+    document.addEventListener(eventName, function (ev) {
+      var select = ev.target && ev.target.closest ? ev.target.closest('#db-prune-form select') : null;
+      if (!select || dbPruneControlsAreReady()) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      select.blur();
+    }, true);
+  });
+
   function updateIndicator(cache) {
-    if (!indicator) return;
     cache = cache || {};
-    indicator.classList.remove('is-stale');
+    setDbPruneControlsReady(cache);
+    setBackupControlsReady(cache);
+    if (!indicator) return;
+    indicator.classList.remove('is-stale', 'is-warming');
     var state = cache.state || 'fresh';
     var age = Number(cache.age || 0);
+    if (state === 'fresh') {
+      activeRefreshUntil = 0;
+      if (warmingRetryTimer) {
+        clearTimeout(warmingRetryTimer);
+        warmingRetryTimer = null;
+      }
+    }
     if (state === 'warming') {
-      indicator.classList.add('is-stale');
+      indicator.classList.add('is-stale', 'is-warming');
       indicator.textContent = cache.message || 'warming up';
       return;
     }
@@ -1974,6 +2329,18 @@
   }
 
   function render(data) {
+    if (!data) return;
+    refreshCsrfTokens(data.csrf_token);
+    if (isPlaceholderPayload(data)) {
+      updateIndicator(data.cache);
+      scheduleWarmRetry(3000);
+      return;
+    }
+    if (data.cache && data.cache.state && data.cache.state !== 'fresh') {
+      scheduleWarmRetry(3000);
+    } else if (Date.now() < activeRefreshUntil) {
+      scheduleWarmRetry(3000);
+    }
     // Users / Invitations / Logins live in single-row tables — just
     // poke the <td> cells in place. Robust against the Invitations
     // panel being absent (when disabled in settings).
@@ -2019,6 +2386,8 @@
         }).join('');
       }
     }
+
+    renderBackup(data.backup);
 
     renderServiceRows(data.services || []);
     renderHealth(data.health || []);
@@ -2144,6 +2513,128 @@
     updateIndicator(data.cache);
   }
 
+  window.submitDbPruneForm = function (form) {
+    if (!form) return;
+    if (form.getAttribute('data-status-ready') !== '1') return;
+    var fields = new FormData(form);
+    fields.set('_ajax', '1');
+    setDbPruneControlsReady({ state: 'refreshing' });
+    indicator.classList.add('is-pulsing');
+    indicator.textContent = 'saving settings';
+    fetchFreshCsrfToken()
+      .then(function () {
+        var ctoken = form.querySelector('input[name="ctoken"]');
+        if (ctoken) fields.set('ctoken', ctoken.value);
+        return fetch(form.action || '?page=admin&action=system', {
+          method: 'POST',
+          body: fields,
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        refreshCsrfTokens(data.csrf_token);
+        indicator.classList.remove('is-pulsing', 'is-stale');
+        indicator.textContent = 'saved · waiting for status refresh';
+        scheduleWarmRetry(1000, 30000);
+      })
+      .catch(function () {
+        setDbPruneControlsReady({ state: 'stale' });
+        indicator.classList.remove('is-pulsing');
+        indicator.classList.add('is-stale');
+        indicator.textContent = 'save failed · refresh and retry';
+      });
+  };
+
+  window.submitBackupSettingsForm = function (form) {
+    if (!form) return;
+    var fields = new FormData(form);
+    fields.set('do', 'update_backup_settings');
+    fields.set('_ajax', '1');
+    indicator.classList.add('is-pulsing');
+    indicator.textContent = 'saving backup settings';
+    fetchFreshCsrfToken()
+      .then(function () {
+        var ctoken = form.querySelector('input[name="ctoken"]');
+        if (ctoken) fields.set('ctoken', ctoken.value);
+        return fetch(form.action || '?page=admin&action=system', {
+          method: 'POST',
+          body: fields,
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        refreshCsrfTokens(data.csrf_token);
+        if (data.backup) renderBackup(data.backup);
+        var saveBtn = document.getElementById('backup-save-btn');
+        if (saveBtn) saveBtn.hidden = true;
+        indicator.classList.remove('is-pulsing', 'is-stale');
+        indicator.textContent = 'saved · waiting for status refresh';
+        scheduleWarmRetry(1000, 30000);
+      })
+      .catch(function () {
+        indicator.classList.remove('is-pulsing');
+        indicator.classList.add('is-stale');
+        indicator.textContent = 'save failed · refresh and retry';
+      });
+  };
+
+  window.runManualBackup = function (form) {
+    if (!form) return;
+    var fields = new FormData(form);
+    fields.set('do', 'run_backup_now');
+    fields.set('_ajax', '1');
+    indicator.classList.add('is-pulsing');
+    indicator.textContent = 'queuing backup';
+    fetchFreshCsrfToken()
+      .then(function () {
+        var ctoken = form.querySelector('input[name="ctoken"]');
+        if (ctoken) fields.set('ctoken', ctoken.value);
+        return fetch(form.action || '?page=admin&action=system', {
+          method: 'POST',
+          body: fields,
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        refreshCsrfTokens(data.csrf_token);
+        indicator.classList.remove('is-pulsing', 'is-stale');
+        indicator.textContent = data.ok ? 'backup queued' : 'backup failed';
+        scheduleWarmRetry(2000, 60000);
+      })
+      .catch(function () {
+        indicator.classList.remove('is-pulsing');
+        indicator.classList.add('is-stale');
+        indicator.textContent = 'backup failed · refresh and retry';
+      });
+  };
+
   document.querySelectorAll('[data-outbox-filter]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       currentOutboxFilter = btn.getAttribute('data-outbox-filter') || 'pending';
@@ -2201,9 +2692,15 @@
   if (serviceSortDurationButton) {
     serviceSortDurationButton.addEventListener('click', toggleServiceRuntimeSort);
   }
+  installTimeToggle();
   renderServiceRows(latestServiceRows);
 
   function tick() {
+    if (tickInFlight) {
+      scheduleWarmRetry(1500);
+      return;
+    }
+    tickInFlight = true;
     indicator.classList.add('is-pulsing');
     fetch(URL, { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) {
@@ -2211,13 +2708,18 @@
         return r.json();
       })
       .then(function (data) {
+        tickInFlight = false;
         indicator.classList.remove('is-pulsing');
         render(data);
       })
       .catch(function () {
+        tickInFlight = false;
+        setDbPruneControlsReady({ state: 'stale' });
+        setBackupControlsReady({ state: 'stale' });
         indicator.classList.remove('is-pulsing');
         indicator.classList.add('is-stale');
         indicator.textContent = 'stale · retrying';
+        scheduleWarmRetry(5000);
       });
   }
 

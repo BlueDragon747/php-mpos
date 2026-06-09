@@ -89,6 +89,14 @@ say "installing backup helper + daily timer"
 install -d "${MPOS_INSTALL_ROOT}/bin"
 install -m 755 "${MPOS_DEPLOY_BUNDLE}/scripts/backup.sh" \
     "${MPOS_INSTALL_ROOT}/bin/backup.sh"
+install -m 755 -o root -g root \
+    "${MPOS_DEPLOY_BUNDLE}/scripts/backup-now-helper.sh" \
+    /usr/local/sbin/blakestream-mpos-backup-now
+install -d -o root -g root -m 0750 /etc/sudoers.d
+install -m 440 -o root -g root \
+    "${MPOS_DEPLOY_BUNDLE}/sudoers/blakestream-mpos-backup" \
+    /etc/sudoers.d/blakestream-mpos-backup
+visudo -cf /etc/sudoers.d/blakestream-mpos-backup >/dev/null
 install -d /var/backups/blakestream-mpos
 install -m 644 "${MPOS_DEPLOY_BUNDLE}/systemd/blakestream-mpos-backup.service" \
     /etc/systemd/system/blakestream-mpos-backup.service

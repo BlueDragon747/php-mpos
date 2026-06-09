@@ -35,6 +35,11 @@ export interface CoinSlotState {
   // "Pending payout" label that flips the body to show details.
   pendingPayout: {
     active: boolean;
+    // Debit_MP/Debit_AP row id shown in Transaction History. This is the
+    // user-facing payout id after the transaction row exists.
+    historyId: number | null;
+    // Paired TXFee row id shown in Transaction History, when present.
+    feeHistoryId: number | null;
     // ISO-ish timestamp string of the user's most-recent pending
     // request, or null when none active. Server hands us whatever
     // format MariaDB emits for TIMESTAMP — typically
@@ -44,6 +49,10 @@ export interface CoinSlotState {
     // corresponding Debit_MP. Null until then; the body shows
     // "Queued, awaiting broadcast" in that gap.
     txid: string | null;
+    // Wallet-reported confirmations for the payout txid. The explorer
+    // link stays disabled until this reaches two confirmations.
+    txConfirmations: number;
+    txExplorerUrl: string;
     // Net amount being paid out (transactions_outbox.amount). Null
     // until the outbox row exists (i.e., during the pre-broadcast
     // queued window or for the legacy unarchived-Debit_MP fallback

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from cronjobs_py.db import Db
 from cronjobs_py.jobs.archive_cleanup import ArchiveCleanup
+from cronjobs_py.settings import DbConfig
 
 
 class FakeDb:
@@ -65,6 +67,14 @@ def test_archive_cleanup_respects_disable_switch():
     assert db.writes == {}
 
 
+def test_get_setting_int_allows_zero_when_floor_allows():
+    db = Db(DbConfig("127.0.0.1", 3306, "mpos", "", "mpos"))
+    db.fetchone = lambda *_args, **_kwargs: {"value": "0"}  # type: ignore[method-assign]
+
+    assert db.get_setting_int("db_prune_enabled", default=1, floor=0) == 0
+    assert db.get_setting_int("db_prune_after_days", default=180, floor=1) == 1
+
+
 def test_archive_cleanup_deletes_in_bounded_batches_and_records_status():
     db = FakeDb(
         settings={
@@ -110,7 +120,28 @@ def test_archive_cleanup_stops_when_batch_is_not_full():
     assert db.writes["db_prune_last_deleted"] == "5042"
     assert db.writes["db_prune_last_status"] == (
         "mm3: deleted 5042 through share_id 2000000; "
-        "target latest 250000 raw shares / 180d"
+        "target latest 1000000 raw shares / 180d"
+    )
+
+
+def test_archive_cleanup_defaults_to_one_million_raw_shares():
+    db = FakeDb(
+        settings={
+            "db_prune_after_days": "180",
+            "db_prune_batch_size": "5000",
+            "db_prune_max_batches": "1",
+        },
+        deletes=[5000],
+        max_share_id=1_500_000,
+        age_cutoff_share_id=0,
+    )
+
+    ArchiveCleanup().run(_ctx(db))
+
+    assert len(db.execute_calls) == 1
+    assert db.execute_calls[0][1] == (500000, 5000)
+    assert "target latest 1000000 raw shares / 180d" in (
+        db.writes["db_prune_last_status"]
     )
 
 
@@ -169,3 +200,39 @@ def test_archive_cleanup_skips_when_archive_is_under_raw_share_cap():
 
     assert db.execute_calls == []
     assert db.writes["db_prune_last_deleted"] == "0"
+
+
+def test_archive_cleanup_reports_unaccounted_block_safety_block():
+    db = FakeDb(
+        settings={
+            "db_prune_after_days": "180",
+            "db_prune_keep_recent_shares": "1000",
+        },
+        max_share_id=1_000_000,
+        age_cutoff_share_id=0,
+        min_unaccounted_share_id=100000,
+    )
+
+    ArchiveCleanup().run(_ctx(db))
+
+    assert db.execute_calls == []
+    assert db.writes["db_prune_last_deleted"] == "0"
+    assert db.writes["db_prune_last_status"] == (
+        "parent: blocked by unaccounted block at share_id 100000; "
+        "target latest 250000 raw shares / 180d"
+    )
+
+
+def test_archive_cleanup_defaults_to_twenty_batches_for_catchup():
+    db = FakeDb(
+        settings={
+            "db_prune_after_days": "180",
+            "db_prune_batch_size": "1000",
+        },
+        deletes=[1000] * 20,
+    )
+
+    ArchiveCleanup().run(_ctx(db))
+
+    assert len(db.execute_calls) == 20
+    assert db.writes["db_prune_last_deleted"] == "20000"

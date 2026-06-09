@@ -120,6 +120,12 @@ Tunables (env):
   MPOS_DAEMON_BUILD_DOCKER_MODE
                        pull uses prebuilt native-base build image; build builds
                        the native-base image locally (default: pull).
+  MPOS_MARIADB_BUFFER_POOL_MB
+                       Optional MariaDB InnoDB buffer pool size in MiB.
+                       Default auto-sizes to 25% RAM capped at 4096 MiB.
+  MPOS_MARIADB_LOG_FILE_MB
+                       Optional MariaDB InnoDB redo log file size in MiB.
+                       Default is 256/512/1024 MiB based on buffer pool size.
   SKIP_DAEMON_IMAGE_BUILD
                        With MPOS_PULL_DAEMON_IMAGES=0, skip source builds and
                        use already-loaded local daemon images (default: 0).
@@ -411,6 +417,10 @@ export MPOS_DB_USER="${MPOS_DB_USER:-mpos}"
 export MPOS_DB_PASS="${MPOS_DB_PASS:-$(random_hex 32)}"
 export MPOS_DB_HOST="${MPOS_DB_HOST:-127.0.0.1}"
 export MPOS_DB_PORT="${MPOS_DB_PORT:-3306}"
+export MPOS_MARIADB_BUFFER_POOL_MB="${MPOS_MARIADB_BUFFER_POOL_MB:-}"
+export MPOS_MARIADB_BUFFER_POOL_MIN_MB="${MPOS_MARIADB_BUFFER_POOL_MIN_MB:-512}"
+export MPOS_MARIADB_BUFFER_POOL_MAX_MB="${MPOS_MARIADB_BUFFER_POOL_MAX_MB:-4096}"
+export MPOS_MARIADB_LOG_FILE_MB="${MPOS_MARIADB_LOG_FILE_MB:-}"
 export MPOS_ADMIN_USER="${MPOS_ADMIN_USER:-admin}"
 export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 32)}"
 export MPOS_ADMIN_PIN="${MPOS_ADMIN_PIN:-0000}"
@@ -474,6 +484,14 @@ require_pattern MPOS_DB_USER      "${MPOS_DB_USER}"      '[A-Za-z_][A-Za-z0-9_]{
 require_pattern MPOS_DB_PASS      "${MPOS_DB_PASS}"      '[A-Za-z0-9_+=:,.@%/-]{8,128}'
 require_pattern MPOS_DB_HOST      "${MPOS_DB_HOST}"      '[A-Za-z0-9._-]{1,253}'
 require_pattern MPOS_DB_PORT      "${MPOS_DB_PORT}"      '[1-9][0-9]{0,4}'
+if [ -n "$MPOS_MARIADB_BUFFER_POOL_MB" ]; then
+    require_pattern MPOS_MARIADB_BUFFER_POOL_MB "${MPOS_MARIADB_BUFFER_POOL_MB}" '[1-9][0-9]{0,6}'
+fi
+require_pattern MPOS_MARIADB_BUFFER_POOL_MIN_MB "${MPOS_MARIADB_BUFFER_POOL_MIN_MB}" '[1-9][0-9]{0,6}'
+require_pattern MPOS_MARIADB_BUFFER_POOL_MAX_MB "${MPOS_MARIADB_BUFFER_POOL_MAX_MB}" '[1-9][0-9]{0,6}'
+if [ -n "$MPOS_MARIADB_LOG_FILE_MB" ]; then
+    require_pattern MPOS_MARIADB_LOG_FILE_MB "${MPOS_MARIADB_LOG_FILE_MB}" '[1-9][0-9]{0,6}'
+fi
 require_pattern MPOS_ADMIN_USER   "${MPOS_ADMIN_USER}"   '[A-Za-z0-9_]{1,32}'
 require_pattern MPOS_ADMIN_PASS   "${MPOS_ADMIN_PASS}"   '[A-Za-z0-9_+=:,.@%/-]{8,128}'
 require_pattern MPOS_ADMIN_PIN    "${MPOS_ADMIN_PIN}"    '[0-9]{4}'
@@ -530,6 +548,8 @@ ENVRC=$(mktemp)
                MPOS_DOMAIN MPOS_HTTP_PORT MPOS_STRATUM_PORT MPOS_SSH_PORT \
                MPOS_BASE_DIFFICULTY MPOS_DIFFICULTY_BITS \
                MPOS_DB_NAME MPOS_DB_USER MPOS_DB_PASS MPOS_DB_HOST MPOS_DB_PORT \
+               MPOS_MARIADB_BUFFER_POOL_MB MPOS_MARIADB_BUFFER_POOL_MIN_MB \
+               MPOS_MARIADB_BUFFER_POOL_MAX_MB MPOS_MARIADB_LOG_FILE_MB \
                MPOS_ADMIN_USER MPOS_ADMIN_PASS MPOS_ADMIN_PIN MPOS_ADMIN_EMAIL \
                MPOS_SALT MPOS_SALTY MPOS_API_TOKEN \
                MPOS_NODE_RPC_USER MPOS_NODE_RPC_PASS \
@@ -614,6 +634,10 @@ deploy_step() {
         say "remote: ${name}${args_display}"
         scp -q "$ENVRC" "${HOST}:/root/.mpos-deploy.env"
         scp -q "$script" "${HOST}:/tmp/${name}"
+        if [ -f "${SCRIPT_DIR}/scripts/configure-mariadb-pool.sh" ]; then
+            scp -q "${SCRIPT_DIR}/scripts/configure-mariadb-pool.sh" \
+                "${HOST}:/tmp/configure-mariadb-pool.sh"
+        fi
         # shellcheck disable=SC2029
         ssh "${HOST}" "set -e; source /root/.mpos-deploy.env; bash /tmp/${name} ${args}"
     fi

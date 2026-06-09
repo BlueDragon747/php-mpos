@@ -56,8 +56,9 @@ INSERT IGNORE INTO settings (name, value)
   VALUES ('pool_worker_difficulty_zero_update_seconds', '600');
 INSERT IGNORE INTO settings (name, value)
   VALUES ('pool_worker_difficulty_zero_batch_size', '500');
--- Default to 180 days so long-running pools keep useful audit history while
--- still bounding archive growth through hourly batched pruning.
+-- Default to 180 days / 1M raw shares so low and mixed-difficulty pools keep
+-- useful audit history while still bounding archive growth through hourly
+-- batched pruning.
 INSERT IGNORE INTO settings (name, value)
   VALUES ('db_prune_enabled', '1');
 INSERT IGNORE INTO settings (name, value)
@@ -65,7 +66,7 @@ INSERT IGNORE INTO settings (name, value)
 INSERT IGNORE INTO settings (name, value)
   VALUES ('db_prune_keep_recent_blocks', '100');
 INSERT IGNORE INTO settings (name, value)
-  VALUES ('db_prune_keep_recent_shares', '250000');
+  VALUES ('db_prune_keep_recent_shares', '1000000');
 UPDATE settings
    SET value = '250000'
  WHERE name = 'db_prune_keep_recent_shares'
@@ -73,7 +74,11 @@ UPDATE settings
 INSERT IGNORE INTO settings (name, value)
   VALUES ('db_prune_batch_size', '50000');
 INSERT IGNORE INTO settings (name, value)
-  VALUES ('db_prune_max_batches', '4');
+  VALUES ('db_prune_max_batches', '20');
+UPDATE settings
+   SET value = '20'
+ WHERE name = 'db_prune_max_batches'
+   AND CAST(value AS UNSIGNED) = 4;
 
 -- Share stats and block-attribution reads.
 CREATE INDEX IF NOT EXISTS result_time_user_diff

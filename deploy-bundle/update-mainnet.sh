@@ -30,6 +30,11 @@ Options:
                MPOS_IMAGE_TAG is set. Defaults to two concurrent daemon builds
                unless BUILD_CONCURRENCY is set.
 
+MariaDB tuning env:
+  MPOS_MARIADB_BUFFER_POOL_MB      Explicit InnoDB buffer pool size in MiB.
+  MPOS_MARIADB_BUFFER_POOL_MAX_MB  Auto-size cap in MiB (default: 4096).
+  MPOS_MARIADB_LOG_FILE_MB         Explicit InnoDB redo log file size in MiB.
+
 The updater reads /root/.mpos-deploy.env when present, then applies any
 environment overrides supplied on this command.
 EOF
@@ -77,6 +82,10 @@ export SKIP_DAEMON_IMAGE_BUILD="${SKIP_DAEMON_IMAGE_BUILD:-0}"
 export MPOS_BUILD_AFTER_STOP="${MPOS_BUILD_AFTER_STOP:-0}"
 export SKIP_BOOTSTRAP=1
 export MPOS_DAEMON_STOP_TIMEOUT_S="${MPOS_DAEMON_STOP_TIMEOUT_S:-900}"
+export MPOS_MARIADB_BUFFER_POOL_MB="${MPOS_MARIADB_BUFFER_POOL_MB:-}"
+export MPOS_MARIADB_BUFFER_POOL_MIN_MB="${MPOS_MARIADB_BUFFER_POOL_MIN_MB:-512}"
+export MPOS_MARIADB_BUFFER_POOL_MAX_MB="${MPOS_MARIADB_BUFFER_POOL_MAX_MB:-4096}"
+export MPOS_MARIADB_LOG_FILE_MB="${MPOS_MARIADB_LOG_FILE_MB:-}"
 export ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
 export ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
 
@@ -473,6 +482,8 @@ update_eloipool() {
 update_mpos() {
     say "starting MPOS web and service update"
     sync_mpos_repo
+    say "applying MariaDB pool tuning"
+    bash "${SCRIPT_DIR}/scripts/configure-mariadb-pool.sh"
     say "updating MPOS web files and database migrations"
     bash "${MAINNET_SCRIPTS}/50-install-mpos.sh"
     say "updating PHP cron service"
