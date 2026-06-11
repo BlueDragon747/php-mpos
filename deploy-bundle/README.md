@@ -124,6 +124,20 @@ MPOS_SWAP_ACTION=auto MPOS_SWAP_SIZE_MB=12288 sudo -E bash deploy-bundle/deploy-
 MPOS_SWAP_ACTION=skip sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 
+## Firewall and SSL
+
+The firewall step opens SSH, the MPOS web port, HTTPS `443/tcp` by default,
+Stratum, and the mainnet daemon P2P ports. Pool JSON-RPC, merged-mine proxy
+JSON-RPC, and wallet daemon RPC ports are explicitly allowed only from
+`127.0.0.1`.
+
+HTTPS is operator-managed. The deploy does not request certificates or write a
+TLS server block. If a certificate tool or operator has added `listen 443` /
+`ssl_certificate` directives to the MPOS nginx vhost, later MPOS updates
+preserve that vhost by default. Set `MPOS_HTTPS_PORT=0` to skip the HTTPS
+firewall rule, or `MPOS_PRESERVE_NGINX_SSL=0` only when intentionally
+replacing the nginx vhost.
+
 ## Log rotation
 
 `deploy-mainnet.sh` and `deploy-testnet.sh` install
@@ -325,6 +339,55 @@ The `--build` flag switches to the local source-build path and tags images as
 explicitly. `--build` defaults to two concurrent daemon builds to reduce CPU
 pressure on live pool hosts; set `BUILD_CONCURRENCY=1` for a serial build or a
 higher value when the host has enough headroom.
+
+### Daemon chain rollback safety
+
+MPOS backups cover the database, pool config, logs, and wallet backups. They do
+not copy the full daemon chain data folders because those can be very large.
+Use one of these chain rollback methods depending on what failed:
+
+| Need | Use | Notes |
+|---|---|---|
+| Restore daemon data folders after a bad update or damaged chainstate | Provider, ZFS, Btrfs, or LVM snapshot | Best option. Take the snapshot after daemon containers stop cleanly. |
+| Self-hosted host without snapshots | Stopped-daemon `rsync`/tar copy of `/root/.<coin>` folders | Works, but can be slow and needs enough free disk. |
+| Move a running daemon's active chain tip back to a known height | RPC `invalidateblock` | Does not delete block files. Use only for deliberate chain-tip rollback. |
+
+Do not edit `blk*.dat`, `rev*.dat`, `blocks/index`, `chainstate`, or wallet
+database files by hand. Those files are coordinated node databases. Manual
+edits can corrupt the daemon and force a reindex or resync.
+
+For update-time snapshot hooks, set `MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD`.
+During `update-mainnet.sh --daemons` or `--all`, the updater stops Stratum,
+stops all daemon containers cleanly, runs this command, and stops the update if
+the command fails. The older `MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD` name is also
+accepted for compatibility.
+
+```bash
+# Example: call an operator-provided snapshot script after daemons stop.
+export MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD='/root/bin/snapshot-blakestream-chains.sh'
+sudo -E bash deploy-bundle/update-mainnet.sh --daemons --build
+```
+
+For a controlled chain-tip rollback, run the interactive RPC tool:
+
+```bash
+sudo bash deploy-bundle/scripts/mainnet/rollback-chain-tip.sh
+```
+
+The tool asks which chains to roll back, asks for each target height, confirms
+the plan, stops Stratum/proxy, backs up each selected wallet with the daemon
+`backupwallet` RPC, invalidates block `target height + 1`, and writes an undo
+manifest under `/var/log/blakestream-mpos/chain-rollback-*.log`. The manifest
+contains the `reconsiderblock` commands needed to undo the RPC invalidation.
+
+For full datadir rollback:
+
+1. Stop Stratum and the merged-mine proxy.
+2. Stop daemon containers cleanly and wait for shutdown.
+3. Restore the provider/filesystem snapshot or stopped-daemon datadir copy.
+4. Start daemon containers and wait for RPC/sync.
+5. Start the merged-mine proxy and Stratum.
+6. Confirm AuxPoW readiness and pool share accounting before returning miners.
 
 ### Bootstrap options
 

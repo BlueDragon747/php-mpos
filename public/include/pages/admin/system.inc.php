@@ -17,6 +17,7 @@ if (!$system_status_collector_mode) _require_admin_csrf($csrftoken);
 
 $system_status_cache_key = 'ADMIN_SYSTEM_STATUS_V1';
 $system_status_cache_last_good_key = $system_status_cache_key . '_LAST_GOOD';
+$system_status_utxo_health_cache_key = 'ADMIN_SYSTEM_UTXO_HEALTH_V1';
 $system_status_cache_fresh_ttl = 60;
 $system_status_cache_stale_ttl = 180;
 $system_status_cache_last_good_ttl = 86400;
@@ -1142,11 +1143,168 @@ function _system_cron_health_chip($mysqli) {
   return _system_health_chip('Cron', $value, $state, $tip, $items);
 }
 
+function _system_setting_int($key, $default, $min, $max) {
+  global $setting;
+  $value = null;
+  if (isset($setting) && is_object($setting)) {
+    $raw = $setting->getValue($key);
+    if ($raw !== '' && $raw !== null && is_numeric($raw)) $value = (int)$raw;
+  }
+  if ($value === null) $value = (int)$default;
+  return max((int)$min, min((int)$max, $value));
+}
+
+function _system_wallet_utxo_state($count, $small_count, $sample_limit, $warn_count, $bad_count, $small_warn, $small_bad) {
+  $at_limit = $sample_limit > 0 && $count >= $sample_limit;
+  if ($at_limit || $count >= $bad_count || $small_count >= $small_bad) return 'bad';
+  if ($count >= $warn_count || $small_count >= $small_warn) return 'warn';
+  return 'ok';
+}
+
+function _system_wallet_utxo_state_label($state) {
+  if ($state === 'bad') return 'BAD';
+  if ($state === 'warn') return 'WARN';
+  return 'OK';
+}
+
+function _system_wallet_utxo_rank($state) {
+  if ($state === 'bad') return 2;
+  if ($state === 'warn') return 1;
+  return 0;
+}
+
+function _system_wallet_utxo_health_with_age($chip) {
+  if (!is_array($chip)) return $chip;
+  $checked_at = isset($chip['checked_at']) ? (int)$chip['checked_at'] : 0;
+  if ($checked_at <= 0) return $chip;
+  $age = _system_duration_compact_seconds(max(0, time() - $checked_at)) . ' ago';
+  $items = array();
+  if (!empty($chip['items']) && is_array($chip['items'])) {
+    foreach ($chip['items'] as $item) {
+      if (!is_array($item)) continue;
+      $meta = isset($item['meta']) ? (string)$item['meta'] : '';
+      $item['meta'] = trim($meta . ($meta !== '' ? ' · ' : '') . 'checked ' . $age);
+      $items[] = $item;
+    }
+  }
+  $chip['items'] = $items;
+  $chip['items_json'] = json_encode($items);
+  $chip['tooltip'] = trim((string)@$chip['tooltip'] . ' Checked ' . $age . '.');
+  return $chip;
+}
+
+function _system_wallet_utxo_health_chip() {
+  global $bitcoin, $bitcoin_mm, $bitcoin_mm1, $bitcoin_mm3, $bitcoin_mm4, $bitcoin_mm5;
+  global $setting;
+  global $system_status_utxo_health_cache_key;
+
+  $ttl = _system_setting_int('utxo_health_ttl_seconds', 300, 60, 3600);
+  $cached = _system_status_cached_payload($system_status_utxo_health_cache_key, $ttl);
+  if (is_array($cached)) {
+    return _system_wallet_utxo_health_with_age($cached);
+  }
+
+  $warn_count = _system_setting_int('utxo_warn_threshold', 400, 10, 1000000);
+  $bad_count = _system_setting_int('utxo_bad_threshold', 800, $warn_count + 1, 1000000);
+  $small_warn = _system_setting_int('utxo_small_warn_threshold', 100, 1, 1000000);
+  $small_bad = _system_setting_int('utxo_small_bad_threshold', 200, $small_warn + 1, 1000000);
+  $small_amount_raw = '0.0001';
+  if (isset($setting) && is_object($setting)) {
+    $raw = trim((string)$setting->getValue('utxo_small_amount'));
+    if ($raw !== '' && is_numeric($raw) && (float)$raw > 0) $small_amount_raw = $raw;
+  }
+  $small_amount = (float)$small_amount_raw;
+  $sample_limit = min(5000, max($bad_count + 1, 201));
+
+  $wallets = array(
+    'BLC'  => isset($bitcoin)     ? $bitcoin     : null,
+    'PHO'  => isset($bitcoin_mm)  ? $bitcoin_mm  : null,
+    'BBTC' => isset($bitcoin_mm1) ? $bitcoin_mm1 : null,
+    'ELT'  => isset($bitcoin_mm3) ? $bitcoin_mm3 : null,
+    'UMO'  => isset($bitcoin_mm4) ? $bitcoin_mm4 : null,
+    'LIT'  => isset($bitcoin_mm5) ? $bitcoin_mm5 : null,
+  );
+
+  $worst = 'ok';
+  $items = array();
+  $reachable = 0;
+  foreach ($wallets as $sym => $btc) {
+    $count = 0;
+    $small = 0;
+    $total = 0.0;
+    $state = 'warn';
+    $meta = 'wallet RPC unavailable';
+
+    if ($btc) {
+      try {
+        $utxos = $btc->listunspent(0, 9999999, array(), true, array('maximumCount' => $sample_limit));
+        if (is_array($utxos)) {
+          $reachable++;
+          foreach ($utxos as $row) {
+            if (!is_array($row)) continue;
+            if (array_key_exists('spendable', $row) && !$row['spendable']) continue;
+            if (array_key_exists('safe', $row) && !$row['safe']) continue;
+            $amount = isset($row['amount']) && is_numeric($row['amount']) ? (float)$row['amount'] : 0.0;
+            $count++;
+            $total += $amount;
+            if ($amount <= $small_amount) $small++;
+          }
+          $state = _system_wallet_utxo_state(
+            $count, $small, $sample_limit, $warn_count, $bad_count, $small_warn, $small_bad
+          );
+          $count_label = $count >= $sample_limit
+            ? ('>' . number_format($sample_limit - 1))
+            : number_format($count);
+          $total_label = number_format($total, 8);
+          $meta = 'spendable ' . $count_label
+            . ' · small ' . number_format($small) . ' <= ' . $small_amount_raw
+            . ' · sample total ' . $total_label;
+          if ($count >= $sample_limit) {
+            $meta .= ' · capped sample';
+          }
+        }
+      } catch (Exception $e) {
+        $state = 'warn';
+        $meta = 'wallet RPC error';
+      }
+    }
+
+    if (_system_wallet_utxo_rank($state) > _system_wallet_utxo_rank($worst)) {
+      $worst = $state;
+    }
+    $items[] = array(
+      'label' => $sym,
+      'value' => _system_wallet_utxo_state_label($state),
+      'state' => $state,
+      'meta'  => $meta,
+    );
+  }
+
+  $value = _system_wallet_utxo_state_label($worst);
+  $tooltip = 'Pool-wallet UTXO health; sampled at most ' . number_format($sample_limit)
+    . ' spendable outputs per coin every ' . _system_duration_compact_seconds($ttl) . '.';
+  if ($reachable <= 0) {
+    $worst = 'warn';
+    $value = '—';
+    $tooltip = 'Wallet UTXO health could not reach any wallet RPC.';
+  }
+
+  $chip = _system_health_chip('UTXO', $value, $worst, $tooltip, $items);
+  $chip['checked_at'] = time();
+  _system_status_cache_set(
+    $system_status_utxo_health_cache_key,
+    array('ts' => time(), 'payload' => $chip),
+    $ttl + 60
+  );
+  return _system_wallet_utxo_health_with_age($chip);
+}
+
 function _system_health_summary($mysqli) {
   return array(
     _system_auxpow_health_chip(),
     _system_importer_health_chip(),
     _system_share_rate_health_chip($mysqli),
+    _system_wallet_utxo_health_chip(),
     _system_cron_health_chip($mysqli),
   );
 }

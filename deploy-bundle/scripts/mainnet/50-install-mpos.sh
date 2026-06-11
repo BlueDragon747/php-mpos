@@ -207,8 +207,19 @@ if [ -f "$SECURITY_CONF" ]; then
 fi
 
 # ---- nginx vhost ----
-say "writing nginx vhost"
-cat > /etc/nginx/sites-available/blakestream-mpos <<EOF
+NGINX_VHOST=/etc/nginx/sites-available/blakestream-mpos
+preserve_tls_vhost=0
+if [ "${MPOS_PRESERVE_NGINX_SSL:-1}" = "1" ] \
+   && [ -f "$NGINX_VHOST" ] \
+   && grep -Eq 'listen[[:space:]].*443|ssl_certificate|managed by Certbot' "$NGINX_VHOST"; then
+    preserve_tls_vhost=1
+fi
+
+if [ "$preserve_tls_vhost" = "1" ]; then
+    say "preserving existing TLS-enabled nginx vhost"
+else
+    say "writing nginx vhost"
+    cat > "$NGINX_VHOST" <<EOF
 server {
     listen ${MPOS_HTTP_PORT} default_server;
     listen [::]:${MPOS_HTTP_PORT} default_server;
@@ -242,7 +253,8 @@ server {
     }
 }
 EOF
-ln -sf /etc/nginx/sites-available/blakestream-mpos /etc/nginx/sites-enabled/blakestream-mpos
+fi
+ln -sf "$NGINX_VHOST" /etc/nginx/sites-enabled/blakestream-mpos
 rm -f /etc/nginx/sites-enabled/default
 
 touch "${LOG_ROOT}/nginx-access.log" "${LOG_ROOT}/nginx-error.log"

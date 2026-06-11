@@ -684,7 +684,29 @@
     max-height: 236px;
     overflow-y: auto;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
     overflow-x: hidden;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar,
+  .bsx-system-page .health-detail::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar-track,
+  .bsx-system-page .health-detail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar-thumb,
+  .bsx-system-page .health-detail::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar-thumb:hover,
+  .bsx-system-page .health-detail::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(79, 195, 247, 0.45);
   }
   .bsx-system-page .services-scroll thead th {
     position: sticky;
@@ -882,6 +904,8 @@
     padding: 8px 10px;
     color: #cdd;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   }
   .bsx-system-page .health-detail-title {
     display: flex;
