@@ -6,6 +6,15 @@
 # update behavior stays aligned with full deploy behavior.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [ -r "${SCRIPT_DIR}/scripts/lib/banner.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/scripts/lib/banner.sh"
+    print_blakestream_banner
+fi
+
 usage() {
     cat <<EOF
 Usage:
@@ -30,6 +39,14 @@ Options:
                MPOS_IMAGE_TAG is set. Defaults to two concurrent daemon builds
                unless BUILD_CONCURRENCY is set.
 
+Chain rollback safety env:
+  MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD
+               Optional command run after daemon containers stop cleanly and
+               before daemon images are updated. Use this for provider, ZFS,
+               Btrfs, or LVM snapshots of the daemon data folders. The update
+               stops if this command fails. MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD
+               is also accepted for compatibility.
+
 MariaDB tuning env:
   MPOS_MARIADB_BUFFER_POOL_MB      Explicit InnoDB buffer pool size in MiB.
   MPOS_MARIADB_BUFFER_POOL_MAX_MB  Auto-size cap in MiB (default: 4096).
@@ -51,8 +68,6 @@ fi
 
 [ "$(id -u)" = "0" ] || die "run as root"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAINNET_SCRIPTS="${SCRIPT_DIR}/scripts/mainnet"
 INSTALL_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
 ELOIPOOL_TREE="${ELIOPOOL_TREE:-/root/Blakestream-Eliopool}"
@@ -86,6 +101,8 @@ export MPOS_MARIADB_BUFFER_POOL_MB="${MPOS_MARIADB_BUFFER_POOL_MB:-}"
 export MPOS_MARIADB_BUFFER_POOL_MIN_MB="${MPOS_MARIADB_BUFFER_POOL_MIN_MB:-512}"
 export MPOS_MARIADB_BUFFER_POOL_MAX_MB="${MPOS_MARIADB_BUFFER_POOL_MAX_MB:-4096}"
 export MPOS_MARIADB_LOG_FILE_MB="${MPOS_MARIADB_LOG_FILE_MB:-}"
+export MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD="${MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD:-}"
+export MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD="${MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD:-$MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD}"
 export ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
 export ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
 
@@ -404,6 +421,17 @@ stop_daemon_containers() {
     say "daemon containers stopped cleanly"
 }
 
+run_preupdate_chain_snapshot_hook() {
+    if [ -z "$MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD" ]; then
+        return
+    fi
+
+    say "running pre-update chain snapshot hook"
+    bash -c "$MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD" \
+        || die "pre-update chain snapshot hook failed; daemon update stopped"
+    say "pre-update chain snapshot hook finished"
+}
+
 start_daemon_containers_staged() {
     say "daemon start plan: ELT first, rotate BLC/PHO/BBTC/LIT, then start UMO while ELT is the only heavy daemon left"
     # Start ELT first, then rotate in lighter daemons while ELT is loading. UMO
@@ -441,6 +469,7 @@ confirm_daemon_images() {
 update_daemon_containers() {
     confirm_daemon_images
     stop_daemon_containers
+    run_preupdate_chain_snapshot_hook
     start_daemon_containers_staged
 }
 
@@ -451,6 +480,7 @@ update_daemons() {
     if [ "$MPOS_BUILD_AFTER_STOP" = "1" ]; then
         say "build-after-stop selected; stopping/removing daemon containers before local image build"
         stop_daemon_containers
+        run_preupdate_chain_snapshot_hook
         say "building local daemon images"
         bash "${MAINNET_SCRIPTS}/19-build-daemon-images.sh"
         confirm_daemon_images

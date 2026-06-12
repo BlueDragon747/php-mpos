@@ -66,7 +66,7 @@ if ($setting->getValue('disable_manual_payouts') != 1 && $aManualPayouts = $tran
       }
       
       // RPC succeeded - now create debit record and mark as processed
-      if (!$transaction_id = $transaction_mm->createPayoutDebitRecord($aUserData['id'], $aUserData['coin_address_mm'], $aUserData['confirmed'] - $config['txfee_manual'], 'Debit_AP')) {
+      if (!$transaction_id = $transaction_mm->createPayoutDebitRecord($aUserData['id'], $aUserData['coin_address_mm'], $aUserData['confirmed'] - $config['txfee_manual'], 'Debit_MP')) {
         $log->logFatal('    failed to fully debit user [MM] ' . $aUserData['username'] . ': ' . $transaction_mm->getCronError());
         $monitoring->endCronjob($cron_name, 'E0064', 1, true);
       }

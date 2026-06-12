@@ -59,18 +59,20 @@ from ..settings import slot_int
 log = get(__name__)
 
 
-def _make_wallet_comment(*, slot: str, account_id: int,
-                        outbox_id: int) -> str:
+def _make_wallet_comment(*, slot: str, account_id: int) -> str:
     """Build the idempotency anchor that goes both into the outbox row
     and the wallet's `sendtoaddress` comment param.
 
-    Format: `mpos:{slot}:{account_id}:{outbox_id}:{nonce_hex8}`.
-    Constraints: bitcoind's `comment` field accepts arbitrary text up
-    to a kilobyte or so, but we keep it short to fit our outbox's
-    VARCHAR(64) UNIQUE column. The slot can be empty (parent chain).
+    Format: `mpos:{slot}:{account_id}:{nonce_hex16}`. The nonce alone
+    makes it unique (enforced by the outbox `wallet_comment` UNIQUE
+    column), so the value does NOT embed the outbox id — that lets the
+    row be inserted with its final anchor atomically, with no
+    placeholder-then-update window. bitcoind's `comment` field accepts
+    arbitrary text; we keep it short to fit the VARCHAR(64) column. The
+    slot can be empty (parent chain).
     """
-    nonce = secrets.token_hex(4)  # 8 hex chars
-    return f"mpos:{slot}:{account_id}:{outbox_id}:{nonce}"
+    nonce = secrets.token_hex(8)  # 16 hex chars
+    return f"mpos:{slot}:{account_id}:{nonce}"
 
 
 def _wallet_max_weight_error(exc: Exception) -> bool:
@@ -578,26 +580,23 @@ class Payouts:
             )
             return
 
-        # Step 1. Reserve outbox row before touching the wallet.
-        # We can't pre-compute the wallet_comment because it embeds the
-        # outbox_id, so insert the row with an interim placeholder, get
-        # the id back, then UPDATE the comment to the real value.
-        placeholder = f"pending:{secrets.token_hex(8)}"
+        # Step 1. Reserve the outbox row with its FINAL wallet_comment in
+        # one atomic insert. The comment no longer embeds the outbox id, so
+        # there is no placeholder-then-update window: a crash before the
+        # send leaves a clean 'pending' row with send_attempted=0 (provably
+        # unsent) that reconcile-orphans can abandon safely.
+        wallet_comment = _make_wallet_comment(
+            slot=self.slot, account_id=account_id,
+        )
         outbox_id = db.insert_outbox_pending(
             slot=self.slot,
             account_id=account_id,
             coin_address=address,
             amount=estimated_send_amount,
-            wallet_comment=placeholder,
+            wallet_comment=wallet_comment,
             archive_on_reconcile=archive_on_reconcile,
-        )
-        wallet_comment = _make_wallet_comment(
-            slot=self.slot, account_id=account_id, outbox_id=outbox_id,
-        )
-        db.execute(
-            "UPDATE transactions_outbox SET wallet_comment = %s "
-            "WHERE id = %s",
-            (wallet_comment, outbox_id),
+            tx_kind=kind,
+            manual_payout_id=manual_payout_id,
         )
 
         log.info(
@@ -608,7 +607,9 @@ class Payouts:
             kind, outbox_id, wallet_comment,
         )
 
-        # Step 2. Issue the wallet send. NO retries.
+        # Step 2. Flip send_attempted=1 (the provable-no-send gate), then
+        # issue the wallet send. NO retries.
+        db.mark_outbox_send_attempted(outbox_id)
         try:
             txid = rpc.sendtoaddress(
                 address, amount, comment=wallet_comment,
@@ -650,6 +651,19 @@ class Payouts:
                 f"user balance unchanged."
             )
 
+        # Durability nudge: the coins are now on-chain. Record the txid on
+        # the still-pending row before the bookkeeping runs, so if that
+        # bookkeeping rolls back the orphaned 'pending' row already carries
+        # its txid and reconcile-orphans can heal it directly.
+        try:
+            db.set_outbox_txid_pending(outbox_id, txid)
+        except Exception as exc:
+            log.warning(
+                "[%s/%s] could not record txid on pending outbox %d "
+                "(reconcile-orphans will fall back to comment lookup): %s",
+                self.name, slot_label, outbox_id, exc,
+            )
+
         txfee = round(float(estimated_txfee), 8)
         try:
             tx_info = rpc.call("gettransaction", txid)
@@ -663,16 +677,20 @@ class Payouts:
             )
         send_amount = round(amount - txfee, 8)
         if send_amount <= 0:
-            db.mark_outbox_indeterminate(
-                outbox_id,
-                f"txid {txid} broadcast but wallet fee {txfee:.8f} "
-                f"consumed gross amount {amount:.8f}",
+            # Degenerate edge: the wallet fee met or exceeded the gross
+            # amount. The tx IS broadcast (txid in hand) and the whole
+            # balance has left the wallet, so the outcome is KNOWN — record
+            # the recipient amount as 0 and the entire spend as fee, and let
+            # the normal Step 3 mark the row 'broadcast' (NOT 'indeterminate',
+            # which would falsely claim the send might not have happened). A
+            # warning, not a slot-poisoning Fatal, for this benign case.
+            log.warning(
+                "[%s/%s] txid=%s wallet fee %.8f >= gross %.8f; recording "
+                "recipient 0 and the full %.8f as fee",
+                self.name, slot_label, txid, txfee, amount, amount,
             )
-            raise Fatal(
-                f"E0093: txid {txid} broadcast but wallet fee {txfee:.8f} "
-                f"consumed gross amount {amount:.8f}; outbox {outbox_id} "
-                f"requires operator review."
-            )
+            send_amount = 0.0
+            txfee = round(amount, 8)
 
         log.info(
             "[%s/%s] txid=%s sent %.8f (gross %.8f − wallet fee %.8f) "
@@ -730,18 +748,27 @@ class Payouts:
                         insert_id_max=debit_id,
                         slot=self.slot,
                     )
-                if manual_payout_id is not None:
+                # Close the manual cash-out request only when the FULL
+                # balance was paid. A capped/partial payout (archive_on_
+                # reconcile is False) leaves the request open so the
+                # remaining balance keeps paying down on later ticks.
+                if manual_payout_id is not None and archive_on_reconcile:
                     db.mark_manual_payout_complete(
                         self.slot, manual_payout_id, cur=cur,
                     )
         except Exception as exc:
-            # On-chain broadcast happened but DB write failed. Outbox
-            # stays pending → reconciliation can match wallet_comment.
+            # On-chain broadcast happened but the bookkeeping commit failed.
+            # The row stays 'pending' with its txid (recorded above) and real
+            # wallet_comment. reconcile-orphans heals it automatically by
+            # matching the txid/comment to the wallet and writing the missing
+            # Debit/TXFee. Distinct code from the pre-broadcast abandon (E0092)
+            # because here the coins ARE on-chain.
             raise Fatal(
-                f"E0092: sendtoaddress for {username} (account {account_id}) "
+                f"E0094: sendtoaddress for {username} (account {account_id}) "
                 f"completed with txid {txid} (wallet_comment={wallet_comment}) "
                 f"but the {kind}+TXFee+archive step failed to commit: "
-                f"{exc}. Reconcile via wallet_comment lookup."
+                f"{exc}. reconcile-orphans will heal outbox {outbox_id}; "
+                f"do not delete the row by hand."
             )
 
         log.info(

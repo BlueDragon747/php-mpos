@@ -50,7 +50,7 @@ $config['algorithm'] = 'sha256d';
  **/
 $config['db']['host'] = 'localhost';
 $config['db']['user'] = 'mpos';
-$config['db']['pass'] = 'Dbpass2013';
+$config['db']['pass'] = 'REPLACE_ME';
 $config['db']['port'] = 3306;
 $config['db']['name'] = 'mpos';
 

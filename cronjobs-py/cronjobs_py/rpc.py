@@ -350,3 +350,68 @@ class RpcClient:
         return self.call(
             "walletcreatefundedpsbt", [], outputs, 0, options, True,
         )
+
+    @staticmethod
+    def _send_net_and_fee(txn: dict) -> tuple[float, float]:
+        """Net recipient amount and fee for a wallet `send` record.
+
+        With `subtractfeefromamount=true` the wallet's `send` entry carries
+        `amount` = -(net delivered to the recipient) and `fee` = -(fee), so
+        the magnitudes are what payouts records as the Debit and TXFee.
+        """
+        net = round(abs(float(txn.get("amount", 0.0) or 0.0)), 8)
+        fee = round(abs(float(txn.get("fee", 0.0) or 0.0)), 8)
+        return net, fee
+
+    def get_send_by_txid(self, txid: str) -> dict | None:
+        """Look up a wallet send by txid (used when the orphan row already
+        carries the txid from the durability nudge). Returns None if the
+        wallet doesn't know the txid."""
+        if not txid:
+            return None
+        try:
+            info = self.call("gettransaction", txid)
+        except Fatal:
+            return None
+        if not isinstance(info, dict):
+            return None
+        net, fee = self._send_net_and_fee(info)
+        return {
+            "txid": txid,
+            "net": net,
+            "fee": fee,
+            "confirmations": int(info.get("confirmations", 0) or 0),
+            "comment": info.get("comment"),
+        }
+
+    def find_send_by_comment(self, comment: str, *,
+                             address: str | None = None) -> dict | None:
+        """Find a wallet `send` whose comment equals `comment` (our
+        outbox idempotency anchor). Optionally require the recipient
+        `address` to match as a second factor. Returns None if no send
+        carries that comment — which, for a comment that a returned
+        `sendtoaddress` would have recorded, means no broadcast happened.
+        """
+        if not comment:
+            return None
+        data = self.call("listsinceblock")
+        txns = data.get("transactions", []) if isinstance(data, dict) else []
+        for t in txns:
+            if not isinstance(t, dict):
+                continue
+            if t.get("category") != "send":
+                continue
+            if t.get("comment") != comment:
+                continue
+            if address and t.get("address") and t.get("address") != address:
+                continue
+            net, fee = self._send_net_and_fee(t)
+            return {
+                "txid": t.get("txid"),
+                "net": net,
+                "fee": fee,
+                "confirmations": int(t.get("confirmations", 0) or 0),
+                "address": t.get("address"),
+                "comment": comment,
+            }
+        return None

@@ -37,7 +37,8 @@ function _require_admin_csrf($csrftoken) {
     }
 
     // POST mutation must carry a valid ctoken. The token validity is
-    // computed in public/index.php against the session IP and page name.
+    // computed in public/index.php against the per-session secret and the
+    // page name.
     if (!isset($csrftoken) || !is_object($csrftoken)
         || !isset($csrftoken->valid) || (int)$csrftoken->valid !== 1) {
         header('HTTP/1.1 403 Forbidden', true, 403);

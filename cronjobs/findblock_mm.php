@@ -36,7 +36,7 @@ if ( $bitcoin_mm->can_connect() === true ){
     $aTransactions = $bitcoin_mm->listsinceblock($strLastBlockHash);
   } catch (Exception $e) {
     $log->logError('RPC call failed, will retry on next run: ' . $e->getMessage());
-    $monitoring->endCronjob($cron_name, 'E0010', 0, true);
+    $monitoring->endCronjob($cron_name, 'E0066', 0, true);
   }
 } else {
   $log->logFatal('Unable to connect to RPC server backend [MM]');

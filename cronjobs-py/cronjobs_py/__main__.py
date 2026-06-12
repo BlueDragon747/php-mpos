@@ -14,8 +14,8 @@ import sys
 from . import __version__
 from .jobs import (
     ArchiveCleanup, BlockUpdate, FindBlock, LiquidPayout, Notifications,
-    Payouts, PplnsPayout, ReconcilePayouts, Statistics, TickerUpdate,
-    TokenCleanup,
+    Payouts, PplnsPayout, ReconcileOrphans, ReconcilePayouts, Statistics,
+    TickerUpdate, TokenCleanup,
 )
 from .logger import get, setup
 from .scheduler import Scheduler
@@ -46,6 +46,7 @@ def _build_scheduler() -> Scheduler:
         "pplns_payout": 90,
         "payouts": 300,
         "reconcile_payouts": 300,
+        "reconcile_orphans": 180,
         "blockupdate": 120,
         "liquid_payout": 600,
     }
@@ -77,6 +78,14 @@ def _build_scheduler() -> Scheduler:
         s.register(ReconcilePayouts(
             name=f"reconcile-{slot_label}",
             interval_seconds=base_intervals["reconcile_payouts"] + offset,
+            slot=slot,
+        ))
+        # Heal payout outbox rows orphaned by a post-broadcast bookkeeping
+        # rollback (coins on-chain, no Debit written). Send-free, so it runs
+        # even while the slot poison flag is set and clears it when clean.
+        s.register(ReconcileOrphans(
+            name=f"reconcile-orphans-{slot_label}",
+            interval_seconds=base_intervals["reconcile_orphans"] + offset,
             slot=slot,
         ))
         s.register(BlockUpdate(

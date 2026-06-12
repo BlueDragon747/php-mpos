@@ -124,6 +124,20 @@ MPOS_SWAP_ACTION=auto MPOS_SWAP_SIZE_MB=12288 sudo -E bash deploy-bundle/deploy-
 MPOS_SWAP_ACTION=skip sudo -E bash deploy-bundle/deploy-mainnet.sh
 ```
 
+## Firewall and SSL
+
+The firewall step opens SSH, the MPOS web port, HTTPS `443/tcp` by default,
+Stratum, and the mainnet daemon P2P ports. Pool JSON-RPC, merged-mine proxy
+JSON-RPC, and wallet daemon RPC ports are explicitly allowed only from
+`127.0.0.1`.
+
+HTTPS is operator-managed. The deploy does not request certificates or write a
+TLS server block. If a certificate tool or operator has added `listen 443` /
+`ssl_certificate` directives to the MPOS nginx vhost, later MPOS updates
+preserve that vhost by default. Set `MPOS_HTTPS_PORT=0` to skip the HTTPS
+firewall rule, or `MPOS_PRESERVE_NGINX_SSL=0` only when intentionally
+replacing the nginx vhost.
+
 ## Log rotation
 
 `deploy-mainnet.sh` and `deploy-testnet.sh` install
@@ -153,6 +167,9 @@ cd php-mpos
 
 `sudo -E` preserves the `export`ed env vars across the privilege jump.
 If you are already root, replace `sudo -E bash …` with `bash …`.
+
+Deploy and update entrypoints print a BlakeStream banner when they start. Set
+`BLAKESTREAM_TOOL_BANNER=0` to suppress it in machine-parsed logs.
 
 Each run writes a full deploy transcript in the repo root by default:
 
@@ -325,6 +342,75 @@ The `--build` flag switches to the local source-build path and tags images as
 explicitly. `--build` defaults to two concurrent daemon builds to reduce CPU
 pressure on live pool hosts; set `BUILD_CONCURRENCY=1` for a serial build or a
 higher value when the host has enough headroom.
+
+### Daemon chain rollback safety
+
+MPOS backups cover the database, pool config, logs, and wallet backups. They do
+not copy the full daemon chain data folders because those can be very large.
+Use one of these chain rollback methods depending on what failed:
+
+| Need | Use | Notes |
+|---|---|---|
+| Restore daemon data folders after a bad update or damaged chainstate | Provider, ZFS, Btrfs, or LVM snapshot | Best option. Take the snapshot after daemon containers stop cleanly. |
+| Self-hosted host without snapshots | Stopped-daemon `rsync`/tar copy of `/root/.<coin>` folders | Works, but can be slow and needs enough free disk. |
+| Move a running daemon's active chain tip back to a known height | RPC `invalidateblock` | Does not delete block files. Use only for deliberate chain-tip rollback. |
+
+Do not edit `blk*.dat`, `rev*.dat`, `blocks/index`, `chainstate`, or wallet
+database files by hand. Those files are coordinated node databases. Manual
+edits can corrupt the daemon and force a reindex or resync.
+
+For update-time snapshot hooks, set `MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD`.
+During `update-mainnet.sh --daemons` or `--all`, the updater stops Stratum,
+stops all daemon containers cleanly, runs this command, and stops the update if
+the command fails. The older `MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD` name is also
+accepted for compatibility.
+
+```bash
+# Example: call an operator-provided snapshot script after daemons stop.
+export MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD='/root/bin/snapshot-blakestream-chains.sh'
+sudo -E bash deploy-bundle/update-mainnet.sh --daemons --build
+```
+
+For a controlled chain-tip rollback, use the operator tool in `tools/`.
+Create a JSON rollback plan once on a synced node:
+
+```bash
+sudo tools/chain-rollback.sh plan
+```
+
+The tool asks which chains to roll back and asks for each target height. It
+writes a JSON plan containing the exact target heights, target block hashes,
+and `target height + 1` invalidate hashes. Copy that JSON plan to each node
+that must roll back, then apply the same plan locally on each node:
+
+```bash
+sudo tools/chain-rollback.sh apply --plan chain-rollback-plan.json
+```
+
+The apply step verifies that each node has the same planned invalidate hash,
+stops Stratum/proxy if those services exist, backs up each selected wallet with
+the daemon `backupwallet` RPC, calls `invalidateblock`, and writes an undo
+manifest under `tools/logs/` unless `MPOS_LOG_ROOT` is explicitly set. The
+manifest contains the `reconsiderblock` commands needed to undo the RPC
+invalidation.
+
+When the rollback tool is run through `sudo` by a normal operator account, the
+default `tools/logs/` directory, generated JSON plans, and apply manifests are
+chowned back to that invoking user. Files are kept mode `600`, so they remain
+private but readable through SFTP/WinSCP as the operator user instead of being
+left owned by `root`.
+
+The old `deploy-bundle/scripts/mainnet/rollback-chain-tip.sh` path is kept only
+as a compatibility wrapper to the `tools/` script.
+
+For full datadir rollback:
+
+1. Stop Stratum and the merged-mine proxy.
+2. Stop daemon containers cleanly and wait for shutdown.
+3. Restore the provider/filesystem snapshot or stopped-daemon datadir copy.
+4. Start daemon containers and wait for RPC/sync.
+5. Start the merged-mine proxy and Stratum.
+6. Confirm AuxPoW readiness and pool share accounting before returning miners.
 
 ### Bootstrap options
 

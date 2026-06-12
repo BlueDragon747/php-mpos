@@ -656,7 +656,7 @@
   /* Services header layout */
   .bsx-system-page .services-status-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
     gap: 12px;
     margin-bottom: 14px;
     align-items: stretch;
@@ -684,7 +684,29 @@
     max-height: 236px;
     overflow-y: auto;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
     overflow-x: hidden;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar,
+  .bsx-system-page .health-detail::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar-track,
+  .bsx-system-page .health-detail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar-thumb,
+  .bsx-system-page .health-detail::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .bsx-system-page .services-scroll::-webkit-scrollbar-thumb:hover,
+  .bsx-system-page .health-detail::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(79, 195, 247, 0.45);
   }
   .bsx-system-page .services-scroll thead th {
     position: sticky;
@@ -882,6 +904,8 @@
     padding: 8px 10px;
     color: #cdd;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   }
   .bsx-system-page .health-detail-title {
     display: flex;
@@ -916,8 +940,8 @@
   }
   .bsx-system-page .health-detail-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(74px, .75fr) auto;
+    gap: 4px 10px;
     align-items: baseline;
     padding-bottom: 5px;
     border-bottom: 1px solid rgba(255,255,255,.06);
@@ -941,11 +965,32 @@
   }
   .bsx-system-page .health-detail-row.is-warn .health-detail-row-v { color: #ffd66e; }
   .bsx-system-page .health-detail-row.is-bad .health-detail-row-v { color: #e57373; }
+  .bsx-system-page .health-detail-row-meta-inline {
+    min-width: 0;
+    justify-self: center;
+    color: #99a;
+    font-size: 11px;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bsx-system-page .health-detail-row-meta-inline.is-empty {
+    visibility: hidden;
+  }
   .bsx-system-page .health-detail-row-meta {
     grid-column: 1 / -1;
     color: #99a;
     font-size: 11px;
     line-height: 1.25;
+  }
+  .bsx-system-page .health-detail-row-meta-primary {
+    display: block;
+    white-space: nowrap;
+  }
+  .bsx-system-page .health-detail-row-meta-age {
+    display: block;
+    margin-top: 2px;
   }
   [data-theme="light"] .bsx-system-page .health-detail {
     border-color: rgba(0,0,0,.12);
@@ -960,6 +1005,7 @@
   [data-theme="light"] .bsx-system-page .health-detail-row-v { color: #2e7d32; }
   [data-theme="light"] .bsx-system-page .health-detail-row.is-warn .health-detail-row-v { color: #b53d00; }
   [data-theme="light"] .bsx-system-page .health-detail-row.is-bad .health-detail-row-v { color: #c62828; }
+  [data-theme="light"] .bsx-system-page .health-detail-row-meta-inline { color: #4a5568; }
   [data-theme="light"] .bsx-system-page .health-detail-row-meta { color: #4a5568; }
   @media (max-width: 1100px) {
     .bsx-system-page .services-status-grid {
@@ -1765,12 +1811,33 @@
     item = item || {};
     var state = String(item.state || 'ok');
     if (state !== 'ok' && state !== 'warn' && state !== 'bad') state = 'ok';
-    var meta = item.meta ? '<div class="health-detail-row-meta">' + esc(item.meta) + '</div>' : '';
+    var meta = healthDetailMetaParts(item.meta || '');
     return '<div class="health-detail-row is-' + esc(state) + '">' +
            '<span class="health-detail-row-k">' + esc(item.label || 'Detail') + '</span>' +
+           meta.inline +
            '<span class="health-detail-row-v">' + esc(item.value || '—') + '</span>' +
-           meta +
+           meta.block +
            '</div>';
+  }
+  function healthDetailMetaParts(meta) {
+    meta = String(meta || '');
+    var empty = '<span class="health-detail-row-meta-inline is-empty">—</span>';
+    if (!meta) return { inline: empty, block: '' };
+    var marker = ' · checked ';
+    var idx = meta.lastIndexOf(marker);
+    if (idx < 0 && meta.length <= 32 && meta.indexOf(' · ') < 0) {
+      return { inline: '<span class="health-detail-row-meta-inline">' + esc(meta) + '</span>', block: '' };
+    }
+    if (idx < 0) {
+      return { inline: empty, block: '<div class="health-detail-row-meta">' + esc(meta) + '</div>' };
+    }
+    return {
+      inline: empty,
+      block: '<div class="health-detail-row-meta">' +
+             '<span class="health-detail-row-meta-primary">' + esc(meta.slice(0, idx)) + '</span>' +
+             '<span class="health-detail-row-meta-age">· checked ' + esc(meta.slice(idx + marker.length)) + '</span>' +
+             '</div>'
+    };
   }
   function renderHealthDetail(row) {
     row = normalizeHealthRow(row);

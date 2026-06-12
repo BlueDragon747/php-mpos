@@ -45,6 +45,7 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 | `MPOS_DAEMON_BUILD_ROOT` | `/root/blakestream-daemon-builds` | Working dir for cloned coin source trees (~15 GB total). |
 | `MPOS_DAEMON_BUILD_JOBS` | `nproc - 1` | Parallel build jobs per coin. |
 | `MPOS_DAEMON_BUILD_DOCKER_MODE` | `pull` | `pull` uses the pre-built native-base build image; `build` builds it locally. Slower but reproducible. |
+| `MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD` | (unset) | Optional command run by `update-mainnet.sh --daemons` after all daemon containers stop cleanly and before images/containers are updated. Use this for provider, ZFS, Btrfs, or LVM snapshots of the six daemon data folders. The update stops if this command fails. This is separate from MPOS DB/wallet backups. `MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD` is also accepted for compatibility. |
 
 **Source repos cloned when building:**
 `BlueDragon747/Blakecoin`, `BlueDragon747/photon`, `BlakeBitcoin/BlakeBitcoin`,
@@ -60,8 +61,10 @@ source ref to `master` after live cutover.
 |---|---|---|
 | `MPOS_DOMAIN` | `_` | nginx vhost name. `_` is the catch-all. Set to your real FQDN for a single-tenant deploy. |
 | `MPOS_HTTP_PORT` | `80` | nginx listen port. |
+| `MPOS_HTTPS_PORT` | `443` | UFW HTTPS allow rule only. Set `0` to skip opening HTTPS. TLS certificates and nginx SSL blocks are operator-managed. |
 | `MPOS_STRATUM_PORT` | `3334` | Eloipool stratum bind port. |
 | `MPOS_SSH_PORT` | auto-detect | Used for the UFW `allow ssh` rule (so we don't lock you out). |
+| `MPOS_PRESERVE_NGINX_SSL` | `1` | When an existing vhost contains `listen 443`, `ssl_certificate`, or certbot markers, MPOS update/install steps preserve it instead of rewriting the vhost. Set `0` only when intentionally replacing the vhost. |
 
 ---
 
@@ -85,6 +88,20 @@ source ref to `master` after live cutover.
 | `MPOS_ADMIN_PASS` | random 32 hex | First-login password. Saved in `/root/.mpos-deploy.env`. |
 | `MPOS_ADMIN_PIN` | `0000` | First-login payout PIN. Saved in `/root/.mpos-deploy.env` with the other deploy secrets. |
 | `MPOS_ADMIN_EMAIL` | `admin@blakestream.local` | Notification address (worker alerts, etc.). |
+
+The admin `api_key` is seeded as a random `bin2hex(random_bytes(32))` value on
+first install and is **fill-only** on later updates: an update sets it only if
+it is missing, and never overwrites an existing key. Pools created before this
+change carried a predictable `sha256(username . SALT)` key; rotate it once by
+hand (it is not changed automatically, to avoid breaking any integration using
+it):
+
+```bash
+NEW=$(php -r 'echo bin2hex(random_bytes(32));')
+mariadb mpos -e "UPDATE accounts SET api_key='$NEW' WHERE username='admin';"
+```
+
+The new key appears on the admin's account page; old API callers must switch to it.
 
 ---
 

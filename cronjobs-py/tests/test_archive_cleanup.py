@@ -10,12 +10,14 @@ from cronjobs_py.settings import DbConfig
 class FakeDb:
     def __init__(self, settings=None, deletes=None, *,
                  max_share_id=2_000_000, age_cutoff_share_id=2_000_000,
-                 min_unaccounted_share_id=None):
+                 min_unaccounted_share_id=None,
+                 unaccounted_blocks=None):
         self.settings = dict(settings or {})
         self.deletes = list(deletes or [])
         self.max_share_id = max_share_id
         self.age_cutoff_share_id = age_cutoff_share_id
         self.min_unaccounted_share_id = min_unaccounted_share_id
+        self.unaccounted_blocks = list(unaccounted_blocks or [])
         self.execute_calls = []
         self.fetchone_calls = []
         self.writes = {}
@@ -43,6 +45,14 @@ class FakeDb:
         if "MAX(share_id), 0) AS cutoff_share_id" in sql:
             return {"cutoff_share_id": self.age_cutoff_share_id}
         if "MIN(share_id) AS min_share_id" in sql:
+            if self.unaccounted_blocks:
+                include_orphans = "confirmations >= 0" not in sql
+                share_ids = [
+                    int(row["share_id"])
+                    for row in self.unaccounted_blocks
+                    if include_orphans or int(row.get("confirmations", 0)) >= 0
+                ]
+                return {"min_share_id": min(share_ids) if share_ids else None}
             return {"min_share_id": self.min_unaccounted_share_id}
         return {}
 
@@ -117,8 +127,10 @@ def test_archive_cleanup_stops_when_batch_is_not_full():
 
     assert len(db.execute_calls) == 2
     assert db.execute_calls[0][0].startswith("DELETE FROM shares_archive_mm3")
-    assert db.writes["db_prune_last_deleted"] == "5042"
-    assert db.writes["db_prune_last_status"] == (
+    assert "db_prune_last_deleted" not in db.writes
+    assert "db_prune_last_status" not in db.writes
+    assert db.writes["db_prune_last_deleted_mm3"] == "5042"
+    assert db.writes["db_prune_last_status_mm3"] == (
         "mm3: deleted 5042 through share_id 2000000; "
         "target latest 1000000 raw shares / 180d"
     )
@@ -221,6 +233,73 @@ def test_archive_cleanup_reports_unaccounted_block_safety_block():
         "parent: blocked by unaccounted block at share_id 100000; "
         "target latest 250000 raw shares / 180d"
     )
+
+
+def test_archive_cleanup_ignores_orphaned_blocks_for_prune_safety():
+    db = FakeDb(
+        settings={
+            "db_prune_after_days": "180",
+            "db_prune_keep_recent_shares": "1000",
+            "db_prune_batch_size": "5000",
+            "db_prune_max_batches": "1",
+        },
+        deletes=[5000],
+        max_share_id=1_000_000,
+        age_cutoff_share_id=0,
+        unaccounted_blocks=[
+            {"share_id": 100000, "confirmations": -1},
+        ],
+    )
+
+    ArchiveCleanup().run(_ctx(db))
+
+    assert len(db.execute_calls) == 1
+    assert db.execute_calls[0][1] == (750000, 5000)
+    assert "confirmations >= 0" in db.fetchone_calls[-1][0]
+    assert "through share_id 750000" in db.writes["db_prune_last_status"]
+
+
+def test_archive_cleanup_uses_real_unaccounted_blocks_for_prune_safety():
+    db = FakeDb(
+        settings={
+            "db_prune_after_days": "180",
+            "db_prune_keep_recent_shares": "1000",
+            "db_prune_batch_size": "5000",
+            "db_prune_max_batches": "1",
+        },
+        deletes=[5000],
+        max_share_id=1_000_000,
+        age_cutoff_share_id=0,
+        unaccounted_blocks=[
+            {"share_id": 100000, "confirmations": -1},
+            {"share_id": 300000, "confirmations": 0},
+        ],
+    )
+
+    ArchiveCleanup().run(_ctx(db))
+
+    assert len(db.execute_calls) == 1
+    assert db.execute_calls[0][1] == (50000, 5000)
+    assert "through share_id 50000" in db.writes["db_prune_last_status"]
+
+
+def test_archive_cleanup_keeps_parent_status_visible_after_aux_slot_runs():
+    db = FakeDb(
+        settings={
+            "db_prune_after_days": "180",
+            "db_prune_batch_size": "5000",
+            "db_prune_max_batches": "1",
+        },
+        deletes=[123, 0],
+    )
+
+    ArchiveCleanup().run(_ctx(db))
+    ArchiveCleanup(slot="mm5").run(_ctx(db))
+
+    assert db.writes["db_prune_last_deleted"] == "123"
+    assert db.writes["db_prune_last_status"].startswith("parent: deleted 123")
+    assert db.writes["db_prune_last_deleted_mm5"] == "0"
+    assert db.writes["db_prune_last_status_mm5"].startswith("mm5: deleted 0")
 
 
 def test_archive_cleanup_defaults_to_twenty_batches_for_catchup():

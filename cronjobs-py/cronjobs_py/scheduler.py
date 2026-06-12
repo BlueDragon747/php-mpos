@@ -75,6 +75,12 @@ class Scheduler:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.db = Db(settings.db)
+        # Dedicated connection for the per-job overlap advisory lock. MySQL
+        # GET_LOCK is connection-scoped, so the lock MUST live on a connection
+        # the job body never touches — otherwise a mid-tick reconnect on the
+        # job's own connection (db._run_with_retry) silently drops the lock
+        # and two ticks of a coin-moving job could overlap.
+        self.lock_db = Db(settings.db)
         self.rpc_by_slot: dict[str, RpcClient] = {
             c.slot: RpcClient(c.endpoint) for c in settings.coins
         }
@@ -235,6 +241,11 @@ class Scheduler:
             return f"findblock{suffix}"
         if name.startswith("pplns-"):
             return f"pplns_payout{suffix}"
+        # Must precede the "payouts-" check and stay short: the monitoring
+        # `name` column is varchar(30) and the longest key suffix is
+        # `_starttime`, so the base must be <= 20 chars (rec_orphans_mm5 fits).
+        if name.startswith("reconcile-orphans-"):
+            return f"rec_orphans{suffix}"
         if name.startswith("payouts-"):
             return f"payouts{suffix}"
         if name.startswith("blockupdate-"):
@@ -298,8 +309,10 @@ class Scheduler:
             return
 
         lock_scope = f"job:{job.name}"
+        # Acquire the overlap lock on the dedicated lock connection, never the
+        # one the job body uses, so a mid-tick reconnect can't drop it.
         try:
-            locked = self.db.try_advisory_lock(lock_scope, timeout=0)
+            locked = self.lock_db.try_advisory_lock(lock_scope, timeout=0)
         except Exception as exc:
             log.warning("[%s] could not acquire advisory lock: %s", job.name, exc)
             locked = False
@@ -333,7 +346,7 @@ class Scheduler:
             log.exception("[%s] unexpected error: %s", job.name, exc)
         finally:
             try:
-                self.db.release_advisory_lock(lock_scope)
+                self.lock_db.release_advisory_lock(lock_scope)
             except Exception as exc:
                 log.warning("[%s] could not release advisory lock: %s", job.name, exc)
 
@@ -341,3 +354,4 @@ class Scheduler:
         for client in self.rpc_by_slot.values():
             client.close()
         self.db.close()
+        self.lock_db.close()

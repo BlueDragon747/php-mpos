@@ -87,12 +87,15 @@ class ReconcilePayouts:
         # finality bar is ~6 confirmations on busy chains; operators
         # who want faster reconciliation set this lower than
         # `confirmations` to shrink the in-flight UX window. Leaving
-        # it unset keeps the conservative behaviour from before this
-        # tunable existed.
-        min_confs = int(
-            cfg.raw.get("reconcile_min_confirmations")
-            or slot_int(cfg.raw, "confirmations", self.slot, 100)
-        )
+        # it unset (None/empty) keeps the conservative behaviour from
+        # before this tunable existed. An explicit 0 is honoured (reconcile
+        # at 0 confirmations) — a falsy-OR would have silently bounced it
+        # back to the coinbase default.
+        rmc = cfg.raw.get("reconcile_min_confirmations")
+        if rmc is None or (isinstance(rmc, str) and rmc.strip() == ""):
+            min_confs = slot_int(cfg.raw, "confirmations", self.slot, 100)
+        else:
+            min_confs = max(0, int(rmc))
 
         log.info(
             "[%s/%s] checking %d broadcast outbox row(s) at min_confs=%d",
