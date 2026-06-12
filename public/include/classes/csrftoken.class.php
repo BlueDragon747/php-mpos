@@ -3,70 +3,49 @@ $defflip = (!cfip()) ? exit(header('HTTP/1.1 401 Unauthorized')) : 1;
 
 class CSRFToken Extends Base {
   public $valid = 0;
+
   /**
-   * Gets a basic csrf token
-   * @param string $user user or IP/host address
+   * Per-session CSRF secret. Generated once per session with a CSPRNG and
+   * stored in $_SESSION, so tokens are bound to the browser session rather
+   * than to the client IP and a wall-clock minute. Falls back to the server
+   * salt only when no session is active, which does not occur in the normal
+   * request flow — bootstrap.php starts the session before CSRF runs.
+   * @return string secret
+   */
+  private function sessionSecret() {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+      if (empty($_SESSION['CSRF_SECRET']) || !is_string($_SESSION['CSRF_SECRET'])) {
+        $_SESSION['CSRF_SECRET'] = bin2hex(random_bytes(32));
+      }
+      return $_SESSION['CSRF_SECRET'];
+    }
+    return (string)$this->salty . '|' . (string)$this->salt;
+  }
+
+  /**
+   * Returns the CSRF token for a page, bound to the session secret.
+   * @param string $user kept for signature parity; no longer seeds the
+   *                     token (the old client-IP binding is removed)
    * @param string $type page name or other unique per-page identifier
+   * @return string token
    */
   public function getBasic($user, $type) {
-    $date = date('m/d/y/H/i');
-    $d = explode('/', $date);
-    $seed = $this->buildSeed($user.$type, $d[0], $d[1], $d[2], $d[3], $d[4]);
-    return $this->getHash($seed);
+    return hash_hmac('sha256', (string)$type, $this->sessionSecret());
   }
-  
+
   /**
-   * Returns +1 min and +1 hour rollovers hashes
-   * @param string $user user or IP/host address
-   * @param string $type page name or other unique per-page identifier
-   * @return array 1min and 1hour hashes
-   */
-  public function checkAdditional($user, $type) {
-    $date = date('m/d/y/H/i');
-    $d = explode('/', $date);
-    // minute may have rolled over
-    $seed1 = $this->buildSeed($user.$type, $d[0], $d[1], $d[2], $d[3], ($d[4]-1));
-    // hour may have rolled over
-    $seed2 = $this->buildSeed($user.$type, $d[0], $d[1], $d[2], ($d[3]-1), 59);
-    return array($this->getHash($seed1), $this->getHash($seed2));
-  }
-  
-  /**
-   * Builds a seed with the given data
-   * @param string $data
-   * @param int $year
-   * @param int $month
-   * @param int $day
-   * @param int $hour
-   * @param int $minute
-   * @return string seed
-   */
-  private function buildSeed($data, $year, $month, $day, $hour, $minute) {
-    return $this->salty.$year.$month.$day.$data.$hour.$minute.$this->salt;
-  }
-  
-  /**
-   * Checks if the token is correct as is, if not checks for rollovers with checkAdditional()
-   * @param string $user user or IP/host address
+   * Validates a submitted token against this session's token for the page,
+   * using a constant-time comparison.
+   * @param string $user kept for signature parity (unused)
    * @param string $type page name or other unique per-page identifier
    * @param string $token token to check against
    * @return boolean
    */
   public function checkBasic($user, $type, $token) {
-    if (empty($token)) return false;
-    $token_now = $this->getBasic($user, $type);
-    if ($token_now !== $token) {
-      $tokens_check = $this->checkAdditional($user, $type);
-      $match = 0;
-      foreach ($tokens_check as $checkit) {
-        if ($checkit == $token) $match = 1;
-      }
-      return ($match) ? true : false;
-    } else {
-      return true;
-    }
+    if (!is_string($token) || $token === '') return false;
+    return hash_equals($this->getBasic($user, $type), $token);
   }
-  
+
   /**
    * Plain-text "session expired" message shown to a user when a
    * page-level CSRF token didn't match. Returned as a single line of
@@ -94,10 +73,6 @@ class CSRFToken Extends Base {
    */
   public static function getDescriptionImageHTML($dowhat="try") {
     return "";
-  }
-  
-  private function getHash($string) {
-    return hash('sha256', $this->salty.$string.$this->salt);
   }
 }
 

@@ -28,13 +28,34 @@ define('SECHASH_CHECK', false);
 //
 // Running both schedulers against the same DB produces double-credits
 // and (worse) double on-chain payouts, since both stacks insert Credit
-// / Debit_AP rows against the same DB. We refuse to run if the operator
-// has explicitly flipped the cronjobs-py service to active — they need
-// to disable one or the other before either runs again.
-if (getenv('MPOS_PYTHON_CRONJOBS_ACTIVE') === '1' &&
-    getenv('MPOS_PHP_CRONJOBS_OPT_IN') !== '1') {
+// / Debit_AP rows against the same DB. We refuse to run when cronjobs-py
+// is the active scheduler — the operator must disable one or the other
+// before either runs again.
+//
+// Detection has two sources so the interlock holds even when nothing set
+// an env var in the cron / PHP-CLI runtime:
+//   1. MPOS_PYTHON_CRONJOBS_ACTIVE=1 — explicit operator signal.
+//   2. The systemd unit blakestream-mpos-cronjobs.service being active —
+//      the live fallback. `systemctl is-active` needs no privileges; if
+//      systemd or the unit is absent the check is simply inconclusive.
+function _mpos_cronjobs_py_active() {
+    if (getenv('MPOS_PYTHON_CRONJOBS_ACTIVE') === '1') {
+        return true;
+    }
+    if (function_exists('exec')) {
+        $rc = 1;
+        $out = array();
+        @exec('systemctl is-active --quiet blakestream-mpos-cronjobs.service 2>/dev/null', $out, $rc);
+        if ($rc === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+if (_mpos_cronjobs_py_active() && getenv('MPOS_PHP_CRONJOBS_OPT_IN') !== '1') {
     fwrite(STDERR,
-        "MPOS PHP cronjobs are disabled — cronjobs-py has been activated.\n" .
+        "MPOS PHP cronjobs are disabled — cronjobs-py is the active scheduler.\n" .
         "If you really need to run this cronjob ad-hoc (e.g. emergency\n" .
         "reconciliation, data migration, dev work), set:\n" .
         "    MPOS_PHP_CRONJOBS_OPT_IN=1\n" .
