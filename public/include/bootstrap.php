@@ -14,6 +14,18 @@ $quickstartlink = "<a href='https://github.com/MPOS/php-mpos/wiki/Quick-Start-Gu
 if (!include_once(BASEPATH . 'include/config/global.inc.dist.php')) die('Unable to load base global config - '.$quickstartlink);
 if (!@include_once(BASEPATH . 'include/config/global.inc.php')) die('Unable to load your global config - '.$quickstartlink);
 
+// Fail closed if the rendered config still carries the dist CHANGE_ME
+// placeholders. A normal deploy sed-replaces SALT/SALTY; a manual
+// global.inc.dist.php -> global.inc.php copy or a half-finished deploy would
+// otherwise run with a publicly-known salt, leaving legacy sha256+salt
+// password/PIN hashes crackable. Refuse to start instead.
+foreach (array('SALT', 'SALTY') as $_cfgkey) {
+  if (!isset($config[$_cfgkey]) || strpos((string)$config[$_cfgkey], 'CHANGE_ME') !== false) {
+    die('Configuration error: $config[\''.$_cfgkey.'\'] still holds the CHANGE_ME placeholder. '
+        .'Deploy global.inc.php with real generated secrets before running MPOS.');
+  }
+}
+
 // load our security configs
 if (!include_once(BASEPATH . 'include/config/security.inc.dist.php')) die('Unable to load base security config - '.$quickstartlink);
 if (@file_exists(BASEPATH . 'include/config/security.inc.php')) include_once(BASEPATH . 'include/config/security.inc.php');
