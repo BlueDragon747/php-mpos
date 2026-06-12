@@ -38,17 +38,18 @@ from ..settings import slot_int
 
 log = get(__name__)
 
-SWEEP_WALLET_COMMENT_FORMAT = "mpos-sweep:{slot}:{outbox_id}:{nonce}"
+SWEEP_WALLET_COMMENT_FORMAT = "mpos-sweep:{slot}:{nonce}"
 
 
-def _make_wallet_comment(*, slot: str, outbox_id: int) -> str:
-    """Build a durable wallet-local comment for cold-wallet sweeps."""
-    nonce = secrets.token_hex(4)
-    return SWEEP_WALLET_COMMENT_FORMAT.format(
-        slot=slot,
-        outbox_id=outbox_id,
-        nonce=nonce,
-    )
+def _make_wallet_comment(*, slot: str) -> str:
+    """Build a durable, unique wallet-local comment for cold-wallet sweeps.
+
+    The nonce alone makes it unique (the outbox `wallet_comment` column is
+    UNIQUE), so the value does not embed the outbox id and the row can be
+    inserted with its final anchor atomically.
+    """
+    nonce = secrets.token_hex(8)
+    return SWEEP_WALLET_COMMENT_FORMAT.format(slot=slot, nonce=nonce)
 
 
 @dataclass
@@ -132,25 +133,28 @@ class LiquidPayout:
                       self.name, slot_label)
             return
 
-        placeholder = f"sweep-pending:{secrets.token_hex(8)}"
+        # Reserve the outbox row with its final wallet_comment atomically
+        # (no placeholder-then-update window), then flip send_attempted=1
+        # just before the send.
+        wallet_comment = _make_wallet_comment(slot=self.slot)
         outbox_id = db.insert_outbox_pending(
             slot=self.slot,
             account_id=0,
             coin_address=address,
             amount=sweep,
-            wallet_comment=placeholder,
+            wallet_comment=wallet_comment,
             archive_on_reconcile=False,
         )
-        wallet_comment = _make_wallet_comment(
-            slot=self.slot, outbox_id=outbox_id,
-        )
-        db.execute(
-            "UPDATE transactions_outbox SET wallet_comment = %s WHERE id = %s",
-            (wallet_comment, outbox_id),
-        )
 
+        # The fee is deducted from the swept amount, not paid on top, so the
+        # sweep never eats into the locked-balance reserve. The cold wallet
+        # receives `sweep − fee`; the hot wallet drops by exactly `sweep`.
+        db.mark_outbox_send_attempted(outbox_id)
         try:
-            txid = rpc.sendtoaddress(address, sweep, comment=wallet_comment)
+            txid = rpc.sendtoaddress(
+                address, sweep, comment=wallet_comment,
+                subtract_fee_from_amount=True,
+            )
         except Indeterminate as exc:
             db.mark_outbox_indeterminate(outbox_id, str(exc))
             raise Fatal(

@@ -1,6 +1,6 @@
 """Wave 4 replay test: payouts outbox state machine.
 
-Covers QC C-1 (the double-spend hazard on `sendtoaddress` retry).
+Covers the double-spend hazard on `sendtoaddress` retry.
 We simulate three RPC outcomes against a stubbed RpcClient:
 
   1. Clean broadcast → outbox row goes pending → broadcast,
@@ -346,6 +346,66 @@ def test_clean_broadcast_writes_debit_and_txfee(fresh_db: Db) -> None:
     assert len(poison) == 0
 
 
+class _FeeEatsAmountRpc(_StubRpc):
+    """Quote fee is small (the payout passes the fee-quote gate), but the
+    ACTUAL wallet fee from gettransaction meets/exceeds the gross — the
+    degenerate edge where send_amount <= 0 after a real broadcast."""
+
+    def __init__(self, *, actual_fee: float, **kw):
+        super().__init__(**kw)
+        self.actual_fee = actual_fee
+
+    def call(self, method, *params):
+        if method == "gettransaction":
+            self.calls.append((method, params))
+            return {"fee": -self.actual_fee, "confirmations": self.confirmations}
+        return super().call(method, *params)
+
+
+def test_full_manual_payout_closes_request(fresh_db: Db) -> None:
+    """A full (uncapped) manual payout DOES close the cash-out request."""
+    db = fresh_db
+    _seed_payable_account(db, balance=1.0, ap_threshold=1.0)
+    db.execute("INSERT INTO payouts (account_id, time, completed) VALUES (10, NOW(), 0)")
+    rpc = _StubRpc(balance=10.0, sendtoaddress="full_manual_txid", confirmations=6)
+    ctx = _ctx(db, rpc, raw={"confirmations": 100, "txfee_manual": 0.001,
+                             "txfee_auto": 0.001})
+
+    Payouts(slot="").run(ctx)
+
+    # Full payout (archive_on_reconcile=1) -> request closed.
+    assert int(db.fetchone("SELECT completed FROM payouts")["completed"]) == 1
+    assert int(db.fetchone("SELECT archive_on_reconcile AS a FROM transactions_outbox")["a"]) == 1
+
+
+def test_fee_consuming_whole_amount_is_broadcast_not_indeterminate(fresh_db: Db) -> None:
+    """A definitely-broadcast tx whose wallet fee ate the whole gross is
+    recorded as 'broadcast' (recipient 0, full amount as fee), NOT mislabeled
+    'indeterminate', and does not poison or raise."""
+    db = fresh_db
+    _seed_payable_account(db, balance=1.0, ap_threshold=1.0)
+    rpc = _FeeEatsAmountRpc(
+        balance=10.0, sendtoaddress="fee_eats_txid", fee=0.001,
+        confirmations=6, actual_fee=1.0,
+    )
+    ctx = _ctx(db, rpc, raw={"confirmations": 100, "txfee_auto": 0.001})
+
+    # Old code raised Fatal E0093 here; the fix must NOT raise.
+    Payouts(slot="").run(ctx)
+
+    rows = db.fetchall("SELECT status, txid, amount FROM transactions_outbox")
+    assert len(rows) == 1
+    assert rows[0]["status"] == "broadcast"        # not 'indeterminate'
+    assert rows[0]["txid"] == "fee_eats_txid"
+    assert abs(float(rows[0]["amount"]) - 0.0) < 1e-9
+    debit = db.fetchall("SELECT amount FROM transactions WHERE type='Debit_AP'")
+    txfee = db.fetchall("SELECT amount FROM transactions WHERE type='TXFee'")
+    assert abs(float(debit[0]["amount"]) - 0.0) < 1e-9      # recipient got 0
+    assert abs(float(txfee[0]["amount"]) - 1.0) < 1e-9      # whole gross as fee
+    # Benign edge -> warning, not a slot-poisoning Fatal.
+    assert db.fetchall("SELECT * FROM cronjobs_py_disabled") == []
+
+
 @pytest.mark.needs_mariadb
 def test_capped_auto_payout_preserves_remaining_balance_after_reconcile(
     fresh_db: Db,
@@ -568,8 +628,11 @@ def test_capped_manual_payout_uses_account_threshold_amount(fresh_db: Db) -> Non
     assert abs(float(outbox[0]["amount"]) - 2.499) < 1e-9
     assert int(outbox[0]["archive_on_reconcile"]) == 0
 
+    # A CAPPED (partial) manual payout must leave the request OPEN so the
+    # remaining balance keeps paying down on later ticks — only a full
+    # payout closes it.
     payout_rows = db.fetchall("SELECT completed FROM payouts")
-    assert int(payout_rows[0]["completed"]) == 1
+    assert int(payout_rows[0]["completed"]) == 0
     debit = db.fetchall("SELECT amount FROM transactions WHERE type='Debit_MP'")
     assert abs(float(debit[0]["amount"]) - 2.499) < 1e-9
     bal = db.compute_balance(10, min_confirmations=100)
@@ -627,8 +690,10 @@ def test_duplicate_manual_rows_only_send_once(fresh_db: Db) -> None:
     assert outbox[0]["status"] == "broadcast"
     assert outbox[0]["txid"] == "manual_once_txid"
 
+    # The kept row is paid as a CAPPED (partial) chunk, so it stays open
+    # (completed=0) to keep paying down; the deduped duplicate is closed.
     payout_rows = db.fetchall("SELECT completed FROM payouts ORDER BY id")
-    assert [int(r["completed"]) for r in payout_rows] == [1, 1]
+    assert [int(r["completed"]) for r in payout_rows] == [0, 1]
     debit = db.fetchall("SELECT amount FROM transactions WHERE type='Debit_MP'")
     assert len(debit) == 1
     assert abs(float(debit[0]["amount"]) - 2.499) < 1e-9
@@ -682,6 +747,63 @@ def test_auto_payout_chunks_until_final_full_balance_archives(
         "SELECT * FROM transactions WHERE account_id = 10 AND archived = 0"
     )
     assert active_txns == []
+
+
+@pytest.mark.needs_mariadb
+def test_manual_payout_chunks_and_closes_only_on_final(fresh_db: Db) -> None:
+    """A manual request larger than the cap pays down in fixed chunks and
+    stays OPEN (completed=0) until the final full chunk closes it."""
+    db = fresh_db
+    _seed_payable_account(db, balance=10.0, ap_threshold=2.5)
+    db.execute("INSERT INTO payouts (account_id, time, completed) VALUES (10, NOW(), 0)")
+    rpc = _StubRpc(balance=20.0, sendtoaddress=["m1", "m2", "m3", "m4"],
+                   confirmations=6)
+    ctx = _ctx(db, rpc, raw={"confirmations": 100, "reconcile_min_confirmations": 6,
+                             "txfee_auto": 0.001, "txfee_manual": 0.001,
+                             "ap_threshold": {"max": 2.5}})
+    completed_after = []
+    for _ in range(4):
+        Payouts(slot="").run(ctx)
+        ReconcilePayouts(slot="").run(ctx)
+        completed_after.append(
+            int(db.fetchone("SELECT completed FROM payouts")["completed"]))
+
+    # Open through chunks 1-3, closed only after the 4th (full) chunk.
+    assert completed_after == [0, 0, 0, 1]
+    send_amounts = [c[1][1] for c in rpc.calls if c[0] == "sendtoaddress"]
+    assert send_amounts == [2.5, 2.5, 2.5, 2.5]
+    assert len(db.fetchall("SELECT 1 FROM transactions WHERE type='Debit_MP'")) == 4
+    bal = db.compute_balance(10, min_confirmations=100)
+    assert abs(bal["confirmed"]) < 1e-9 and abs(bal["inflight"]) < 1e-9, bal
+
+
+@pytest.mark.needs_mariadb
+def test_reconcile_min_confs_zero_reconciles_at_zero_confs(fresh_db: Db) -> None:
+    """reconcile_min_confirmations=0 archives a 0-conf tx (a falsy-OR would
+    silently bounce 0 back to the 100-conf coinbase default)."""
+    db = fresh_db
+    _seed_payable_account(db, balance=1.0, ap_threshold=1.0)
+    rpc = _StubRpc(balance=10.0, sendtoaddress="zc_tx", confirmations=0)
+    ctx = _ctx(db, rpc, raw={"confirmations": 100, "reconcile_min_confirmations": 0,
+                             "txfee_auto": 0.001})
+    Payouts(slot="").run(ctx)
+    assert db.fetchone("SELECT status FROM transactions_outbox")["status"] == "broadcast"
+    ReconcilePayouts(slot="").run(ctx)
+    assert db.fetchone("SELECT status FROM transactions_outbox")["status"] == "reconciled"
+
+
+@pytest.mark.needs_mariadb
+def test_reconcile_min_confs_zero_still_holds_conflicted_tx(fresh_db: Db) -> None:
+    """Safety: even at min_confs=0, a conflicted tx (confs<0) is NOT
+    archived — the confs<0 guard wins over the 0 threshold."""
+    db = fresh_db
+    _seed_payable_account(db, balance=1.0, ap_threshold=1.0)
+    rpc = _StubRpc(balance=10.0, sendtoaddress="cf_tx", confirmations=-1)
+    ctx = _ctx(db, rpc, raw={"confirmations": 100, "reconcile_min_confirmations": 0,
+                             "txfee_auto": 0.001})
+    Payouts(slot="").run(ctx)
+    ReconcilePayouts(slot="").run(ctx)
+    assert db.fetchone("SELECT status FROM transactions_outbox")["status"] == "broadcast"
 
 
 @pytest.mark.needs_mariadb

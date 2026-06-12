@@ -1702,7 +1702,9 @@ class Db:
     def insert_outbox_pending(self, *, slot: str, account_id: int,
                               coin_address: str, amount: float,
                               wallet_comment: str,
-                              archive_on_reconcile: bool = True) -> int:
+                              archive_on_reconcile: bool = True,
+                              tx_kind: str | None = None,
+                              manual_payout_id: int | None = None) -> int:
         """Reserve an outbox slot before the wallet send is issued.
 
         wallet_comment is the idempotency anchor: the value is written
@@ -1710,21 +1712,55 @@ class Db:
         param so a later reconciliation pass can match the wallet's
         listtransactions output back to this row.
 
+        `tx_kind` ('Debit_AP'/'Debit_MP') and `manual_payout_id` are
+        recorded so `reconcile-orphans` can heal a row whose send
+        succeeded but whose bookkeeping rolled back: it writes the
+        correct Debit kind and closes the matching manual request.
+
         Returns the new outbox id.
         """
         with self.cursor() as cur:
             cur.execute(
                 "INSERT INTO transactions_outbox "
                 "(slot, account_id, coin_address, amount, archive_on_reconcile, "
-                "wallet_comment, status) "
-                "VALUES (%s, %s, %s, %s, %s, %s, 'pending')",
+                "wallet_comment, tx_kind, manual_payout_id, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')",
                 (
                     slot, account_id, coin_address, amount,
                     1 if archive_on_reconcile else 0,
-                    wallet_comment,
+                    wallet_comment, tx_kind, manual_payout_id,
                 ),
             )
             return int(cur.lastrowid)
+
+    def mark_outbox_send_attempted(self, outbox_id: int) -> None:
+        """Flip send_attempted=1 immediately before the wallet send.
+
+        Paired with an atomic insert of the final wallet_comment, this is
+        the provable-no-send marker: a 'pending' row still at
+        send_attempted=0 cannot have been broadcast (the flag commits
+        before sendtoaddress is called), so reconcile-orphans may abandon
+        it without a wallet lookup.
+        """
+        self.execute(
+            "UPDATE transactions_outbox SET send_attempted = 1 "
+            "WHERE id = %s AND status = 'pending'",
+            (outbox_id,),
+        )
+
+    def set_outbox_txid_pending(self, outbox_id: int, txid: str) -> None:
+        """Durability nudge: record the broadcast txid on a still-pending
+        outbox row immediately after `sendtoaddress` returns, before the
+        Debit/TXFee/archive bookkeeping runs. If that bookkeeping then
+        rolls back, the orphaned 'pending' row already carries its txid so
+        `reconcile-orphans` can heal it directly via `gettransaction`
+        instead of having to scan the wallet by comment.
+        """
+        self.execute(
+            "UPDATE transactions_outbox SET txid = %s "
+            "WHERE id = %s AND status = 'pending'",
+            (txid, outbox_id),
+        )
 
     def mark_outbox_broadcast(self, outbox_id: int, txid: str) -> None:
         self.execute(
@@ -1801,6 +1837,113 @@ class Db:
             "ORDER BY id ASC",
             (slot,),
         )
+
+    def list_outbox_unresolved(self, slot: str) -> list[dict]:
+        """Outbox rows in an unresolved state ('pending' / 'indeterminate').
+
+        These are the rows whose on-chain outcome the automated jobs have
+        not yet pinned down. 'broadcast' is excluded: its txid is known and
+        reconcile-payouts owns it. Used to gate the slot poison auto-clear —
+        the slot stays frozen while any row here is still ambiguous.
+        """
+        return self.fetchall(
+            "SELECT * FROM transactions_outbox "
+            "WHERE slot = %s AND status IN ('pending','indeterminate') "
+            "ORDER BY id ASC",
+            (slot,),
+        )
+
+    def list_outbox_unresolved_aged(self, slot: str,
+                                    older_than_seconds: int) -> list[dict]:
+        """Unresolved outbox rows whose last update is older than the grace
+        window. The grace window keeps reconcile-orphans from touching a row
+        that a payouts tick is legitimately still working through.
+        """
+        return self.fetchall(
+            "SELECT * FROM transactions_outbox "
+            "WHERE slot = %s AND status IN ('pending','indeterminate') "
+            "  AND updated_at <= (NOW() - INTERVAL %s SECOND) "
+            "ORDER BY id ASC",
+            (slot, int(older_than_seconds)),
+        )
+
+    def heal_outbox_in_tx(
+        self, *, cur: "pymysql.cursors.DictCursor",
+        outbox_id: int, slot: str, txid: str,
+        net_amount: float, fee: float,
+    ) -> bool:
+        """Heal an orphaned outbox row whose send is confirmed on-chain.
+
+        Used by reconcile-orphans when a 'pending'/'indeterminate' row is
+        matched to a real wallet transaction (the bookkeeping after a
+        successful sendtoaddress had rolled back). In one transaction:
+
+          1. lock the row and flip 'pending'/'indeterminate' -> 'broadcast'
+             with the real txid + net amount (conditional UPDATE; rowcount
+             gate makes the heal single-shot under any race);
+          2. write the missing Debit (kind from the row's `tx_kind`, default
+             Debit_AP) and the TXFee, but only if no Debit for this txid
+             already exists (idempotent if a prior partial heal ran);
+          3. close the manual payout request if the row carried one.
+
+        Archiving is intentionally left to reconcile-payouts once the txid
+        reaches the confirmation bar, exactly like the normal payout path.
+        Returns True if this call performed the heal, False if the row was
+        already resolved by someone else.
+        """
+        cur.execute(
+            "SELECT account_id, coin_address, tx_kind, manual_payout_id "
+            "FROM transactions_outbox "
+            "WHERE id = %s AND slot = %s "
+            "  AND status IN ('pending','indeterminate') FOR UPDATE",
+            (outbox_id, slot),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        account_id = int(row["account_id"])
+        coin_address = row.get("coin_address")
+        kind = row.get("tx_kind") or "Debit_AP"
+        manual_payout_id = row.get("manual_payout_id")
+        net_amount = round(float(net_amount), 8)
+        fee = round(float(fee), 8)
+
+        cur.execute(
+            "UPDATE transactions_outbox "
+            "SET status = 'broadcast', txid = %s, amount = %s, "
+            "    rpc_error = 'healed by reconcile-orphans' "
+            "WHERE id = %s AND slot = %s "
+            "  AND status IN ('pending','indeterminate')",
+            (txid, net_amount, outbox_id, slot),
+        )
+        if cur.rowcount != 1:
+            return False
+
+        txn_table = self._transactions_table(slot)
+        cur.execute(
+            f"SELECT COUNT(*) AS n FROM {txn_table} "
+            f"WHERE txid = %s AND account_id = %s "
+            f"  AND type IN ('Debit_AP','Debit_MP')",
+            (txid, account_id),
+        )
+        already = int((cur.fetchone() or {}).get("n", 0))
+        if already == 0:
+            self.add_transaction_in_tx(
+                cur=cur, account_id=account_id, amount=net_amount,
+                kind=kind, block_id=None, coin_address=coin_address,
+                txid=txid, slot=slot,
+            )
+            if fee > 0:
+                self.add_transaction_in_tx(
+                    cur=cur, account_id=account_id, amount=fee,
+                    kind="TXFee", block_id=None, coin_address=coin_address,
+                    txid=txid, slot=slot,
+                )
+        if manual_payout_id is not None:
+            self.mark_manual_payout_complete(
+                slot, int(manual_payout_id), cur=cur,
+            )
+        return True
 
     def reconcile_outbox_in_tx(
         self, *, cur: "pymysql.cursors.DictCursor",
@@ -2032,7 +2175,7 @@ class Db:
             f"    SELECT 1 FROM transactions_outbox o "
             f"    WHERE o.slot = %s "
             f"      AND o.account_id = t.account_id "
-            f"      AND o.status IN ('pending','broadcast')"
+            f"      AND o.status IN ('pending','broadcast','indeterminate')"
             f"  ) "
             f"GROUP BY t.account_id "
             f"HAVING balance >= a.{threshold_col} "
@@ -2097,7 +2240,7 @@ class Db:
             f"    SELECT 1 FROM transactions_outbox o "
             f"    WHERE o.slot = %s "
             f"      AND o.account_id = p.account_id "
-            f"      AND o.status IN ('pending','broadcast')"
+            f"      AND o.status IN ('pending','broadcast','indeterminate')"
             f"  ) "
             f"GROUP BY p.id "
             f"HAVING amount > %s"

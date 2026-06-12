@@ -54,6 +54,7 @@ class _Db:
         self.broadcast: list[tuple[int, str]] = []
         self.indeterminate: list[tuple[int, str]] = []
         self.abandoned: list[tuple[int, str]] = []
+        self.send_attempted: list[int] = []
 
     def list_open_coldwallet_outbox(self, slot):
         return self.open_sweeps
@@ -66,10 +67,8 @@ class _Db:
         self.inserted.append({"id": outbox_id, **kwargs})
         return outbox_id
 
-    def execute(self, sql, params=()):
-        assert "UPDATE transactions_outbox SET wallet_comment" in sql
-        self.updated_comments.append((params[0], params[1]))
-        return 1
+    def mark_outbox_send_attempted(self, outbox_id):
+        self.send_attempted.append(outbox_id)
 
     def mark_outbox_broadcast(self, outbox_id, txid):
         self.broadcast.append((outbox_id, txid))
@@ -103,13 +102,18 @@ def test_liquid_payout_uses_outbox_and_non_retry_send() -> None:
     assert db.inserted[0]["coin_address"] == "cold_addr"
     assert db.inserted[0]["amount"] == 70.0
     assert db.inserted[0]["archive_on_reconcile"] is False
-    assert db.updated_comments[0][0].startswith("mpos-sweep::1:")
+    # Final wallet_comment is written atomically in the INSERT (no separate
+    # UPDATE), and send_attempted is flipped before the send.
+    assert db.inserted[0]["wallet_comment"].startswith("mpos-sweep::")
+    assert db.send_attempted == [1]
     assert db.broadcast == [(1, "cold_txid")]
     send_calls = [c for c in rpc.calls if c[0] == "sendtoaddress"]
     assert len(send_calls) == 1
     assert send_calls[0][1][0] == "cold_addr"
     assert send_calls[0][1][1] == 70.0
-    assert send_calls[0][1][2].startswith("mpos-sweep::1:")
+    assert send_calls[0][1][2].startswith("mpos-sweep::")
+    # The sweep fee comes out of the swept amount, not the reserve.
+    assert send_calls[0][1][4] is True  # subtract_fee_from_amount
 
 
 def test_liquid_payout_indeterminate_marks_outbox_and_fails_closed() -> None:
