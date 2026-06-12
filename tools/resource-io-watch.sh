@@ -11,19 +11,26 @@ set -u
 #   change miner/pool settings.
 #
 # Usage:
-#   chmod +x ./blakestream-resource-io-watch.sh
-#   INTERVAL_SECONDS=300 ./blakestream-resource-io-watch.sh
+#   chmod +x ./resource-io-watch.sh
+#   INTERVAL_SECONDS=300 ./resource-io-watch.sh
 #
 # Optional miner-side context can be added without editing this file:
-#   BAIKAL=miner-lan-ip INTERVAL_SECONDS=300 ./blakestream-resource-io-watch.sh
+#   BAIKAL=miner-lan-ip INTERVAL_SECONDS=300 ./resource-io-watch.sh
 #
 # For a 24-hour background run:
-#   timeout 24h env INTERVAL_SECONDS=300 ./blakestream-resource-io-watch.sh \
-#     >> /tmp/blakestream-resource-io-watch.log 2>&1 &
+#   timeout 24h env INTERVAL_SECONDS=300 ./resource-io-watch.sh \
+#     >> /tmp/resource-io-watch.log 2>&1 &
 #
 # Run this directly on the pool server where MPOS, Eloipool, MariaDB, and the
 # merged-mining proxy are hosted. It reads local localhost RPC ports and local
 # MariaDB tables; it does not SSH to another server.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [ -r "${SCRIPT_DIR}/lib/tool-banner.sh" ]; then
+  # shellcheck disable=SC1091
+  . "${SCRIPT_DIR}/lib/tool-banner.sh"
+  print_blakestream_banner
+fi
+
 POOL_DB="${POOL_DB:-mpos}"
 case "$POOL_DB" in
   ''|*[!A-Za-z0-9_]*)

@@ -24,6 +24,13 @@ set -u
 # This file lives under tools/ so operators can capture comparable before/after
 # resource snapshots during deploy, update, and stress-test work.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [ -r "${SCRIPT_DIR}/lib/tool-banner.sh" ]; then
+  # shellcheck disable=SC1091
+  . "${SCRIPT_DIR}/lib/tool-banner.sh"
+  print_blakestream_banner
+fi
+
 OUT="${1:-/tmp/mpos-metrics-$(date -u +%Y%m%dT%H%M%SZ).log}"
 DB_NAME="${DB_NAME:-mpos}"
 MYSQL_CMD="${MYSQL_CMD:-mysql}"

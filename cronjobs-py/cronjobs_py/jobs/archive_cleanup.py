@@ -146,8 +146,7 @@ class ArchiveCleanup:
                 if deleted < batch_size:
                     break
         except Exception as exc:
-            db.set_setting("db_prune_last_run", str(int(time.time())))
-            db.set_setting("db_prune_last_status", f"{slot_label}: failed: {exc}")
+            self._record_failure(db, slot_label, exc)
             raise Skip(f"archive cleanup query failed: {exc}")
 
         self._record_success(db, slot_label, total_deleted, retention_days,
@@ -167,9 +166,7 @@ class ArchiveCleanup:
     def _record_success(self, db: Any, slot_label: str, deleted: int,
                         retention_days: int, keep_recent_shares: int,
                         delete_cutoff: int) -> None:
-        db.set_setting("db_prune_last_run", str(int(time.time())))
-        db.set_setting("db_prune_last_deleted", str(deleted))
-        if delete_cutoff > 0:
+        if deleted > 0 and delete_cutoff > 0:
             status = (
                 f"{slot_label}: deleted {deleted} through share_id {delete_cutoff}; "
                 f"target latest {keep_recent_shares} raw shares / {retention_days}d"
@@ -179,19 +176,40 @@ class ArchiveCleanup:
                 f"{slot_label}: deleted {deleted}; target latest "
                 f"{keep_recent_shares} raw shares / {retention_days}d"
             )
-        db.set_setting("db_prune_last_status", status)
+        self._record_slot_result(db, slot_label, deleted, status)
 
     def _record_blocked(self, db: Any, slot_label: str, retention_days: int,
                         keep_recent_shares: int,
                         min_unaccounted_share_id: int) -> None:
-        db.set_setting("db_prune_last_run", str(int(time.time())))
-        db.set_setting("db_prune_last_deleted", "0")
-        db.set_setting(
-            "db_prune_last_status",
+        self._record_slot_result(
+            db,
+            slot_label,
+            0,
             f"{slot_label}: blocked by unaccounted block at share_id "
             f"{min_unaccounted_share_id}; target latest "
             f"{keep_recent_shares} raw shares / {retention_days}d",
         )
+
+    def _record_failure(self, db: Any, slot_label: str, exc: Exception) -> None:
+        self._record_slot_result(
+            db,
+            slot_label,
+            0,
+            f"{slot_label}: failed: {exc}",
+            force_visible=True,
+        )
+
+    def _record_slot_result(self, db: Any, slot_label: str, deleted: int,
+                            status: str, force_visible: bool = False) -> None:
+        now = str(int(time.time()))
+        slot_key = "parent" if slot_label == "parent" else slot_label
+        db.set_setting("db_prune_last_run", now)
+        db.set_setting(f"db_prune_last_run_{slot_key}", now)
+        db.set_setting(f"db_prune_last_deleted_{slot_key}", str(deleted))
+        db.set_setting(f"db_prune_last_status_{slot_key}", status)
+        if force_visible or slot_label == "parent":
+            db.set_setting("db_prune_last_deleted", str(deleted))
+            db.set_setting("db_prune_last_status", status)
 
     def _max_archive_share_id(self, db: Any, archive_table: str) -> int:
         row = db.fetchone(
@@ -222,7 +240,8 @@ class ArchiveCleanup:
             return 0
         selects = [
             f"SELECT MIN(share_id) AS share_id FROM {table} "
-            f"WHERE accounted = 0 AND share_id IS NOT NULL"
+            f"WHERE accounted = 0 AND share_id IS NOT NULL "
+            f"AND confirmations >= 0"
             for table in block_tables
         ]
         row = db.fetchone(

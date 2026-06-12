@@ -26,28 +26,28 @@ set -u
 # Usage:
 #   1. Make the script executable:
 #
-#        chmod +x ./blakestream-pool-stall-watch.sh
+#        chmod +x ./pool-stall-watch.sh
 #
 #   2. Run it in the foreground against the default pool:
 #
-#        INTERVAL_SECONDS=300 ./blakestream-pool-stall-watch.sh
+#        INTERVAL_SECONDS=300 ./pool-stall-watch.sh
 #
 #   3. Optional miner-side context can be added without editing this file:
 #
-#        BAIKAL=miner-lan-ip INTERVAL_SECONDS=300 ./blakestream-pool-stall-watch.sh
+#        BAIKAL=miner-lan-ip INTERVAL_SECONDS=300 ./pool-stall-watch.sh
 #
 #   4. Or run it in the background and keep a log:
 #
-#        INTERVAL_SECONDS=300 nohup ./blakestream-pool-stall-watch.sh \
-#          >> /tmp/blakestream-pool-stall-watch.log 2>&1 &
+#        INTERVAL_SECONDS=300 nohup ./pool-stall-watch.sh \
+#          >> /tmp/pool-stall-watch.log 2>&1 &
 #
 #   5. Watch the log:
 #
-#        tail -f /tmp/blakestream-pool-stall-watch.log
+#        tail -f /tmp/pool-stall-watch.log
 #
 #   6. Stop a background copy:
 #
-#        pkill -f blakestream-pool-stall-watch.sh
+#        pkill -f pool-stall-watch.sh
 #
 # Network notes:
 # - Run this directly on the pool server where MPOS, Eloipool, MariaDB, and the
@@ -68,6 +68,13 @@ set -u
 #   pool shares from the last 10 minutes, so no miner username setup is needed.
 #
 # The output is line-oriented so it can be tailed, archived, or parsed later.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [ -r "${SCRIPT_DIR}/lib/tool-banner.sh" ]; then
+  # shellcheck disable=SC1091
+  . "${SCRIPT_DIR}/lib/tool-banner.sh"
+  print_blakestream_banner
+fi
 
 POOL_DB="${POOL_DB:-mpos}"
 case "$POOL_DB" in

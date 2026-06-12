@@ -168,6 +168,9 @@ cd php-mpos
 `sudo -E` preserves the `export`ed env vars across the privilege jump.
 If you are already root, replace `sudo -E bash …` with `bash …`.
 
+Deploy and update entrypoints print a BlakeStream banner when they start. Set
+`BLAKESTREAM_TOOL_BANNER=0` to suppress it in machine-parsed logs.
+
 Each run writes a full deploy transcript in the repo root by default:
 
 ```text
@@ -368,17 +371,37 @@ export MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD='/root/bin/snapshot-blakestream-chain
 sudo -E bash deploy-bundle/update-mainnet.sh --daemons --build
 ```
 
-For a controlled chain-tip rollback, run the interactive RPC tool:
+For a controlled chain-tip rollback, use the operator tool in `tools/`.
+Create a JSON rollback plan once on a synced node:
 
 ```bash
-sudo bash deploy-bundle/scripts/mainnet/rollback-chain-tip.sh
+sudo tools/chain-rollback.sh plan
 ```
 
-The tool asks which chains to roll back, asks for each target height, confirms
-the plan, stops Stratum/proxy, backs up each selected wallet with the daemon
-`backupwallet` RPC, invalidates block `target height + 1`, and writes an undo
-manifest under `/var/log/blakestream-mpos/chain-rollback-*.log`. The manifest
-contains the `reconsiderblock` commands needed to undo the RPC invalidation.
+The tool asks which chains to roll back and asks for each target height. It
+writes a JSON plan containing the exact target heights, target block hashes,
+and `target height + 1` invalidate hashes. Copy that JSON plan to each node
+that must roll back, then apply the same plan locally on each node:
+
+```bash
+sudo tools/chain-rollback.sh apply --plan chain-rollback-plan.json
+```
+
+The apply step verifies that each node has the same planned invalidate hash,
+stops Stratum/proxy if those services exist, backs up each selected wallet with
+the daemon `backupwallet` RPC, calls `invalidateblock`, and writes an undo
+manifest under `tools/logs/` unless `MPOS_LOG_ROOT` is explicitly set. The
+manifest contains the `reconsiderblock` commands needed to undo the RPC
+invalidation.
+
+When the rollback tool is run through `sudo` by a normal operator account, the
+default `tools/logs/` directory, generated JSON plans, and apply manifests are
+chowned back to that invoking user. Files are kept mode `600`, so they remain
+private but readable through SFTP/WinSCP as the operator user instead of being
+left owned by `root`.
+
+The old `deploy-bundle/scripts/mainnet/rollback-chain-tip.sh` path is kept only
+as a compatibility wrapper to the `tools/` script.
 
 For full datadir rollback:
 

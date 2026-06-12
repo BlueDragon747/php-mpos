@@ -6,6 +6,15 @@
 # update behavior stays aligned with full deploy behavior.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [ -r "${SCRIPT_DIR}/scripts/lib/banner.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/scripts/lib/banner.sh"
+    print_blakestream_banner
+fi
+
 usage() {
     cat <<EOF
 Usage:
@@ -59,8 +68,6 @@ fi
 
 [ "$(id -u)" = "0" ] || die "run as root"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MAINNET_SCRIPTS="${SCRIPT_DIR}/scripts/mainnet"
 INSTALL_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
 ELOIPOOL_TREE="${ELIOPOOL_TREE:-/root/Blakestream-Eliopool}"
