@@ -89,6 +89,20 @@ source ref to `master` after live cutover.
 | `MPOS_ADMIN_PIN` | `0000` | First-login payout PIN. Saved in `/root/.mpos-deploy.env` with the other deploy secrets. |
 | `MPOS_ADMIN_EMAIL` | `admin@blakestream.local` | Notification address (worker alerts, etc.). |
 
+The admin `api_key` is seeded as a random `bin2hex(random_bytes(32))` value on
+first install and is **fill-only** on later updates: an update sets it only if
+it is missing, and never overwrites an existing key. Pools created before this
+change carried a predictable `sha256(username . SALT)` key; rotate it once by
+hand (it is not changed automatically, to avoid breaking any integration using
+it):
+
+```bash
+NEW=$(php -r 'echo bin2hex(random_bytes(32));')
+mariadb mpos -e "UPDATE accounts SET api_key='$NEW' WHERE username='admin';"
+```
+
+The new key appears on the admin's account page; old API callers must switch to it.
+
 ---
 
 ## Pool RPC credentials (shared across all six daemons)

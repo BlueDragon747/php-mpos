@@ -20,6 +20,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+if [ -r "${SCRIPT_DIR}/scripts/lib/banner.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/scripts/lib/banner.sh"
+    print_blakestream_banner
+fi
+
 # Flags
 RUN_LOCAL=0
 SKIP_POOL=0
@@ -171,12 +177,14 @@ export MPOS_RUN_GROUP="${MPOS_RUN_GROUP:-www-data}"
 
 # Generate stable secrets if the operator didn't pin them. We avoid
 # `tr` over /dev/urandom because some sandbox layers swap charsets.
-random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$1"; }
-export MPOS_DB_PASS="${MPOS_DB_PASS:-$(random_hex 32)}"
-export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 32)}"
+# random_hex BYTES -> 2*BYTES hex chars of full entropy (16 = 128 bits,
+# 24 = 192 bits). The argument is a BYTE count, not a char count.
+random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$(( $1 * 2 ))"; }
+export MPOS_DB_PASS="${MPOS_DB_PASS:-$(random_hex 24)}"
+export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 24)}"
 export MPOS_ADMIN_PIN="${MPOS_ADMIN_PIN:-0000}"
-export MPOS_SALT="${MPOS_SALT:-$(random_hex 8)}"
-export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 8)}"
+export MPOS_SALT="${MPOS_SALT:-$(random_hex 16)}"
+export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 16)}"
 export MPOS_API_TOKEN="${MPOS_API_TOKEN:-$(random_hex 16)}"
 
 export MPOS_PYTHON_CRONJOBS_ACTIVE="${MPOS_PYTHON_CRONJOBS_ACTIVE:-1}"

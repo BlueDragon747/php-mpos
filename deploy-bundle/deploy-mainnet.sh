@@ -44,6 +44,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+if [ -r "${SCRIPT_DIR}/scripts/lib/banner.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/scripts/lib/banner.sh"
+    print_blakestream_banner
+fi
+
 MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/BlueDragon747/php-mpos.git}"
 # Pre-live: use 25.2-GO until the Go Eloipool cutover is live, then switch
 # ELIOPOOL_BRANCH to master once master carries these updates.
@@ -331,8 +337,9 @@ fi
 # Pre-flight: paths exist locally. SSH mode also verifies remote auth.
 [ -d "${ELIOPOOL_TREE}" ] || die "eloipool_Blakecoin checkout not found at ${ELIOPOOL_TREE}"
 
-# random_hex producing N hex characters (8 = 32 bits, 32 = 128 bits, ...)
-random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$1"; }
+# random_hex BYTES -> 2*BYTES hex chars of full entropy (16 = 128 bits,
+# 24 = 192 bits). The argument is a BYTE count, not a char count.
+random_hex() { head -c "$1" /dev/urandom | xxd -p -c 256 | head -c "$(( $1 * 2 ))"; }
 
 # Reuse a previous deploy's tunables if /root/.mpos-deploy.env exists on
 # the VPS. The DB password, RPC creds, salts, etc. get baked into the
@@ -416,7 +423,7 @@ export MPOS_BASE_DIFFICULTY="${MPOS_BASE_DIFFICULTY:-32}"
 export MPOS_DIFFICULTY_BITS="${MPOS_DIFFICULTY_BITS:-21}"
 export MPOS_DB_NAME="${MPOS_DB_NAME:-mpos}"
 export MPOS_DB_USER="${MPOS_DB_USER:-mpos}"
-export MPOS_DB_PASS="${MPOS_DB_PASS:-$(random_hex 32)}"
+export MPOS_DB_PASS="${MPOS_DB_PASS:-$(random_hex 24)}"
 export MPOS_DB_HOST="${MPOS_DB_HOST:-127.0.0.1}"
 export MPOS_DB_PORT="${MPOS_DB_PORT:-3306}"
 export MPOS_MARIADB_BUFFER_POOL_MB="${MPOS_MARIADB_BUFFER_POOL_MB:-}"
@@ -424,11 +431,11 @@ export MPOS_MARIADB_BUFFER_POOL_MIN_MB="${MPOS_MARIADB_BUFFER_POOL_MIN_MB:-512}"
 export MPOS_MARIADB_BUFFER_POOL_MAX_MB="${MPOS_MARIADB_BUFFER_POOL_MAX_MB:-4096}"
 export MPOS_MARIADB_LOG_FILE_MB="${MPOS_MARIADB_LOG_FILE_MB:-}"
 export MPOS_ADMIN_USER="${MPOS_ADMIN_USER:-admin}"
-export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 32)}"
+export MPOS_ADMIN_PASS="${MPOS_ADMIN_PASS:-$(random_hex 24)}"
 export MPOS_ADMIN_PIN="${MPOS_ADMIN_PIN:-0000}"
 export MPOS_ADMIN_EMAIL="${MPOS_ADMIN_EMAIL:-admin@blakestream.local}"
-export MPOS_SALT="${MPOS_SALT:-$(random_hex 32)}"
-export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 32)}"
+export MPOS_SALT="${MPOS_SALT:-$(random_hex 16)}"
+export MPOS_SALTY="${MPOS_SALTY:-$(random_hex 16)}"
 export MPOS_API_TOKEN="${MPOS_API_TOKEN:-$(random_hex 16)}"
 export MPOS_NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 export MPOS_NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-$(random_hex 24)}"

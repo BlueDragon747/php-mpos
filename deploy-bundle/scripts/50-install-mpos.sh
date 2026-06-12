@@ -255,16 +255,24 @@ say "seeding admin account '${MPOS_ADMIN_USER}'"
 # email" filter rejects it.
 ADMIN_HASH=$(php -r "echo hash('sha256', '${MPOS_ADMIN_PASS}' . '${MPOS_SALT}');")
 PIN_HASH=$(php -r "echo hash('sha256', '${MPOS_ADMIN_PIN}' . '${MPOS_SALT}');")
-# api_key matches MPOS's register-time formula: sha256(username . SALT).
-# Without this, every API endpoint (dashboard live updates, navbar refresh,
-# v2/dashboard, etc.) returns 401 because checkApiKey() fails on NULL.
-ADMIN_API_KEY=$(php -r "echo hash('sha256', '${MPOS_ADMIN_USER}' . '${MPOS_SALT}');")
+# Random admin api_key, matching the current register-time behaviour
+# (random_bytes), NOT the old deterministic sha256(username . SALT) — a
+# predictable key lets anyone who knows/cracks SALT call the admin API.
+# The api_key must be non-empty or every API endpoint (dashboard live
+# updates, navbar refresh, v2/dashboard, etc.) returns 401 (checkApiKey()
+# fails on NULL).
+ADMIN_API_KEY=$(php -r 'echo bin2hex(random_bytes(32));')
 ADMIN_EMAIL="${MPOS_ADMIN_EMAIL:-${MPOS_ADMIN_USER}@blakestream.local}"
+# Fill-only on re-run: set the api_key ONLY when it is missing, and otherwise
+# leave the existing value completely untouched. An update must never mutate a
+# key the operator is already relying on. (A pool still carrying the old
+# deterministic sha256(username.SALT) key should rotate it once by hand — see
+# Config-Settings.md — rather than have an update silently change it.)
 mariadb "${MPOS_DB_NAME}" <<SQL || true
 INSERT INTO accounts (username, pass, pin, email, api_key, is_admin, is_locked, no_fees, donate_percent)
 VALUES ('${MPOS_ADMIN_USER}', '${ADMIN_HASH}', '${PIN_HASH}', '${ADMIN_EMAIL}', '${ADMIN_API_KEY}', 1, 0, 1, 0.0)
 ON DUPLICATE KEY UPDATE pass = VALUES(pass), pin = VALUES(pin), email = VALUES(email),
-                        api_key = VALUES(api_key),
+                        api_key = IF(api_key IS NULL OR api_key = '', VALUES(api_key), api_key),
                         is_admin = 1, is_locked = 0;
 SQL
 
