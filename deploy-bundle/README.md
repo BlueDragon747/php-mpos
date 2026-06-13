@@ -339,9 +339,9 @@ all finished.
 By default daemon updates pull `${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG}`.
 The `--build` flag switches to the local source-build path and tags images as
 `local/<coin>:25.2-local` unless `MPOS_DOCKER_HUB` or `MPOS_IMAGE_TAG` is set
-explicitly. `--build` defaults to two concurrent daemon builds to reduce CPU
-pressure on live pool hosts; set `BUILD_CONCURRENCY=1` for a serial build or a
-higher value when the host has enough headroom.
+explicitly. `--build` defaults to one concurrent daemon build per two CPU cores
+available, capped by the number of coins. Set `BUILD_CONCURRENCY=1` for a
+serial build or a higher value when the host has enough headroom.
 
 ### Daemon chain rollback safety
 

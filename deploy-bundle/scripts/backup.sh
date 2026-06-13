@@ -153,10 +153,11 @@ cp "${MPOS_INSTALL_ROOT}/eloipool/config.py" "${WORK}/eloipool-config.py" 2>/dev
 cp "${MPOS_WEB_ROOT}/include/config/global.inc.php" \
     "${WORK}/global.inc.php" 2>/dev/null || true
 
-# Per-coin wallet backup via daemon RPC. Support both deployment shapes:
-# local host daemons under /opt/blakestream-25.2 and Docker containers
-# named by ticker. A raw wallet.dat copy can catch a half-flushed file;
-# `backupwallet` asks the daemon to create a consistent backup.
+# Per-coin wallet backup via daemon RPC. Support current native daemons
+# under MPOS_INSTALL_ROOT/MPOS_DATA_ROOT, older native daemon installs, and
+# Docker containers named by ticker. A raw wallet.dat copy can catch a
+# half-flushed file; `backupwallet` asks the daemon to create a consistent
+# backup.
 echo "==> backing up wallets (RPC backupwallet)"
 mkdir -p "${WORK}/wallets"
 WALLETS=()
@@ -176,6 +177,22 @@ declare -A DAEMON_DATADIR=(
     [elt]=/root/.electron
     [umo]=/root/.universalmolecule
     [lit]=/root/.lithium
+)
+declare -A DEPLOYED_CONF=(
+    [blc]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/blakecoin/blakecoin.conf"
+    [pho]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/photon/photon.conf"
+    [bbtc]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/blakebitcoin/blakebitcoin.conf"
+    [elt]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/electron/electron.conf"
+    [umo]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/universalmol/universalmolecule.conf"
+    [lit]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/lithium/lithium.conf"
+)
+declare -A DEPLOYED_DATADIR=(
+    [blc]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/blakecoin"
+    [pho]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/photon"
+    [bbtc]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/blakebitcoin"
+    [elt]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/electron"
+    [umo]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/universalmol"
+    [lit]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/lithium"
 )
 declare -A LOCAL_CONF=(
     [blc]=/etc/blakestream-25.2/blakecoin.conf
@@ -317,15 +334,38 @@ mkdir -p "${WORK}/daemon-configs"
 for sym in blc pho bbtc elt umo lit; do
     container="$sym"
     cli="${DAEMON_BIN[$sym]}"
-    local_cli="${MPOS_DAEMON_BIN_DIR:-/opt/blakestream-25.2/bin}/${cli}"
-    local_conf="${LOCAL_CONF[$sym]}"
-    local_datadir="${LOCAL_DATADIR[$sym]}"
-    if [ -x "$local_cli" ] && [ -r "$local_conf" ] && [ -d "$local_datadir" ]; then
-        cp -p "$local_conf" "${WORK}/daemon-configs/${sym}.conf" 2>/dev/null || true
-        if backup_local_wallets "$sym" "$local_cli" "$local_conf" "$local_datadir"; then
-            continue
+    local_backed_up=0
+    local_cli_candidates=()
+    if [ -n "${MPOS_DAEMON_BIN_DIR:-}" ]; then
+        local_cli_candidates+=("${MPOS_DAEMON_BIN_DIR}/${cli}")
+    fi
+    local_cli_candidates+=(
+        "${MPOS_INSTALL_ROOT}/bin/${cli}"
+        "/opt/blakestream-25.2/bin/${cli}"
+    )
+    local_conf_candidates=("${DEPLOYED_CONF[$sym]}" "${LOCAL_CONF[$sym]}")
+    local_datadir_candidates=("${DEPLOYED_DATADIR[$sym]}" "${LOCAL_DATADIR[$sym]}")
+    for idx in "${!local_conf_candidates[@]}"; do
+        local_conf="${local_conf_candidates[$idx]}"
+        local_datadir="${local_datadir_candidates[$idx]}"
+        [ -r "$local_conf" ] && [ -d "$local_datadir" ] || continue
+        for local_cli in "${local_cli_candidates[@]}"; do
+            [ -x "$local_cli" ] || continue
+            cp -p "$local_conf" "${WORK}/daemon-configs/${sym}.conf" 2>/dev/null || true
+            if backup_local_wallets "$sym" "$local_cli" "$local_conf" "$local_datadir"; then
+                local_backed_up=1
+                break 2
+            fi
+            echo "    [$sym] local backup failed with ${local_cli}; trying next path"
+        done
+    done
+    if [ "$local_backed_up" = "1" ]; then
+        continue
+    fi
+    if [ -r "${DEPLOYED_CONF[$sym]}" ] || [ -r "${LOCAL_CONF[$sym]}" ]; then
+        if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx "$container"; then
+            echo "    [$sym] local backup failed; trying Docker fallback"
         fi
-        echo "    [$sym] local backup failed; trying Docker fallback"
     fi
 
     if backup_docker_wallet "$sym" "$cli" "$container" "${DAEMON_DATADIR[$sym]}"; then

@@ -35,6 +35,19 @@ COIN_TUPLES=(
     "universalmolecule|universalmolecule-0.25.2|https://github.com/BlueDragon747/universalmol.git|universalmoleculed|universalmolecule-cli|universalmolecule-tx"
 )
 
+default_build_concurrency() {
+    local max="$1" cores concurrency
+    cores="$(nproc 2>/dev/null || echo 2)"
+    concurrency=$((cores / 2))
+    if [ "$concurrency" -lt 1 ]; then
+        concurrency=1
+    fi
+    if [ "$concurrency" -gt "$max" ]; then
+        concurrency="$max"
+    fi
+    printf '%s' "$concurrency"
+}
+
 sync_upstream_repo() {
     local repo="$1" source_dir="$2" repo_url="$3"
     local source_path="${MPOS_DAEMON_BUILD_ROOT}/${source_dir}"
@@ -109,7 +122,9 @@ if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ] || [ -n "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]
         say "building daemons from ${source_root}"
     fi
 
-    for row in "${COIN_TUPLES[@]}"; do
+    build_one_tuple() {
+        local row="$1"
+        local repo source_dir repo_url daemon cli tx source_path output_path binary
         IFS='|' read -r repo source_dir repo_url daemon cli tx <<< "$row"
         if [ -z "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]; then
             sync_upstream_repo "$repo" "$source_dir" "$repo_url"
@@ -139,7 +154,33 @@ if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ] || [ -n "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]
             install -m 0755 "${output_path}/${binary}" "${INSTALL_BIN}/${binary}"
         done
         verify_runtime_links "$repo" "$output_path" "$daemon" "$cli" "$tx"
+    }
+
+    BUILD_CONCURRENCY="${BUILD_CONCURRENCY:-$(default_build_concurrency "${#COIN_TUPLES[@]}")}"
+    say "building daemons with concurrency ${BUILD_CONCURRENCY}"
+    PIDS=()
+    BUILD_FAIL=0
+    for row in "${COIN_TUPLES[@]}"; do
+        while [ "${#PIDS[@]}" -ge "$BUILD_CONCURRENCY" ]; do
+            wait -n 2>/dev/null || BUILD_FAIL=1
+            survivors=()
+            for p in "${PIDS[@]}"; do
+                kill -0 "$p" 2>/dev/null && survivors+=("$p")
+            done
+            PIDS=("${survivors[@]}")
+        done
+        IFS='|' read -r repo _source_dir _repo_url _daemon _cli _tx <<< "$row"
+        say "spawning build for ${repo}"
+        ( build_one_tuple "$row" ) &
+        PIDS+=("$!")
     done
+    for p in "${PIDS[@]}"; do
+        wait "$p" || BUILD_FAIL=1
+    done
+    if [ "$BUILD_FAIL" = "1" ]; then
+        echo "ERROR: one or more daemon builds failed" >&2
+        exit 1
+    fi
 
     "${INSTALL_BIN}/blakecoind" --version >/dev/null
     say "local-built daemons present and link-OK"

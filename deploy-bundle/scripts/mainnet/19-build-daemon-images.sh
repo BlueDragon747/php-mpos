@@ -32,6 +32,19 @@ esac
 
 COINS=(blc pho bbtc elt lit umo)
 
+default_build_concurrency() {
+    local max="$1" cores concurrency
+    cores="$(nproc 2>/dev/null || echo 2)"
+    concurrency=$((cores / 2))
+    if [ "$concurrency" -lt 1 ]; then
+        concurrency=1
+    fi
+    if [ "$concurrency" -gt "$max" ]; then
+        concurrency="$max"
+    fi
+    printf '%s' "$concurrency"
+}
+
 # Wallet repos are pinned by MPOS_DAEMON_SOURCE_REF. Use 0.25.2 for pre-live
 # 25.2 builds; change the source ref to master after live cutover.
 declare -A COIN_REPO=(
@@ -222,15 +235,14 @@ say "daemon source ref: ${MPOS_DAEMON_SOURCE_REF}"
 say "daemon image tag: ${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG}"
 
 MPOS_FORCE_REBUILD="${MPOS_FORCE_REBUILD:-0}"
-BUILD_CONCURRENCY="${BUILD_CONCURRENCY:-3}"
+BUILD_CONCURRENCY="${BUILD_CONCURRENCY:-$(default_build_concurrency "${#COINS[@]}")}"
 MPOS_LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
 MONITOR_LOG="${MPOS_LOG_ROOT}/build-monitor.log"
 mkdir -p "$MPOS_LOG_ROOT"
 : > "$MONITOR_LOG"
 
 # Background system-usage monitor. One 30 s snapshot per line so we can
-# tell at the end whether building 3 coins concurrently strained the
-# 15 GB / 4-vCPU host.
+# tell at the end whether daemon build concurrency strained the host.
 (
     while sleep 30; do
         ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
