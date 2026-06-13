@@ -17,6 +17,7 @@ MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
 MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
 MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
+MPOS_DAEMON_DISABLE_MINIUPNPC="${MPOS_DAEMON_DISABLE_MINIUPNPC:-1}"
 
 if [ -z "$MPOS_DAEMON_BUILD_JOBS" ]; then
     cpu_count="$(nproc 2>/dev/null || echo 2)"
@@ -105,6 +106,31 @@ sync_repo() {
     fi
 }
 
+apply_pool_daemon_build_policy() {
+    local coin="$1"
+    local dir="$MPOS_DAEMON_BUILD_ROOT/${COIN_SOURCE_DIR[$coin]}"
+    local build_script="${dir}/build.sh"
+    local patched_count
+
+    [ "$MPOS_DAEMON_DISABLE_MINIUPNPC" = "1" ] || return 0
+
+    say "applying ${coin} pool daemon build policy: --without-miniupnpc"
+    perl -0pi -e '
+        s/(daemon\)\s+configure_extra="--with-gui=no)(?! --without-miniupnpc)/$1 --without-miniupnpc/g;
+        s/^\s*libminiupnpc-dev\s*\n//mg;
+        s/\s+libminiupnpc-dev\b//g;
+    ' "$build_script"
+    patched_count="$(grep -Ec 'daemon\)[[:space:]]+configure_extra="--with-gui=no --without-miniupnpc' "$build_script" || true)"
+    if [ "$patched_count" -lt 1 ]; then
+        warn "failed to apply --without-miniupnpc to ${build_script}"
+        exit 1
+    fi
+    if grep -Eq '(^|[[:space:]])libminiupnpc-dev([[:space:]]|$)' "$build_script"; then
+        warn "failed to remove libminiupnpc-dev from ${build_script}"
+        exit 1
+    fi
+}
+
 build_coin_binaries() {
     local coin="$1"
     local dir="$MPOS_DAEMON_BUILD_ROOT/${COIN_SOURCE_DIR[$coin]}"
@@ -115,6 +141,33 @@ build_coin_binaries() {
         cd "$dir"
         OUTPUT_BASE="$dir/outputs" ./build.sh --native --daemon "$build_docker_arg" --jobs "$MPOS_DAEMON_BUILD_JOBS"
     )
+}
+
+verify_runtime_links() {
+    local coin="$1"
+    local image="$2"
+    local daemon="$3"
+    local cli="$4"
+    local tx="$5"
+    local disable_miniupnpc="$MPOS_DAEMON_DISABLE_MINIUPNPC"
+
+    say "verifying ${coin} runtime links"
+    docker run --rm --entrypoint /bin/sh "$image" -lc "
+set -eu
+for bin in /usr/local/bin/${daemon} /usr/local/bin/${cli} /usr/local/bin/${tx}; do
+    echo \"=== \${bin} ===\"
+    ldd \"\${bin}\" > /tmp/ldd.out
+    cat /tmp/ldd.out
+    if grep -q 'not found' /tmp/ldd.out; then
+        echo \"missing runtime dependency for \${bin}\" >&2
+        exit 1
+    fi
+    if [ '${disable_miniupnpc}' = '1' ] && grep -q 'miniupnpc' /tmp/ldd.out; then
+        echo \"\${bin} still links miniupnpc; pool daemon builds must use --without-miniupnpc\" >&2
+        exit 1
+    fi
+done
+"
 }
 
 package_coin_image() {
@@ -147,9 +200,8 @@ RUN apt-get update -qq \\
         libboost-program-options1.83.0 \\
         libboost-thread1.83.0 \\
         libboost-chrono1.83.0 \\
-        libevent-2.1-7 \\
-        libevent-pthreads-2.1-7 \\
-        libminiupnpc17 \\
+        libevent-2.1-7t64 \\
+        libevent-pthreads-2.1-7t64 \\
         libsqlite3-0 \\
         libssl3 \\
         libstdc++6 \\
@@ -163,6 +215,7 @@ EOF
 
     docker run --rm --entrypoint /bin/sh "$image" -lc \
         "/usr/local/bin/${daemon} --version >/dev/null 2>&1 || /usr/local/bin/${daemon} -version >/dev/null"
+    verify_runtime_links "$coin" "$image" "$daemon" "$cli" "$tx"
 }
 
 say "daemon source ref: ${MPOS_DAEMON_SOURCE_REF}"
@@ -207,6 +260,7 @@ build_one_coin() {
         return 0
     fi
     sync_repo "$coin"
+    apply_pool_daemon_build_policy "$coin"
     build_coin_binaries "$coin"
     package_coin_image "$coin"
 }

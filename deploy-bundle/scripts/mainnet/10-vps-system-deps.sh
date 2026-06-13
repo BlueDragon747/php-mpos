@@ -31,6 +31,10 @@ apt-get -qq install -y \
     php${PHP_VER}-curl php${PHP_VER}-gd php${PHP_VER}-memcached \
     php${PHP_VER}-mbstring php${PHP_VER}-xml \
     memcached libmemcached-tools \
+    libboost-filesystem1.83.0 libboost-program-options1.83.0 \
+    libboost-thread1.83.0 libboost-chrono1.83.0 \
+    libevent-2.1-7t64 libevent-pthreads-2.1-7t64 \
+    libsqlite3-0 libssl3 libstdc++6 libzmq5 \
     python3 python3-venv python3-pip
 
 # Docker repo + docker-ce.
