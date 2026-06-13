@@ -211,6 +211,15 @@ wallet_label() {
     fi
 }
 
+wallet_rpc_arg() {
+    local wallet="${1:-__default__}"
+    if [ -z "$wallet" ] || [ "$wallet" = "__default__" ]; then
+        printf '%s' "-rpcwallet="
+    else
+        printf '%s' "-rpcwallet=${wallet}"
+    fi
+}
+
 list_local_wallets() {
     local cli="$1" conf="$2" datadir="$3" wallets
     wallets=$("$cli" -conf="$conf" -datadir="$datadir" listwallets 2>/dev/null \
@@ -238,9 +247,7 @@ backup_local_wallets() {
         out="${WORK}/wallets/${sym}-${safe}.dat"
         total=$((total + 1))
         cmd=("$cli" -conf="$conf" -datadir="$datadir")
-        if [ "$wallet" != "__default__" ]; then
-            cmd+=("-rpcwallet=$wallet")
-        fi
+        cmd+=("$(wallet_rpc_arg "$wallet")")
         cmd+=(backupwallet "$tmp")
         if "${cmd[@]}" >/dev/null 2>&1 && cp "$tmp" "$out" 2>/dev/null; then
             rm -f "$tmp" 2>/dev/null || true
@@ -257,24 +264,53 @@ backup_local_wallets() {
     [ "$total" -gt 0 ] && [ "$ok" -gt 0 ] && [ "$failures" -eq 0 ]
 }
 
+list_docker_wallets() {
+    local container="$1" cli="$2" datadir="$3" wallets
+    wallets=$(docker exec "$container" "$cli" -datadir="$datadir" listwallets 2>/dev/null \
+        | sed -n 's/^[[:space:]]*"\(.*\)"[[:space:]]*,\{0,1\}[[:space:]]*$/\1/p' \
+        || true)
+    if [ -z "$wallets" ]; then
+        printf '%s\n' "__default__"
+    else
+        printf '%s\n' "$wallets"
+    fi
+}
+
 backup_docker_wallet() {
-    local sym="$1" cli="$2" container="$3" datadir="$4" inner_path="$5"
+    local sym="$1" cli="$2" container="$3" datadir="$4"
+    local wallet safe label tmp out ok failures total
     if ! command -v docker >/dev/null 2>&1 \
         || ! docker ps --format '{{.Names}}' | grep -qx "$container"; then
         return 1
     fi
-    if docker exec "$container" "$cli" -datadir="$datadir" backupwallet "$inner_path" >/dev/null 2>&1; then
-        if docker cp "${container}:${inner_path}" "${WORK}/wallets/${sym}.dat" 2>/dev/null; then
-            echo "    [$sym] Docker wallet backed up ($(du -h "${WORK}/wallets/${sym}.dat" | cut -f1))"
-            WALLETS+=("${sym}/default")
-            docker exec "$container" rm -f "$inner_path" 2>/dev/null || true
-            return 0
+    ok=0
+    failures=0
+    total=0
+    while IFS= read -r wallet; do
+        [ -n "$wallet" ] || wallet="__default__"
+        safe="$(wallet_safe_name "$wallet")"
+        label="$(wallet_label "$wallet")"
+        tmp="${datadir}/${sym}-wallet-${STAMP}-${safe}.dat"
+        out="${WORK}/wallets/${sym}-${safe}.dat"
+        total=$((total + 1))
+        if docker exec "$container" "$cli" -datadir="$datadir" \
+            "$(wallet_rpc_arg "$wallet")" backupwallet "$tmp" >/dev/null 2>&1; then
+            if docker cp "${container}:${tmp}" "$out" 2>/dev/null; then
+                echo "    [$sym] Docker wallet ${label} backed up ($(du -h "$out" | cut -f1))"
+                WALLETS+=("${sym}/${label}")
+                docker exec "$container" rm -f "$tmp" 2>/dev/null || true
+                ok=$((ok + 1))
+                continue
+            fi
+            echo "    [$sym] WARN: Docker wallet ${label} backup succeeded but docker cp failed"
+        else
+            echo "    [$sym] WARN: Docker wallet ${label} RPC backup failed"
         fi
-        echo "    [$sym] WARN: Docker backupwallet succeeded but docker cp failed"
-        return 1
-    fi
-    echo "    [$sym] WARN: Docker wallet RPC backup failed"
-    return 1
+        docker exec "$container" rm -f "$tmp" 2>/dev/null || true
+        failures=$((failures + 1))
+    done < <(list_docker_wallets "$container" "$cli" "$datadir")
+
+    [ "$total" -gt 0 ] && [ "$ok" -gt 0 ] && [ "$failures" -eq 0 ]
 }
 
 mkdir -p "${WORK}/daemon-configs"
@@ -292,8 +328,7 @@ for sym in blc pho bbtc elt umo lit; do
         echo "    [$sym] local backup failed; trying Docker fallback"
     fi
 
-    inner_path="${DAEMON_DATADIR[$sym]}/${sym}-wallet-${STAMP}.dat"
-    if backup_docker_wallet "$sym" "$cli" "$container" "${DAEMON_DATADIR[$sym]}" "$inner_path"; then
+    if backup_docker_wallet "$sym" "$cli" "$container" "${DAEMON_DATADIR[$sym]}"; then
         continue
     else
         echo "    [$sym] WARN: no working local or Docker wallet backup path"

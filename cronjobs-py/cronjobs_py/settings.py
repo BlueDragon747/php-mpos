@@ -15,9 +15,10 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from .errors import Fatal
-from .rpc import Endpoint
+from .rpc import Endpoint, default_wallet_url
 
 
 @dataclass(frozen=True)
@@ -147,6 +148,17 @@ def _coin_from_slot(slot: str, raw: dict[str, Any]) -> CoinConfig | None:
         return None
     host = str(w["host"]).strip().rstrip("/")
     url = host if host.startswith(("http://", "https://")) else f"http://{host}"
+    wallet_url = str(w.get("wallet_url", "") or "").strip().rstrip("/")
+    wallet_name = str(w.get("wallet_name", "") or w.get("rpcwallet", "") or "")
+    parsed = urlsplit(url)
+    if parsed.path.startswith("/wallet/") or parsed.path == "/wallet":
+        wallet_url = wallet_url or url
+        url = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    elif not wallet_url:
+        if wallet_name:
+            wallet_url = url.rstrip("/") + "/wallet/" + quote(wallet_name, safe="")
+        else:
+            wallet_url = default_wallet_url(url)
     payout_key = "payout_system" if slot == "" else f"payout_system_{slot}"
     return CoinConfig(
         slot=slot,
@@ -155,6 +167,7 @@ def _coin_from_slot(slot: str, raw: dict[str, Any]) -> CoinConfig | None:
             user=w.get("username", ""),
             password=w.get("password", ""),
             label=key,
+            wallet_url=wallet_url,
         ),
         payout_system=str(raw.get(payout_key, "pplns")),
     )

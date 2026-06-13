@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from cronjobs_py.settings import _php_dump_config
+from cronjobs_py.settings import _coin_from_slot, _php_dump_config
 
 
 def test_php_config_loader_matches_mpos_dist_then_override(tmp_path):
@@ -45,3 +45,31 @@ $config['wallet']['host'] = '127.0.0.1:8772/wallet/pool';
     assert raw["pplns"]["blockavg"]["blockcount"] == 5
     assert raw["db"]["host"] == "localhost"
     assert raw["db"]["user"] == "operator-user"
+
+
+def test_coin_config_sets_25_2_default_wallet_endpoint() -> None:
+    coin = _coin_from_slot("", {
+        "wallet": {
+            "host": "localhost:8772",
+            "username": "u",
+            "password": "p",
+        },
+    })
+
+    assert coin is not None
+    assert coin.endpoint.url == "http://localhost:8772"
+    assert coin.endpoint.wallet_url == "http://localhost:8772/wallet/"
+
+
+def test_coin_config_splits_explicit_wallet_path_from_node_root() -> None:
+    coin = _coin_from_slot("mm1", {
+        "wallet_mm1": {
+            "host": "http://localhost:8243/wallet/pool",
+            "username": "u",
+            "password": "p",
+        },
+    })
+
+    assert coin is not None
+    assert coin.endpoint.url == "http://localhost:8243"
+    assert coin.endpoint.wallet_url == "http://localhost:8243/wallet/pool"

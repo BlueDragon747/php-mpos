@@ -191,21 +191,27 @@ unit_exists() {
     systemctl cat "$1" >/dev/null 2>&1
 }
 
-stop_pool_for_daemon_update() {
-    say "stopping Stratum server before daemon update"
+stop_pool_services_for_update() {
+    local reason="${1:-update}"
+
+    say "stopping Stratum server before ${reason}"
     if unit_exists blakestream-mpos-eloipool.service; then
         systemctl stop blakestream-mpos-eloipool.service
         say "Stratum server stopped"
     else
         say "Stratum service not installed; skipping"
     fi
-    say "stopping merged-mine proxy before daemon update"
+    say "stopping merged-mine proxy before ${reason}"
     if unit_exists blakestream-mpos-mergeminer.service; then
         systemctl stop blakestream-mpos-mergeminer.service
         say "merged-mine proxy stopped"
     else
         say "merged-mine proxy service not installed; skipping"
     fi
+}
+
+stop_pool_for_daemon_update() {
+    stop_pool_services_for_update "daemon update"
 }
 
 wait_merged_mine_proxy_ready() {
@@ -499,13 +505,20 @@ update_daemons() {
 }
 
 update_eloipool() {
+    local defer_start="${MPOS_DEFER_POOL_START:-0}"
+
     say "starting Eloipool update"
     sync_mpos_repo
-    sync_eloipool_repo
-    if [ "${MPOS_DEFER_POOL_START:-0}" = "1" ]; then
+    if [ "$defer_start" = "1" ]; then
         say "full update selected; Eloipool install will not start Stratum yet"
+    else
+        stop_pool_services_for_update "Eloipool rebuild"
     fi
-    bash "${MAINNET_SCRIPTS}/40-install-pool.sh"
+    sync_eloipool_repo
+    MPOS_DEFER_POOL_START=1 bash "${MAINNET_SCRIPTS}/40-install-pool.sh"
+    if [ "$defer_start" != "1" ]; then
+        start_pool_services_after_update
+    fi
     say "Eloipool update finished"
 }
 

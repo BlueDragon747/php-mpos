@@ -73,6 +73,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now blakestream-mpos-cronjobs.service
+systemctl enable blakestream-mpos-cronjobs.service
+systemctl restart blakestream-mpos-cronjobs.service
 say "step 70 done — cronjobs-py is AUTHORITATIVE; PHP cron NOT installed."
 say "  drift gate (shadow mode): set CRONJOBS_PY_SHADOW_MODE=1 in unit + reinstall /etc/cron.d/blakestream-mpos"
