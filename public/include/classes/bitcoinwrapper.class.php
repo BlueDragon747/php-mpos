@@ -26,9 +26,10 @@ class BitcoinWrapper extends BitcoinClient {
     $this->username = $username;
     $this->password = $password;
     $this->host = $host;
-    // Parse port from host:port for cache key generation
-    if (strpos($host, ':') !== false) {
-      list($host_part, $port_part) = explode(':', $host);
+    // Parse port from host:port for cache key generation; host may include a wallet RPC path.
+    $host_for_port = preg_replace('#/.*$#', '', $host);
+    if (strpos($host_for_port, ':') !== false) {
+      list($host_part, $port_part) = explode(':', $host_for_port, 2);
       $this->port = $port_part;
     } else {
       $this->port = '';
