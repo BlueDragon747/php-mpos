@@ -26,6 +26,7 @@
          data-pplns-target="{$V2_PPLNS_TARGET}"
          data-balances='{$V2_BALANCES_JSON nofilter}'
          data-stats='{$V2_STATS_JSON nofilter}'
+         data-account='{$V2_ACCOUNT_JSON nofilter}'
          data-messages='{$V2_MESSAGES_JSON nofilter}'
          data-session-key="{$V2_SESSION_KEY}"></div>
     <p class="bsx-v2-debug">debug: {$V2_DEBUG}</p>

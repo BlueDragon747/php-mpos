@@ -27,6 +27,12 @@ interface InitialBalance {
   inflight?: number;
 }
 
+interface AccountInfo {
+  fees: number;
+  noFees: boolean;
+  donatePercent: number;
+}
+
 const props = withDefaults(defineProps<{
   apiKey: string;
   userId: number;
@@ -36,11 +42,13 @@ const props = withDefaults(defineProps<{
   currency: string;
   pplnsTarget: string;
   initialBalances?: InitialBalance[];
+  accountInfo?: AccountInfo;
   initialStats?: CoinStats[];
   initialMessages?: PoolMessage[];
   sessionKey?: string;
 }>(), {
   initialBalances: () => [],
+  accountInfo: () => ({ fees: 0, noFees: true, donatePercent: 0 }),
   initialStats: () => [],
   initialMessages: () => [],
   sessionKey: 'anon',
@@ -140,12 +148,9 @@ const workersList = computed(() => {
   return workersResp.value?.getuserworkers.data ?? [];
 });
 
-// Banner. fees/noFees/donatePercent are hardcoded to match the admin seed
-// (no_fees=1, donate_percent=0.0). TODO: surface via controller — legacy
-// reads $GLOBAL.fees / $GLOBAL.userdata.no_fees / .donate_percent.
-const fees = computed(() => 0);
-const noFees = computed(() => true);
-const donatePercent = computed(() => 0);
+const fees = computed(() => Number(props.accountInfo?.fees ?? 0));
+const noFees = computed(() => Boolean(props.accountInfo?.noFees));
+const donatePercent = computed(() => Number(props.accountInfo?.donatePercent ?? 0));
 
 // Pool messages — instead of an overlay, the gauges card flips in
 // place to show the messages on its "back". Dismissal stored in
@@ -763,7 +768,7 @@ function formatDate(iso: string): string {
 .bsx-msg-body blockquote { margin: 0 0 8px; padding: 4px 10px; border-left: 3px solid rgba(255,255,255,0.18); font-style: italic; }
 .bsx-msg-empty { font-size: 13px; opacity: 0.6; text-align: center; padding: 1em; }
 
-.banner { font-size: 13px; color: #cdd; margin: 0 0 12px; line-height: 1.4; }
+.banner { font-size: 12px; color: #cdd; margin: 0 0 12px; line-height: 1.4; text-align: center; }
 .banner .fees { color: #f5cba7; font-weight: 700; }
 .banner .donate { color: #b5e7a0; font-weight: 700; }
 

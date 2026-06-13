@@ -45,44 +45,44 @@ case 'admin':
 
 // Gernerate the GET URL for filters
 $aUsers = array();
-if (isset($_REQUEST['filter'])) {
-  // Fetch round shares for estimates
-  $aRoundShares = $statistics->getRoundShares();
+$filters = (isset($_REQUEST['filter']) && is_array($_REQUEST['filter'])) ? $_REQUEST['filter'] : array();
 
-  // Create filter URL for pagination arrows
-  $strFilters = '';
-  foreach (@$_REQUEST['filter'] as $filter => $value) {
-    $filter = "filter[$filter]";
-    $strFilters .= "&$filter=$value";
-  }
-  $smarty->assign('FILTERS', $strFilters);
+// Fetch round shares for estimates
+$aRoundShares = $statistics->getRoundShares();
 
-  // Fetch requested users
-  if ($real = $statistics->getAllUserStats($_REQUEST['filter'], $iLimit, $start)) {
-    $aUsers = $real;
-    // Add additional stats to each user
-    foreach ($aUsers as $iKey => $aUser) {
-      $aBalance = $transaction->getBalance($aUser['id']);
-      $aUser['balance'] = $aBalance['confirmed'];
-      $aUser['hashrate'] = $statistics->getUserHashrate($aUser['username'], $aUser['id']);
+// Create filter URL for pagination arrows
+$strFilters = '';
+foreach ($filters as $filter => $value) {
+  $filter = "filter[$filter]";
+  $strFilters .= "&$filter=$value";
+}
+$smarty->assign('FILTERS', $strFilters);
 
-      if ($config['payout_system'] == 'pps') {
-        $aUser['sharerate'] = $statistics->getUserSharerate($aUser['username'], $aUser['id']);
-        $aUser['difficulty'] = $statistics->getUserShareDifficulty($aUser['username'], $aUser['id']);
-        $aUser['estimates'] = $statistics->getUserEstimates($aUser['sharerate'], $aUser['difficulty'], $user->getUserDonatePercent($aUser['id']), $user->getUserNoFee($aUser['id']), $statistics->getPPSValue());
-      } else {
-        $aUser['estimates'] = $statistics->getUserEstimates($aRoundShares, $aUser['shares'], $aUser['donate_percent'], $aUser['no_fees']);
-      }
-      $aUsers[$iKey] = $aUser;
+// Fetch requested users. With no filter submitted, show the first page
+// so admins can find newly locked registration accounts immediately.
+$real = $statistics->getAllUserStats($filters, $iLimit, $start);
+if (is_array($real)) {
+  $aUsers = $real;
+  // Add additional stats to each user
+  foreach ($aUsers as $iKey => $aUser) {
+    $aBalance = $transaction->getBalance($aUser['id']);
+    $aUser['balance'] = $aBalance['confirmed'];
+    $aUser['hashrate'] = $statistics->getUserHashrate($aUser['username'], $aUser['id']);
+
+    if ($config['payout_system'] == 'pps') {
+      $aUser['sharerate'] = $statistics->getUserSharerate($aUser['username'], $aUser['id']);
+      $aUser['difficulty'] = $statistics->getUserShareDifficulty($aUser['username'], $aUser['id']);
+      $aUser['estimates'] = $statistics->getUserEstimates($aUser['sharerate'], $aUser['difficulty'], $user->getUserDonatePercent($aUser['id']), $user->getUserNoFee($aUser['id']), $statistics->getPPSValue());
+    } else {
+      $aUser['estimates'] = $statistics->getUserEstimates($aRoundShares, $aUser['shares'], $aUser['donate_percent'], $aUser['no_fees']);
     }
-  } else {
-    $_SESSION['POPUP'][] = array('CONTENT' => 'Could not find any users', 'TYPE' => 'errormsg');
+    $aUsers[$iKey] = $aUser;
   }
+} else {
+  $_SESSION['POPUP'][] = array('CONTENT' => 'Could not fetch users', 'TYPE' => 'errormsg');
 }
 
-if (!empty($aUsers)) {
-  $smarty->assign("USERS", $aUsers);
-}
+$smarty->assign("USERS", $aUsers);
 
 // Tempalte specifics
 $smarty->assign("CONTENT", "default.tpl");

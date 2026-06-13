@@ -14,6 +14,12 @@ const payoutSystem = root.dataset.payoutSystem ?? 'pplns';
 const currency = root.dataset.currency ?? 'BLC';
 const pplnsTarget = root.dataset.pplnsTarget ?? '';
 
+interface AccountInfo {
+  fees: number;
+  noFees: boolean;
+  donatePercent: number;
+}
+
 interface InitialBalance {
   key: string;
   currency: string;
@@ -25,6 +31,13 @@ try {
   initialBalances = JSON.parse(root.dataset.balances ?? '[]') as InitialBalance[];
 } catch {
   initialBalances = [];
+}
+
+let accountInfo: AccountInfo = { fees: 0, noFees: true, donatePercent: 0 };
+try {
+  accountInfo = JSON.parse(root.dataset.account ?? '{}') as AccountInfo;
+} catch {
+  accountInfo = { fees: 0, noFees: true, donatePercent: 0 };
 }
 
 let initialStats: unknown[] = [];
@@ -51,6 +64,7 @@ createApp(DashboardPage, {
   currency,
   pplnsTarget,
   initialBalances,
+  accountInfo,
   initialStats,
   initialMessages,
   sessionKey,
