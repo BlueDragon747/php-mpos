@@ -14,8 +14,10 @@ class _FakeSession:
         self.response = response
         self.auth = None
         self.headers = {}
+        self.calls = []
 
-    def post(self, *_args, **_kwargs):
+    def post(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
         return self.response
 
 
@@ -57,3 +59,44 @@ def test_nonidempotent_non_json_http_500_stays_indeterminate() -> None:
 
     with pytest.raises(Indeterminate, match="outcome unknown"):
         client.call_nonidempotent("sendtoaddress", "addr", 1.0)
+
+
+def test_wallet_methods_use_wallet_endpoint_and_node_methods_use_root() -> None:
+    response = _json_response(200, {
+        "result": "ok",
+        "error": None,
+        "id": 1,
+    })
+    fake = _FakeSession(response)
+    client = RpcClient(Endpoint(
+        "http://127.0.0.1:8332",
+        "u",
+        "p",
+        "wallet",
+        wallet_url="http://127.0.0.1:8332/wallet/",
+    ))
+    client._session = fake  # type: ignore[assignment]
+
+    client.call("getblockcount")
+    client.call("getbalance")
+    client.call_nonidempotent("sendtoaddress", "addr", 1.0)
+
+    assert fake.calls[0][0][0] == "http://127.0.0.1:8332"
+    assert fake.calls[1][0][0] == "http://127.0.0.1:8332/wallet/"
+    assert fake.calls[2][0][0] == "http://127.0.0.1:8332/wallet/"
+
+
+def test_mixed_root_wallet_batch_is_rejected() -> None:
+    client = RpcClient(Endpoint(
+        "http://127.0.0.1:8332",
+        "u",
+        "p",
+        "wallet",
+        wallet_url="http://127.0.0.1:8332/wallet/",
+    ))
+
+    with pytest.raises(Fatal, match="mixed root/wallet RPC batch"):
+        client.batch([
+            ("getblockcount", []),
+            ("getbalance", []),
+        ])

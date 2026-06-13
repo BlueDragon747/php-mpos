@@ -33,10 +33,32 @@ class Endpoint:
     user: str
     password: str
     label: str = ""
+    wallet_url: str | None = None
 
     @property
     def display(self) -> str:
         return self.label or self.url
+
+
+WALLET_METHODS = frozenset({
+    "backupwallet",
+    "getbalance",
+    "getnewaddress",
+    "gettransaction",
+    "getwalletinfo",
+    "listtransactions",
+    "listsinceblock",
+    "listunspent",
+    "lockunspent",
+    "sendtoaddress",
+    "validateaddress",
+    "walletcreatefundedpsbt",
+    "walletprocesspsbt",
+})
+
+
+def default_wallet_url(url: str) -> str:
+    return url.rstrip("/") + "/wallet/"
 
 
 class RpcClient:
@@ -72,6 +94,11 @@ class RpcClient:
         self._id += 1
         return self._id
 
+    def _url_for_method(self, method: str) -> str:
+        if method in WALLET_METHODS:
+            return self.endpoint.wallet_url or default_wallet_url(self.endpoint.url)
+        return self.endpoint.url
+
     def call(self, method: str, *params: Any) -> Any:
         """Idempotent JSON-RPC call. Retries on transient failures.
 
@@ -90,7 +117,10 @@ class RpcClient:
             "method": method,
             "params": list(params),
         }
-        return self._request_idempotent(payload)["result"]
+        return self._request_idempotent(
+            payload,
+            url=self._url_for_method(method),
+        )["result"]
 
     def call_nonidempotent(self, method: str, *params: Any) -> Any:
         """Single JSON-RPC call with NO retry on connection error/timeout.
@@ -115,7 +145,11 @@ class RpcClient:
             "method": method,
             "params": list(params),
         }
-        return self._request_nonidempotent(payload, method)["result"]
+        return self._request_nonidempotent(
+            payload,
+            method,
+            url=self._url_for_method(method),
+        )["result"]
 
     def batch(self, calls: Iterable[tuple[str, list[Any]] | tuple[str]]) -> list[Any]:
         """Batched JSON-RPC. Returns results in input order.
@@ -129,8 +163,17 @@ class RpcClient:
         if not items:
             return []
         payload = []
+        batch_url: str | None = None
         for entry in items:
             method = entry[0]
+            url = self._url_for_method(method)
+            if batch_url is None:
+                batch_url = url
+            elif url != batch_url:
+                raise Fatal(
+                    f"{self.endpoint.display}: mixed root/wallet RPC batch "
+                    f"is not supported"
+                )
             params = list(entry[1]) if len(entry) > 1 else []
             payload.append({
                 "jsonrpc": "1.0",
@@ -138,7 +181,11 @@ class RpcClient:
                 "method": method,
                 "params": params,
             })
-        responses = self._request_idempotent(payload, batched=True)
+        responses = self._request_idempotent(
+            payload,
+            batched=True,
+            url=batch_url or self.endpoint.url,
+        )
         # Order responses to match input order by id.
         by_id = {r["id"]: r for r in responses}
         out: list[Any] = []
@@ -156,7 +203,7 @@ class RpcClient:
         return out
 
     def _request_idempotent(
-        self, payload: Any, *, batched: bool = False
+        self, payload: Any, *, batched: bool = False, url: str | None = None
     ) -> Any:
         """Submit and retry on transport failure. Safe ONLY for calls
         whose retry semantics are idempotent — see `call_nonidempotent`
@@ -165,7 +212,7 @@ class RpcClient:
         for attempt in range(1, self.max_attempts + 1):
             try:
                 resp = self._session.post(
-                    self.endpoint.url,
+                    url or self.endpoint.url,
                     json=payload,
                     timeout=self.timeout,
                 )
@@ -225,7 +272,9 @@ class RpcClient:
             f"(last error: {last_exc})"
         ) from last_exc
 
-    def _request_nonidempotent(self, payload: Any, method: str) -> Any:
+    def _request_nonidempotent(
+        self, payload: Any, method: str, *, url: str | None = None
+    ) -> Any:
         """One-shot submit. Connection error or timeout raises
         `Indeterminate` (the request may have been broadcast). A
         confirmed daemon error response raises `Fatal` (the daemon
@@ -239,7 +288,7 @@ class RpcClient:
         """
         try:
             resp = self._session.post(
-                self.endpoint.url,
+                url or self.endpoint.url,
                 json=payload,
                 timeout=self.timeout,
             )
