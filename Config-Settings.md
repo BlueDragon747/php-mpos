@@ -45,6 +45,7 @@ already root, use `bash deploy-bundle/deploy-mainnet.sh`.
 | `MPOS_DAEMON_BUILD_ROOT` | `/root/blakestream-daemon-builds` | Working dir for cloned coin source trees (~15 GB total). |
 | `MPOS_DAEMON_BUILD_JOBS` | `nproc - 1` | Parallel build jobs per coin. |
 | `MPOS_DAEMON_BUILD_DOCKER_MODE` | `pull` | `pull` uses the pre-built native-base build image; `build` builds it locally. Slower but reproducible. |
+| `MPOS_DAEMON_DISABLE_MINIUPNPC` | `1` | Source-built pool daemon binaries use `--without-miniupnpc` by default. Pool nodes use fixed networking and should not link the UPnP runtime library. |
 | `MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD` | (unset) | Optional command run by `update-mainnet.sh --daemons` after all daemon containers stop cleanly and before images/containers are updated. Use this for provider, ZFS, Btrfs, or LVM snapshots of the six daemon data folders. The update stops if this command fails. This is separate from MPOS DB/wallet backups. `MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD` is also accepted for compatibility. |
 
 **Source repos cloned when building:**

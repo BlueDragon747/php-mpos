@@ -22,6 +22,7 @@ MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-build
 MPOS_LOCAL_DAEMON_REPO_ROOT="${MPOS_LOCAL_DAEMON_REPO_ROOT:-}"
 MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
 MPOS_DAEMON_HARDENED_RELEASE="${MPOS_DAEMON_HARDENED_RELEASE:-1}"
+MPOS_DAEMON_DISABLE_MINIUPNPC="${MPOS_DAEMON_DISABLE_MINIUPNPC:-1}"
 mkdir -p "$INSTALL_BIN" "$INSTALL_LIB"
 
 # (image_repo, source_dir, upstream_repo, daemon, cli, tx)
@@ -52,6 +53,48 @@ sync_upstream_repo() {
     chmod +x "${source_path}/build.sh"
 }
 
+apply_pool_daemon_build_policy() {
+    local repo="$1" source_path="$2" build_script="${source_path}/build.sh"
+    local patched_count
+
+    [ "$MPOS_DAEMON_DISABLE_MINIUPNPC" = "1" ] || return 0
+
+    say "applying ${repo} pool daemon build policy: --without-miniupnpc"
+    perl -0pi -e '
+        s/(daemon\)\s+configure_extra="--with-gui=no)(?! --without-miniupnpc)/$1 --without-miniupnpc/g;
+        s/^\s*libminiupnpc-dev\s*\n//mg;
+        s/\s+libminiupnpc-dev\b//g;
+    ' "$build_script"
+    patched_count="$(grep -Ec 'daemon\)[[:space:]]+configure_extra="--with-gui=no --without-miniupnpc' "$build_script" || true)"
+    if [ "$patched_count" -lt 1 ]; then
+        echo "ERROR: failed to apply --without-miniupnpc to ${build_script}" >&2
+        exit 1
+    fi
+    if grep -Eq '(^|[[:space:]])libminiupnpc-dev([[:space:]]|$)' "$build_script"; then
+        echo "ERROR: failed to remove libminiupnpc-dev from ${build_script}" >&2
+        exit 1
+    fi
+}
+
+verify_runtime_links() {
+    local repo="$1" output_path="$2" daemon="$3" cli="$4" tx="$5"
+    local binary ldd_out
+
+    say "verifying ${repo} runtime links"
+    for binary in "$daemon" "$cli" "$tx"; do
+        ldd_out="$(ldd "${output_path}/${binary}")"
+        printf '%s\n' "$ldd_out"
+        if grep -q 'not found' <<<"$ldd_out"; then
+            echo "ERROR: missing runtime dependency for ${output_path}/${binary}" >&2
+            exit 1
+        fi
+        if [ "$MPOS_DAEMON_DISABLE_MINIUPNPC" = "1" ] && grep -q 'miniupnpc' <<<"$ldd_out"; then
+            echo "ERROR: ${output_path}/${binary} still links miniupnpc; pool daemon builds must use --without-miniupnpc" >&2
+            exit 1
+        fi
+    done
+}
+
 if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ] || [ -n "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]; then
     if [ -z "$MPOS_DAEMON_BUILD_JOBS" ]; then
         cores="$(nproc 2>/dev/null || echo 2)"
@@ -78,6 +121,7 @@ if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ] || [ -n "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]
             echo "ERROR: missing executable build.sh in ${source_path}" >&2
             exit 1
         }
+        apply_pool_daemon_build_policy "$repo" "$source_path"
 
         say "building ${repo} with ${MPOS_DAEMON_BUILD_JOBS} jobs"
         (
@@ -94,6 +138,7 @@ if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ] || [ -n "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]
             }
             install -m 0755 "${output_path}/${binary}" "${INSTALL_BIN}/${binary}"
         done
+        verify_runtime_links "$repo" "$output_path" "$daemon" "$cli" "$tx"
     done
 
     "${INSTALL_BIN}/blakecoind" --version >/dev/null
