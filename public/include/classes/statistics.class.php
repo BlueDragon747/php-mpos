@@ -461,9 +461,7 @@ class Statistics extends Base {
         $row['shares'] = $this->getUserShares($row['username'], $row['id']);
         $aUsers[] = $row;
       }
-      if (count($aUsers) > 0) {
-        return $aUsers;
-      }
+      return $aUsers;
     }
     return $this->sqlError();
   }

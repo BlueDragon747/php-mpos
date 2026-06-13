@@ -1049,18 +1049,24 @@ class User extends Base {
     $signup_time = time();
 
     if ($this->checkStmt($stmt) && $stmt->bind_param('sssissi', $username_clean, $password_hash, $email1, $signup_time, $pin_hash, $apikey_hash, $is_locked) && $stmt->execute()) {
+      $account_id = (int)$stmt->insert_id;
       if (! $this->setting->getValue('accounts_confirm_email_disabled') && $is_admin != 1) {
-        if ($token = $this->token->createToken('confirm_email', $stmt->insert_id)) {
+        if ($token = $this->token->createToken('confirm_email', $account_id)) {
           $aData['username'] = $username_clean;
           $aData['token'] = $token;
           $aData['email'] = $email1;
           $aData['subject'] = 'E-Mail verification';
           if (!$this->mail->sendMail('register/confirm_email', $aData)) {
+            $this->token->deleteToken($token);
+            $cleanup = $this->mysqli->prepare("DELETE FROM $this->table WHERE id = ? LIMIT 1");
+            if ($cleanup) { $cleanup->bind_param('i', $account_id); $cleanup->execute(); }
             $this->setErrorMessage('Unable to request email confirmation: ' . $this->mail->getError());
             return false;
           }
           return true;
         } else {
+          $cleanup = $this->mysqli->prepare("DELETE FROM $this->table WHERE id = ? LIMIT 1");
+          if ($cleanup) { $cleanup->bind_param('i', $account_id); $cleanup->execute(); }
           $this->setErrorMessage('Failed to create confirmation token');
           $this->debug->append('Unable to create confirm_email token: ' . $this->token->getError());
           return false;

@@ -323,6 +323,7 @@
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    line-height: 16px;
   }
   .admin-user-v2 .bsx-toggle-wrap input[type=checkbox] {
     position: absolute;
@@ -335,8 +336,8 @@
   }
   .admin-user-v2 .bsx-toggle {
     position: relative;
-    width: 32px;
-    height: 18px;
+    width: 28px;
+    height: 16px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.10);
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -347,8 +348,8 @@
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: #cdd;
     transition: transform 180ms ease, background 180ms ease;
@@ -358,7 +359,7 @@
     border-color: rgba(79, 195, 247, 0.65);
   }
   .admin-user-v2 .bsx-toggle-wrap input[type=checkbox]:checked + .bsx-toggle::after {
-    transform: translateX(14px);
+    transform: translateX(12px);
     background: #ffffff;
   }
   /* Locked toggle gets a warning tint when on — highlights "this user is locked". */

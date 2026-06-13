@@ -163,6 +163,8 @@
     flex: 1 1 auto;
   }
   .bsx-system-page .wallets-table .muted { color: #99a; font-style: italic; }
+  .bsx-system-page .wallets-table th,
+  .bsx-system-page .wallets-table td { white-space: nowrap; }
   .bsx-system-page .daemon-card .bsx-card-body { overflow: visible; }
   .bsx-system-page .daemon-table {
     width: max-content;
@@ -1606,7 +1608,7 @@
   </header>
   <div class="bsx-card-body">
     <table class="daemon-table">
-      <thead><tr><th>Coin</th><th>Chain</th><th class="num">Blocks</th><th class="num">Headers</th><th>Version</th><th>Sync</th><th>Rules</th></tr></thead>
+      <thead><tr><th>Coin</th><th>Chain</th><th class="num">Blocks</th><th class="num">Headers</th><th class="num">Peers</th><th>Version</th><th>Sync</th><th>Rules</th></tr></thead>
       <tbody id="sys-tbody-daemons">
       {section name=d loop=$SYS_DAEMONS}
         <tr>
@@ -1614,6 +1616,7 @@
           <td><code>{$SYS_DAEMONS[d].chain|escape}</code></td>
           <td class="num">{$SYS_DAEMONS[d].blocks|escape}</td>
           <td class="num">{$SYS_DAEMONS[d].headers|escape}</td>
+          <td class="num">{$SYS_DAEMONS[d].peers|escape}</td>
           <td><code>{$SYS_DAEMONS[d].version|escape}</code></td>
           <td>
             {if $SYS_DAEMONS[d].stale|default:false}
@@ -1651,13 +1654,14 @@
   </header>
   <div class="bsx-card-body">
     <table class="wallets-table">
-      <thead><tr><th>Coin</th><th class="num">Balance</th><th class="num">Locked</th><th class="num">Unconfirmed</th></tr></thead>
+      <thead><tr><th>Coin</th><th class="num">Balance</th><th class="num">Locked</th><th class="num">Fee/Donate</th><th class="num">Unconfirmed</th></tr></thead>
       <tbody id="sys-tbody-wallets">
       {section name=w loop=$SYS_WALLETS}
         <tr>
           <td>{$SYS_WALLETS[w].sym|escape}</td>
           <td class="num{if !$SYS_WALLETS[w].reachable} muted{/if}">{$SYS_WALLETS[w].balance|escape}</td>
           <td class="num">{$SYS_WALLETS[w].locked|escape}</td>
+          <td class="num">{$SYS_WALLETS[w].fee_donation|escape}</td>
           <td class="num">{$SYS_WALLETS[w].unconfirmed|escape}</td>
         </tr>
       {/section}
@@ -2552,6 +2556,7 @@
       return '<tr><td>' + esc(r.sym) + '</td><td><code>' + esc(r.chain) +
              '</code></td><td class="num">' + esc(r.blocks) +
              '</td><td class="num">' + esc(r.headers) +
+             '</td><td class="num">' + esc(r.peers) +
              '</td><td><code>' + esc(r.version) + '</code></td>' +
              '<td>' + syncPill(r) + '</td><td>' + rulePill(r.rules) + '</td></tr>';
     }).join(''));
@@ -2561,6 +2566,7 @@
       return '<tr><td>' + esc(r.sym) + '</td>' +
              '<td class="' + balCls + '">' + esc(r.balance) + '</td>' +
              '<td class="num">' + esc(r.locked) + '</td>' +
+             '<td class="num">' + esc(r.fee_donation) + '</td>' +
              '<td class="num">' + esc(r.unconfirmed) + '</td></tr>';
     }).join(''));
 

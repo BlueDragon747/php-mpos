@@ -1785,7 +1785,7 @@ $daemons = array(
   'LIT'  => isset($bitcoin_mm5) ? $bitcoin_mm5 : null,
 );
 foreach ($daemons as $sym => $btc) {
-  $blocks = ''; $headers = ''; $chain = ''; $version = '';
+  $blocks = ''; $headers = ''; $chain = ''; $version = ''; $peers = '';
   $info = array();
   $netinfo = array();
   $rpc_error = '';
@@ -1810,10 +1810,17 @@ foreach ($daemons as $sym => $btc) {
           // Strip the leading/trailing slashes from "/Satoshi:0.15.21/".
           $version = trim((string)$netinfo['subversion'], "/ \t");
         }
+        if (is_array($netinfo) && isset($netinfo['connections']) && is_numeric($netinfo['connections'])) {
+          $peers = (string)(int)$netinfo['connections'];
+        }
       } catch (Exception $e) {
         if ($cached_entry && !empty($cached_entry['row']['version'])
             && $cached_entry['row']['version'] !== '—') {
           $version = (string)$cached_entry['row']['version'];
+        }
+        if ($cached_entry && !empty($cached_entry['row']['peers'])
+            && $cached_entry['row']['peers'] !== '—') {
+          $peers = (string)$cached_entry['row']['peers'];
         }
       }
     }
@@ -1836,6 +1843,7 @@ foreach ($daemons as $sym => $btc) {
     'version'      => $version !== '' ? $version : '—',
     'blocks'       => $blocks !== '' ? $blocks : '—',
     'headers'      => $headers !== '' ? $headers : '—',
+    'peers'        => $peers !== '' ? $peers : '—',
     'synced'       => ($blocks !== '' && $headers !== '' && $blocks === $headers),
     'stale'        => false,
     'stale_age'    => 0,
@@ -1857,28 +1865,48 @@ if ($daemon_cache_dirty) {
 }
 
 // ---- Wallets -------------------------------------------------------
-// Per-coin spendable balance + DB-tracked locked + maturing unconfirmed.
-// Distinct from Coin Daemons (chain state) and Payout Outbox (queue) —
-// answers "do I have enough cash on hand to drain my payment queue?".
+// Per-coin wallet balance, DB-tracked locked payouts, confirmed pool fees and
+// donations, and maturing blocks. UTXO health lives under Pool Health so
+// operators do not confuse balances with spendability checks.
 $wallet_slot_globals = array(
-  'BLC'  => array('',    isset($bitcoin)     ? $bitcoin     : null, isset($transaction)     ? $transaction     : null, isset($block)     ? $block     : null),
-  'PHO'  => array('mm',  isset($bitcoin_mm)  ? $bitcoin_mm  : null, isset($transaction_mm)  ? $transaction_mm  : null, isset($block_mm)  ? $block_mm  : null),
-  'BBTC' => array('mm1', isset($bitcoin_mm1) ? $bitcoin_mm1 : null, isset($transaction_mm1) ? $transaction_mm1 : null, isset($block_mm1) ? $block_mm1 : null),
-  'ELT'  => array('mm3', isset($bitcoin_mm3) ? $bitcoin_mm3 : null, isset($transaction_mm3) ? $transaction_mm3 : null, isset($block_mm3) ? $block_mm3 : null),
-  'UMO'  => array('mm4', isset($bitcoin_mm4) ? $bitcoin_mm4 : null, isset($transaction_mm4) ? $transaction_mm4 : null, isset($block_mm4) ? $block_mm4 : null),
-  'LIT'  => array('mm5', isset($bitcoin_mm5) ? $bitcoin_mm5 : null, isset($transaction_mm5) ? $transaction_mm5 : null, isset($block_mm5) ? $block_mm5 : null),
+  'BLC'  => array('',    isset($bitcoin)     ? $bitcoin     : null, isset($transaction)     ? $transaction     : null, isset($block)     ? $block     : null, 'transactions',     'blocks'),
+  'PHO'  => array('mm',  isset($bitcoin_mm)  ? $bitcoin_mm  : null, isset($transaction_mm)  ? $transaction_mm  : null, isset($block_mm)  ? $block_mm  : null, 'transactions_mm',  'blocks_mm'),
+  'BBTC' => array('mm1', isset($bitcoin_mm1) ? $bitcoin_mm1 : null, isset($transaction_mm1) ? $transaction_mm1 : null, isset($block_mm1) ? $block_mm1 : null, 'transactions_mm1', 'blocks_mm1'),
+  'ELT'  => array('mm3', isset($bitcoin_mm3) ? $bitcoin_mm3 : null, isset($transaction_mm3) ? $transaction_mm3 : null, isset($block_mm3) ? $block_mm3 : null, 'transactions_mm3', 'blocks_mm3'),
+  'UMO'  => array('mm4', isset($bitcoin_mm4) ? $bitcoin_mm4 : null, isset($transaction_mm4) ? $transaction_mm4 : null, isset($block_mm4) ? $block_mm4 : null, 'transactions_mm4', 'blocks_mm4'),
+  'LIT'  => array('mm5', isset($bitcoin_mm5) ? $bitcoin_mm5 : null, isset($transaction_mm5) ? $transaction_mm5 : null, isset($block_mm5) ? $block_mm5 : null, 'transactions_mm5', 'blocks_mm5'),
 );
 $wallet_panel_rows = array();
+$wallet_fee_confirmations = isset($config['confirmations']) ? max(0, (int)$config['confirmations']) : 0;
 foreach ($wallet_slot_globals as $sym => $tuple) {
-  list($slot, $btc, $txn, $blk) = $tuple;
+  list($slot, $btc, $txn, $blk, $tx_table, $block_table) = $tuple;
   $wallet_confs_key = $slot === '' ? 'network_confirmations' : ('network_confirmations_' . $slot);
   $wallet_confs = empty($config[$wallet_confs_key]) ? 120 : (int)$config[$wallet_confs_key];
-  $balance = null; $locked = null; $unconfirmed = null;
+  $balance = null; $locked = null; $fee_donation = null; $unconfirmed = null;
   if ($btc) {
-    try { if ($btc->can_connect() === true) { $balance = (float)$btc->getbalance(); } } catch (Exception $e) {}
+    try { $balance = (float)$btc->getbalance(); } catch (Exception $e) {}
   }
   if ($txn) {
     try { $lb = $txn->getLockedBalance(); if (is_numeric($lb)) $locked = (float)$lb; } catch (Exception $e) {}
+  }
+  if (isset($mysqli)) {
+    $sql = "
+      SELECT ROUND(IFNULL(SUM(CASE
+        WHEN t.type IN ('Fee', 'Donation') AND b.confirmations >= ? THEN t.amount
+        WHEN t.type IN ('Fee_PPS', 'Donation_PPS') THEN t.amount
+        ELSE 0
+      END), 0), 8) AS fee_donation_total
+      FROM " . $tx_table . " AS t
+      LEFT JOIN " . $block_table . " AS b ON b.id = t.block_id
+      WHERE t.type IN ('Fee', 'Fee_PPS', 'Donation', 'Donation_PPS')";
+    if ($stmt = $mysqli->prepare($sql)) {
+      if ($stmt->bind_param('i', $wallet_fee_confirmations) && $stmt->execute() && $result = $stmt->get_result()) {
+        if ($row = $result->fetch_assoc()) {
+          $fee_donation = is_numeric($row['fee_donation_total']) ? (float)$row['fee_donation_total'] : null;
+        }
+      }
+      $stmt->close();
+    }
   }
   if ($blk) {
     try {
@@ -1892,6 +1920,7 @@ foreach ($wallet_slot_globals as $sym => $tuple) {
     'sym'         => $sym,
     'balance'     => $balance     === null ? '—' : number_format($balance,     8),
     'locked'      => $locked      === null ? '—' : number_format($locked,      8),
+    'fee_donation' => $fee_donation === null ? '—' : number_format($fee_donation, 8),
     'unconfirmed' => $unconfirmed === null ? '—' : number_format($unconfirmed, 8),
     'reachable'   => $balance !== null,
   );

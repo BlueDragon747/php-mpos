@@ -148,6 +148,13 @@ $smarty->assign('V2_BALANCES_JSON', json_encode_attr($balances));
 require_once(INCLUDE_DIR . '/smarty_globals.inc.php');
 $global = $smarty->getTemplateVars('GLOBAL');
 
+$account_info = array(
+  'fees'          => isset($global['fees']) ? (float)$global['fees'] : (isset($config['fees']) ? (float)$config['fees'] : 0.0),
+  'noFees'        => !empty($global['userdata']['no_fees']),
+  'donatePercent' => isset($global['userdata']['donate_percent']) ? (float)$global['userdata']['donate_percent'] : 0.0,
+);
+$smarty->assign('V2_ACCOUNT_JSON', json_encode_attr($account_info));
+
 // Per-coin payout system (override of primary if set).
 $payout_systems = array(
   'primary' => isset($global['config']['payout_system'])     ? $global['config']['payout_system']     : 'pplns',

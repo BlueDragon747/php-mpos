@@ -2,7 +2,7 @@
   <header><h3>Account Information</h3></header>
     <table class="tablesorter" cellspacing="0">
       <tr>
-        <td colspan="2">
+        <td colspan="2" style="text-align: center;">
 {if $GLOBAL.userdata.no_fees}
         You are mining without any pool fees applied and
 {else if $GLOBAL.fees > 0}
