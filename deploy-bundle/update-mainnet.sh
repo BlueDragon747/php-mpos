@@ -36,8 +36,8 @@ Options:
                images after stopping/removing daemon containers. Recreates
                containers on the existing data folders with no bootstrap replay.
                Defaults to local/<coin>:25.2-local unless MPOS_DOCKER_HUB or
-               MPOS_IMAGE_TAG is set. Defaults to two concurrent daemon builds
-               unless BUILD_CONCURRENCY is set.
+               MPOS_IMAGE_TAG is set. Build concurrency defaults to one daemon
+               per two CPU cores unless BUILD_CONCURRENCY is set.
 
 Chain rollback safety env:
   MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD
@@ -576,8 +576,8 @@ if [ "$build_daemon_images" = "1" ]; then
     export SKIP_DAEMON_IMAGE_BUILD=0
     export MPOS_BUILD_AFTER_STOP=1
     export MPOS_FORCE_REBUILD="${MPOS_FORCE_REBUILD:-1}"
-    export BUILD_CONCURRENCY="${BUILD_CONCURRENCY:-2}"
-    say "daemon build mode selected; containers will stop before building ${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG} with concurrency ${BUILD_CONCURRENCY}"
+    export BUILD_CONCURRENCY="${BUILD_CONCURRENCY:-}"
+    say "daemon build mode selected; containers will stop before building ${MPOS_DOCKER_HUB}/<coin>:${MPOS_IMAGE_TAG} with concurrency ${BUILD_CONCURRENCY:-auto}"
 fi
 
 if [ "$run_mpos$run_eloipool$run_daemons" = "111" ]; then

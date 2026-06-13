@@ -318,9 +318,13 @@ class BitcoinClient extends jsonRPCClient {
       throw new Exception("Password must be non-blank");
     if (!empty($certificate_path) && !is_readable($certificate_path))
       throw new Exception("Certificate file " . $certificate_path . " is not readable");
-    $address = rtrim($address, "/");
+    $address = trim($address);
+    $has_path = strpos($address, "/") !== false;
+    if (!$has_path) {
+      $address = rtrim($address, "/");
+    }
     $uri = $scheme . "://" . $username . ":" . $password . "@" . $address;
-    if (strpos($address, "/") === false) {
+    if (!$has_path) {
       $uri .= "/";
     }
     parent::__construct($uri, $debug);

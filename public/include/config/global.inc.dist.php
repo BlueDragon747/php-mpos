@@ -63,17 +63,17 @@ $config['db']['name'] = 'mpos';
 // real `rpcpassword=` value from each coin's .conf. Usernames align with
 // the rpcuser= values operators typically use.
 $config['wallet']['type'] = 'http';
-$config['wallet']['host'] = 'localhost:8772';       // Blakecoin mainnet RPC
+$config['wallet']['host'] = 'localhost:8772/wallet/';       // Blakecoin mainnet RPC
 $config['wallet']['username'] = 'blakecoin';
 $config['wallet']['password'] = 'x';
 
 $config['wallet_mm']['type'] = 'http';
-$config['wallet_mm']['host'] = 'localhost:8984';    // Photon mainnet RPC
+$config['wallet_mm']['host'] = 'localhost:8984/wallet/';    // Photon mainnet RPC
 $config['wallet_mm']['username'] = 'photon';
 $config['wallet_mm']['password'] = 'x';
 
 $config['wallet_mm1']['type'] = 'http';
-$config['wallet_mm1']['host'] = 'localhost:8243';   // BlakeBitcoin mainnet RPC
+$config['wallet_mm1']['host'] = 'localhost:8243/wallet/';   // BlakeBitcoin mainnet RPC
 $config['wallet_mm1']['username'] = 'blakebitcoin';
 $config['wallet_mm1']['password'] = 'x';
 
@@ -83,17 +83,17 @@ $config['wallet_mm2']['username'] = 'unused1';
 $config['wallet_mm2']['password'] = 'x';
 
 $config['wallet_mm3']['type'] = 'http';
-$config['wallet_mm3']['host'] = 'localhost:6852';   // Electron-ELT mainnet RPC
+$config['wallet_mm3']['host'] = 'localhost:6852/wallet/';   // Electron-ELT mainnet RPC
 $config['wallet_mm3']['username'] = 'electron';
 $config['wallet_mm3']['password'] = 'x';
 
 $config['wallet_mm4']['type'] = 'http';
-$config['wallet_mm4']['host'] = 'localhost:5921';   // Universalmolecule mainnet RPC
+$config['wallet_mm4']['host'] = 'localhost:5921/wallet/';   // Universalmolecule mainnet RPC
 $config['wallet_mm4']['username'] = 'umo';
 $config['wallet_mm4']['password'] = 'x';
 
 $config['wallet_mm5']['type'] = 'http';
-$config['wallet_mm5']['host'] = 'localhost:12000';  // Lithium mainnet RPC
+$config['wallet_mm5']['host'] = 'localhost:12000/wallet/';  // Lithium mainnet RPC
 $config['wallet_mm5']['username'] = 'lithium';
 $config['wallet_mm5']['password'] = 'x';
 
