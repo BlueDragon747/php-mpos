@@ -165,6 +165,36 @@
   .bsx-system-page .wallets-table .muted { color: #99a; font-style: italic; }
   .bsx-system-page .wallets-table th,
   .bsx-system-page .wallets-table td { white-space: nowrap; }
+  .bsx-system-page .wallet-card header {
+    align-items: center;
+  }
+  .bsx-system-page .wallet-view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .bsx-system-page .wallet-view-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.04);
+    color: #aab;
+    font-size: 11px;
+    line-height: 14px;
+    cursor: pointer;
+  }
+  .bsx-system-page .wallet-view-btn:hover {
+    border-color: rgba(79,195,247,.55);
+    color: #cdd;
+  }
+  .bsx-system-page .wallet-view-btn.is-active {
+    border-color: rgba(79,195,247,.75);
+    background: rgba(79,195,247,.16);
+    color: #4fc3f7;
+  }
   .bsx-system-page .daemon-card .bsx-card-body { overflow: visible; }
   .bsx-system-page .daemon-table {
     width: max-content;
@@ -1648,20 +1678,30 @@
   </div>
 </article>
 
-<article class="bsx-card">
+<article class="bsx-card wallet-card">
   <header>
     <h3>Wallets</h3>
+    <div class="wallet-view-toggle" role="group" aria-label="Wallet view">
+      <button type="button" class="wallet-view-btn is-active" data-wallet-view="balances" aria-pressed="true">Balances</button>
+      <button type="button" class="wallet-view-btn" data-wallet-view="accounting" aria-pressed="false">Fee/Donations</button>
+    </div>
   </header>
   <div class="bsx-card-body">
     <table class="wallets-table">
-      <thead><tr><th>Coin</th><th class="num">Balance</th><th class="num">Locked</th><th class="num">Fee/Donate</th><th class="num">Unconfirmed</th></tr></thead>
+      <thead id="sys-wallet-head"><tr><th>Coin</th><th class="num">Balance</th><th class="num">Locked</th><th class="num">Unconfirmed</th></tr></thead>
       <tbody id="sys-tbody-wallets">
       {section name=w loop=$SYS_WALLETS}
-        <tr>
+        <tr data-sym="{$SYS_WALLETS[w].sym|escape}"
+            data-balance="{$SYS_WALLETS[w].balance|escape}"
+            data-locked="{$SYS_WALLETS[w].locked|escape}"
+            data-unconfirmed="{$SYS_WALLETS[w].unconfirmed|escape}"
+            data-pool-fee="{$SYS_WALLETS[w].pool_fee|escape}"
+            data-donation="{$SYS_WALLETS[w].donation|escape}"
+            data-send-fee="{$SYS_WALLETS[w].send_fee|escape}"
+            data-reachable="{if $SYS_WALLETS[w].reachable}1{else}0{/if}">
           <td>{$SYS_WALLETS[w].sym|escape}</td>
           <td class="num{if !$SYS_WALLETS[w].reachable} muted{/if}">{$SYS_WALLETS[w].balance|escape}</td>
           <td class="num">{$SYS_WALLETS[w].locked|escape}</td>
-          <td class="num">{$SYS_WALLETS[w].fee_donation|escape}</td>
           <td class="num">{$SYS_WALLETS[w].unconfirmed|escape}</td>
         </tr>
       {/section}
@@ -1875,6 +1915,8 @@
   var latestServiceRows = readCurrentServiceRows();
   var currentHealthIndex = 0;
   var latestHealthRows = readCurrentHealthRows();
+  var walletView = 'balances';
+  var latestWalletRows = readCurrentWalletRows();
 
   function readCurrentServiceRows() {
     var tbody = document.getElementById('sys-tbody-services');
@@ -1892,6 +1934,66 @@
         since_ts: td[6] ? (td[6].getAttribute('data-utc-epoch') || '') : ''
       };
     });
+  }
+
+  function readCurrentWalletRows() {
+    var tbody = document.getElementById('sys-tbody-wallets');
+    if (!tbody) return [];
+    return Array.prototype.map.call(tbody.querySelectorAll('tr'), function (tr) {
+      return {
+        sym: tr.getAttribute('data-sym') || '',
+        balance: tr.getAttribute('data-balance') || '—',
+        locked: tr.getAttribute('data-locked') || '—',
+        unconfirmed: tr.getAttribute('data-unconfirmed') || '—',
+        pool_fee: tr.getAttribute('data-pool-fee') || tr.getAttribute('data-fee-donation') || '—',
+        donation: tr.getAttribute('data-donation') || '—',
+        send_fee: tr.getAttribute('data-send-fee') || '—',
+        reachable: tr.getAttribute('data-reachable') !== '0'
+      };
+    });
+  }
+
+  function walletCell(value, muted) {
+    return '<td class="num' + (muted ? ' muted' : '') + '">' + esc(value || '—') + '</td>';
+  }
+
+  function walletRow(row) {
+    row = row || {};
+    var sym = row.sym || '—';
+    var reachable = row.reachable !== false && row.reachable !== '0';
+    if (walletView === 'accounting') {
+      return '<tr><td>' + esc(sym) + '</td>' +
+             walletCell(row.pool_fee || row.fee_donation || '—', false) +
+             walletCell(row.donation || '—', false) +
+             walletCell(row.send_fee || '—', false) +
+             '</tr>';
+    }
+    return '<tr><td>' + esc(sym) + '</td>' +
+           walletCell(row.balance || '—', !reachable) +
+           walletCell(row.locked || '—', false) +
+           walletCell(row.unconfirmed || '—', false) +
+           '</tr>';
+  }
+
+  function renderWalletRows(rows) {
+    latestWalletRows = Array.isArray(rows) ? rows : [];
+    var head = document.getElementById('sys-wallet-head');
+    if (head) {
+      head.innerHTML = walletView === 'accounting'
+        ? '<tr><th>Coin</th><th class="num">Pool Fee</th><th class="num">Donation</th><th class="num">TXFee</th></tr>'
+        : '<tr><th>Coin</th><th class="num">Balance</th><th class="num">Locked</th><th class="num">Unconfirmed</th></tr>';
+    }
+    fill('sys-tbody-wallets', latestWalletRows.map(walletRow).join(''));
+    document.querySelectorAll('[data-wallet-view]').forEach(function (btn) {
+      var active = (btn.getAttribute('data-wallet-view') || 'balances') === walletView;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function setWalletView(view) {
+    walletView = view === 'accounting' ? 'accounting' : 'balances';
+    renderWalletRows(latestWalletRows);
   }
 
   function serviceSinceValue(row) {
@@ -2561,14 +2663,7 @@
              '<td>' + syncPill(r) + '</td><td>' + rulePill(r.rules) + '</td></tr>';
     }).join(''));
 
-    fill('sys-tbody-wallets', (data.wallets || []).map(function (r) {
-      var balCls = 'num' + (r.reachable ? '' : ' muted');
-      return '<tr><td>' + esc(r.sym) + '</td>' +
-             '<td class="' + balCls + '">' + esc(r.balance) + '</td>' +
-             '<td class="num">' + esc(r.locked) + '</td>' +
-             '<td class="num">' + esc(r.fee_donation) + '</td>' +
-             '<td class="num">' + esc(r.unconfirmed) + '</td></tr>';
-    }).join(''));
+    renderWalletRows(data.wallets || []);
 
     var outboxTbody = document.getElementById('sys-tbody-outbox');
     if (outboxTbody) {
@@ -2716,6 +2811,13 @@
     });
   });
   applyOutboxFilter(outboxCountsFromButtons());
+
+  document.querySelectorAll('[data-wallet-view]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      setWalletView(btn.getAttribute('data-wallet-view') || 'balances');
+    });
+  });
+  renderWalletRows(latestWalletRows);
 
   var healthRow = document.getElementById('sys-health-row');
   if (healthRow) {
