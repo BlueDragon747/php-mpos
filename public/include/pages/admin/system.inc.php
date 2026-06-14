@@ -1865,8 +1865,8 @@ if ($daemon_cache_dirty) {
 }
 
 // ---- Wallets -------------------------------------------------------
-// Per-coin wallet balance, DB-tracked locked payouts, confirmed pool fees and
-// donations, and maturing blocks. UTXO health lives under Pool Health so
+// Per-coin wallet balance, DB-tracked locked payouts, confirmed pool fees,
+// donations, send fees, and maturing blocks. UTXO health lives under Pool Health so
 // operators do not confuse balances with spendability checks.
 $wallet_slot_globals = array(
   'BLC'  => array('',    isset($bitcoin)     ? $bitcoin     : null, isset($transaction)     ? $transaction     : null, isset($block)     ? $block     : null, 'transactions',     'blocks'),
@@ -1882,7 +1882,7 @@ foreach ($wallet_slot_globals as $sym => $tuple) {
   list($slot, $btc, $txn, $blk, $tx_table, $block_table) = $tuple;
   $wallet_confs_key = $slot === '' ? 'network_confirmations' : ('network_confirmations_' . $slot);
   $wallet_confs = empty($config[$wallet_confs_key]) ? 120 : (int)$config[$wallet_confs_key];
-  $balance = null; $locked = null; $fee_donation = null; $unconfirmed = null;
+  $balance = null; $locked = null; $pool_fee = null; $donation = null; $send_fee = null; $unconfirmed = null;
   if ($btc) {
     try { $balance = (float)$btc->getbalance(); } catch (Exception $e) {}
   }
@@ -1892,17 +1892,28 @@ foreach ($wallet_slot_globals as $sym => $tuple) {
   if (isset($mysqli)) {
     $sql = "
       SELECT ROUND(IFNULL(SUM(CASE
-        WHEN t.type IN ('Fee', 'Donation') AND b.confirmations >= ? THEN t.amount
-        WHEN t.type IN ('Fee_PPS', 'Donation_PPS') THEN t.amount
+        WHEN t.type = 'Fee' AND b.confirmations >= ? THEN t.amount
+        WHEN t.type = 'Fee_PPS' THEN t.amount
         ELSE 0
-      END), 0), 8) AS fee_donation_total
+      END), 0), 8) AS pool_fee_total,
+      ROUND(IFNULL(SUM(CASE
+        WHEN t.type = 'Donation' AND b.confirmations >= ? THEN t.amount
+        WHEN t.type = 'Donation_PPS' THEN t.amount
+        ELSE 0
+      END), 0), 8) AS donation_total,
+      ROUND(IFNULL(SUM(CASE
+        WHEN t.type = 'TXFee' THEN t.amount
+        ELSE 0
+      END), 0), 8) AS send_fee_total
       FROM " . $tx_table . " AS t
       LEFT JOIN " . $block_table . " AS b ON b.id = t.block_id
-      WHERE t.type IN ('Fee', 'Fee_PPS', 'Donation', 'Donation_PPS')";
+      WHERE t.type IN ('Fee', 'Fee_PPS', 'Donation', 'Donation_PPS', 'TXFee')";
     if ($stmt = $mysqli->prepare($sql)) {
-      if ($stmt->bind_param('i', $wallet_fee_confirmations) && $stmt->execute() && $result = $stmt->get_result()) {
+      if ($stmt->bind_param('ii', $wallet_fee_confirmations, $wallet_fee_confirmations) && $stmt->execute() && $result = $stmt->get_result()) {
         if ($row = $result->fetch_assoc()) {
-          $fee_donation = is_numeric($row['fee_donation_total']) ? (float)$row['fee_donation_total'] : null;
+          $pool_fee = is_numeric($row['pool_fee_total']) ? (float)$row['pool_fee_total'] : null;
+          $donation = is_numeric($row['donation_total']) ? (float)$row['donation_total'] : null;
+          $send_fee = is_numeric($row['send_fee_total']) ? (float)$row['send_fee_total'] : null;
         }
       }
       $stmt->close();
@@ -1920,7 +1931,9 @@ foreach ($wallet_slot_globals as $sym => $tuple) {
     'sym'         => $sym,
     'balance'     => $balance     === null ? '—' : number_format($balance,     8),
     'locked'      => $locked      === null ? '—' : number_format($locked,      8),
-    'fee_donation' => $fee_donation === null ? '—' : number_format($fee_donation, 8),
+    'pool_fee'    => $pool_fee    === null ? '—' : number_format($pool_fee,    8),
+    'donation'    => $donation    === null ? '—' : number_format($donation,    8),
+    'send_fee'    => $send_fee    === null ? '—' : number_format($send_fee,    8),
     'unconfirmed' => $unconfirmed === null ? '—' : number_format($unconfirmed, 8),
     'reachable'   => $balance !== null,
   );
