@@ -4,10 +4,10 @@
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
-INSTALL_ROOT=/opt/blakestream-mpos
-LOG_ROOT=/var/log/blakestream-mpos
-WEB_ROOT=/var/www/blakestream-mpos
-MPOS_REPO=/root/Blakestream-MPOS
+INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
+LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
+WEB_ROOT="${MPOS_WEB_ROOT:-/var/www/blakestream-mpos}"
+MPOS_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
 CRON_SRC="${MPOS_REPO}/cronjobs-py"
 CRON_DEST="${INSTALL_ROOT}/cronjobs-py"
 VENV="${CRON_DEST}/.venv"

@@ -10,10 +10,8 @@ say()  { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;31m!! %s\033[0m\n' "$*" >&2; }
 
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2-local}"
-# Pre-live: source-build daemons from the 0.25.2 wallet branches. Change to
-# master after live cutover once master carries the 25.2 wallet updates.
-MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
+MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest-local}"
+MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
 MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
 MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
@@ -45,8 +43,8 @@ default_build_concurrency() {
     printf '%s' "$concurrency"
 }
 
-# Wallet repos are pinned by MPOS_DAEMON_SOURCE_REF. Use 0.25.2 for pre-live
-# 25.2 builds; change the source ref to master after live cutover.
+# Wallet repos are selected by MPOS_DAEMON_SOURCE_REF; default is the live
+# upstream master branch for 25.2 daemon builds.
 declare -A COIN_REPO=(
     [blc]="https://github.com/BlueDragon747/Blakecoin.git"
     [pho]="https://github.com/BlueDragon747/photon.git"

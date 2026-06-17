@@ -35,7 +35,7 @@ Options:
   --build      With --daemons, --wallets, or --all, build local daemon runtime
                images after stopping/removing daemon containers. Recreates
                containers on the existing data folders with no bootstrap replay.
-               Defaults to local/<coin>:25.2-local unless MPOS_DOCKER_HUB or
+               Defaults to local/<coin>:latest-local unless MPOS_DOCKER_HUB or
                MPOS_IMAGE_TAG is set. Build concurrency defaults to one daemon
                per two CPU cores unless BUILD_CONCURRENCY is set.
 
@@ -52,7 +52,7 @@ MariaDB tuning env:
   MPOS_MARIADB_BUFFER_POOL_MAX_MB  Auto-size cap in MiB (default: 4096).
   MPOS_MARIADB_LOG_FILE_MB         Explicit InnoDB redo log file size in MiB.
 
-The updater reads /root/.mpos-deploy.env when present, then applies any
+The updater reads \${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env} when present, then applies any
 environment overrides supplied on this command.
 EOF
 }
@@ -70,16 +70,24 @@ fi
 
 MAINNET_SCRIPTS="${SCRIPT_DIR}/scripts/mainnet"
 INSTALL_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
-ELOIPOOL_TREE="${ELIOPOOL_TREE:-/root/Blakestream-Eliopool}"
+ELOIPOOL_TREE="${MPOS_ELIOPOOL_ROOT:-${ELIOPOOL_TREE:-/root/Blakestream-Eliopool}}"
+MPOS_DEPLOY_ENV_FILE="${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env}"
 
-if [ -f /root/.mpos-deploy.env ]; then
+if [ -f "$MPOS_DEPLOY_ENV_FILE" ]; then
     # shellcheck disable=SC1091
-    . /root/.mpos-deploy.env
+    . "$MPOS_DEPLOY_ENV_FILE"
 fi
 
 export MPOS_INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
 export MPOS_WEB_ROOT="${MPOS_WEB_ROOT:-/var/www/blakestream-mpos}"
 export MPOS_LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
+export MPOS_DATA_ROOT="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}"
+export MPOS_BACKUP_ROOT="${MPOS_BACKUP_ROOT:-/var/backups/blakestream-mpos}"
+export MPOS_PHP_VERSION_FILE="${MPOS_PHP_VERSION_FILE:-/opt/blakestream-mpos.php-version}"
+export MPOS_UPDATE_REPO_ROOT="${MPOS_UPDATE_REPO_ROOT:-$INSTALL_REPO}"
+export MPOS_ELIOPOOL_ROOT="${MPOS_ELIOPOOL_ROOT:-/root/Blakestream-Eliopool}"
+export MPOS_DEPLOY_ENV_FILE="${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env}"
+ELOIPOOL_TREE="${MPOS_ELIOPOOL_ROOT:-${ELOIPOOL_TREE:-/root/Blakestream-Eliopool}}"
 export MPOS_DB_NAME="${MPOS_DB_NAME:-mpos}"
 export MPOS_DB_USER="${MPOS_DB_USER:-mpos}"
 export MPOS_DB_PASS="${MPOS_DB_PASS:?MPOS_DB_PASS is required}"
@@ -88,10 +96,11 @@ export MPOS_DB_PORT="${MPOS_DB_PORT:-3306}"
 export MPOS_RUN_USER="${MPOS_RUN_USER:-www-data}"
 export MPOS_RUN_GROUP="${MPOS_RUN_GROUP:-www-data}"
 export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
+export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 export MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
-export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
+export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
 export MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
+export MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
 export MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
 export SKIP_DAEMON_IMAGE_BUILD="${SKIP_DAEMON_IMAGE_BUILD:-0}"
 export MPOS_BUILD_AFTER_STOP="${MPOS_BUILD_AFTER_STOP:-0}"
@@ -105,6 +114,17 @@ export MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD="${MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD:-}
 export MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD="${MPOS_PRE_DAEMON_UPDATE_SNAPSHOT_CMD:-$MPOS_PREUPDATE_CHAIN_SNAPSHOT_CMD}"
 export ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
 export ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
+
+# Older deploy env files generated before the 25.2 network went live pinned
+# the daemon image tag to 25.2. Treat that old generated default as stale so
+# updates follow the current live defaults unless the operator set a custom tag.
+if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
+    [ "$MPOS_DOCKER_HUB" != "sidgrip" ] || export MPOS_DOCKER_HUB=local
+    [ "$MPOS_IMAGE_TAG" != "25.2" ] || export MPOS_IMAGE_TAG=latest-local
+else
+    [ "$MPOS_IMAGE_TAG" != "25.2" ] || export MPOS_IMAGE_TAG=latest
+fi
+[ "$MPOS_DAEMON_SOURCE_REF" != "0.25.2" ] || export MPOS_DAEMON_SOURCE_REF=master
 
 sync_mpos_repo() {
     if [ "$(readlink -f "$REPO_ROOT")" = "$(readlink -f "$INSTALL_REPO" 2>/dev/null || echo "$INSTALL_REPO")" ]; then
@@ -185,6 +205,11 @@ declare -A COIN_IMAGE_NAME=(
 coin_image() {
     local coin="$1"
     printf '%s/%s:%s' "$MPOS_DOCKER_HUB" "${COIN_IMAGE_NAME[$coin]}" "$MPOS_IMAGE_TAG"
+}
+
+coin_datadir() {
+    local coin="$1"
+    printf '%s/%s' "${MPOS_DAEMON_DATA_ROOT%/}" "${CONFIG_DIR[$coin]}"
 }
 
 unit_exists() {
@@ -335,7 +360,7 @@ stop_daemon_container_gracefully() {
     say "stopping daemon container ${coin} cleanly"
     docker update --restart=no "$coin" >/dev/null 2>&1 || true
     if docker ps --format '{{.Names}}' | grep -qx "$coin"; then
-        docker exec "$coin" "/usr/local/bin/${cli}" "-datadir=/root/${config_dir}" stop >/dev/null 2>&1 || true
+        docker exec "$coin" "/usr/local/bin/${cli}" "-datadir=$(coin_datadir "$coin")" stop >/dev/null 2>&1 || true
         wait_iterations=$((MPOS_DAEMON_STOP_TIMEOUT_S / 5))
         [ "$wait_iterations" -ge 1 ] || wait_iterations=1
         for _ in $(seq 1 "$wait_iterations"); do
@@ -359,7 +384,7 @@ start_daemon_container() {
     image="$(coin_image "$coin")"
     daemon="${DAEMON_NAME[$coin]}"
     config_dir="${CONFIG_DIR[$coin]}"
-    datadir="/root/${config_dir}"
+    datadir="$(coin_datadir "$coin")"
     conf="${datadir}/${CONFIG_FILE[$coin]}"
 
     [ -d "$datadir" ] || die "missing existing data folder ${datadir}; use deploy-mainnet.sh for first install"
@@ -572,7 +597,7 @@ if [ "$build_daemon_images" = "1" ]; then
     [ "$run_daemons" = "1" ] || die "--build requires --daemons, --wallets, or --all"
     export MPOS_PULL_DAEMON_IMAGES=0
     [ "$MPOS_DOCKER_HUB" != "sidgrip" ] || export MPOS_DOCKER_HUB=local
-    [ "$MPOS_IMAGE_TAG" != "25.2" ] || export MPOS_IMAGE_TAG=25.2-local
+    [ "$MPOS_IMAGE_TAG" != "latest" ] || export MPOS_IMAGE_TAG=latest-local
     export SKIP_DAEMON_IMAGE_BUILD=0
     export MPOS_BUILD_AFTER_STOP=1
     export MPOS_FORCE_REBUILD="${MPOS_FORCE_REBUILD:-1}"

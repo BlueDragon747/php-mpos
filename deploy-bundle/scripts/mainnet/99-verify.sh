@@ -5,6 +5,10 @@ say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 pass() { printf '   \033[1;32m[OK]\033[0m   %s\n' "$*"; }
 fail() { printf '   \033[1;31m[FAIL]\033[0m %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT+1)); }
 FAIL_COUNT=0
+INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
+LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
+WEB_ROOT="${MPOS_WEB_ROOT:-/var/www/blakestream-mpos}"
+BACKUP_ROOT="${MPOS_BACKUP_ROOT:-/var/backups/blakestream-mpos}"
 
 wait_unit_active() {
     local unit="$1" deadline=$(( $(date +%s) + 180 ))
@@ -35,7 +39,23 @@ for sym in blc pho bbtc elt lit umo; do
         sleep 5
     done
 done
-for port in 3334 19335 19334 "${MPOS_HTTP_PORT}"; do
+VERIFY_STRATUM_PORT="${MPOS_STRATUM_PORT:-3334}"
+if [ -r "${INSTALL_ROOT}/eloipool/config.py" ]; then
+    CONFIG_STRATUM_PORT="$(python3 - <<'PY' 2>/dev/null || true
+import re
+import os
+from pathlib import Path
+cfg = Path(os.environ.get('MPOS_INSTALL_ROOT', '/opt/blakestream-mpos')) / 'eloipool' / 'config.py'
+m = re.search(r'StratumAddresses\s*=\s*\(\(\s*[\"\'][^\"\']*[\"\']\s*,\s*(\d{2,5})', cfg.read_text(errors='ignore'))
+if m:
+    print(m.group(1))
+PY
+)"
+    if [[ "${CONFIG_STRATUM_PORT}" =~ ^[1-9][0-9]{0,4}$ ]]; then
+        VERIFY_STRATUM_PORT="${CONFIG_STRATUM_PORT}"
+    fi
+fi
+for port in "${VERIFY_STRATUM_PORT}" 19335 19334 "${MPOS_HTTP_PORT}"; do
     deadline=$(( $(date +%s) + 90 ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
         ss -tln | awk '{print $4}' | grep -qE ":(${port})\$" && break
@@ -70,21 +90,6 @@ for unit in blakestream-mpos-eloipool blakestream-mpos-mergeminer blakestream-mp
 done
 
 say "ports listening"
-VERIFY_STRATUM_PORT="${MPOS_STRATUM_PORT:-3334}"
-if [ -r /opt/blakestream-mpos/eloipool/config.py ]; then
-    CONFIG_STRATUM_PORT="$(python3 - <<'PY' 2>/dev/null || true
-import re
-from pathlib import Path
-cfg = Path('/opt/blakestream-mpos/eloipool/config.py')
-m = re.search(r'StratumAddresses\s*=\s*\(\(\s*[\"\'][^\"\']*[\"\']\s*,\s*(\d{2,5})', cfg.read_text(errors='ignore'))
-if m:
-    print(m.group(1))
-PY
-)"
-    if [[ "${CONFIG_STRATUM_PORT}" =~ ^[1-9][0-9]{0,4}$ ]]; then
-        VERIFY_STRATUM_PORT="${CONFIG_STRATUM_PORT}"
-    fi
-fi
 for entry in "stratum:${VERIFY_STRATUM_PORT}" "mmproxy:19335" "pool-jsonrpc:19334" "http:${MPOS_HTTP_PORT}"; do
     name=${entry%:*}; port=${entry#*:}
     if ss -tln | awk '{print $4}' | grep -qE ":(${port})\$"; then
@@ -117,12 +122,12 @@ else
 fi
 if [[ "${BACKUPS_ENABLED_NORM:-1}" =~ ^(0|false|no|off|disabled)$ ]]; then
     pass "backup artifact check skipped; backups disabled by operator"
-elif [ -s /var/backups/blakestream-mpos/latest.tar.gz ]; then
+elif [ -s "${BACKUP_ROOT}/latest.tar.gz" ]; then
     pass "latest backup artifact present"
 else
     fail "latest backup artifact missing while backups_enabled=${BACKUPS_ENABLED:-missing}"
 fi
-BACKUP_STATUS_FILE=/var/log/blakestream-mpos/backup-status.ini
+BACKUP_STATUS_FILE="${LOG_ROOT}/backup-status.ini"
 if [ -r "$BACKUP_STATUS_FILE" ]; then
     pass "backup status manifest readable"
     BACKUP_STATUS=$(sed -n 's/^status="\([^"]*\)".*/\1/p' "$BACKUP_STATUS_FILE" | head -1)
@@ -181,7 +186,7 @@ else
 fi
 
 say "drift-check (diagnostic only)"
-sudo -u blakestream-mpos /opt/blakestream-mpos/cronjobs-py/.venv/bin/cronjobs-py \
+sudo -u blakestream-mpos "${INSTALL_ROOT}/cronjobs-py/.venv/bin/cronjobs-py" \
     --log-level WARN drift-check 2>&1 | tail -10 || true
 
 if [ "$FAIL_COUNT" -gt 0 ]; then

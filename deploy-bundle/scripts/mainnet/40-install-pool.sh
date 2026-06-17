@@ -4,11 +4,11 @@
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
-INSTALL_ROOT=/opt/blakestream-mpos
-LOG_ROOT=/var/log/blakestream-mpos
-WEB_ROOT=/var/www/blakestream-mpos
-MPOS_REPO=/root/Blakestream-MPOS
-ELOIPOOL_TREE=/root/Blakestream-Eliopool
+INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
+LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
+WEB_ROOT="${MPOS_WEB_ROOT:-/var/www/blakestream-mpos}"
+MPOS_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
+ELOIPOOL_TREE="${MPOS_ELIOPOOL_ROOT:-${ELIOPOOL_TREE:-/root/Blakestream-Eliopool}}"
 ELOIPOOL_SRC="${ELOIPOOL_TREE}"
 
 [ -d "$ELOIPOOL_SRC" ] || { echo "missing $ELOIPOOL_SRC" >&2; exit 1; }
@@ -440,6 +440,12 @@ LimitNOFILE=8192
 WantedBy=multi-user.target
 EOF
 
+MMP_READY_EXEC="ExecStartPost=${MMP_READY_CHECK} 19335 5"
+if [ "${SKIP_BOOTSTRAP:-0}" = "1" ]; then
+    say "SKIP_BOOTSTRAP=1 — merged-mine-proxy aux readiness wait is disabled for this validation run"
+    MMP_READY_EXEC=
+fi
+
 cat > /etc/systemd/system/blakestream-mpos-mergeminer.service <<EOF
 [Unit]
 Description=Blakestream-MPOS merged-mine-proxy (5 aux chains)
@@ -453,7 +459,7 @@ Group=blakestream-mpos
 WorkingDirectory=${POOL_ROOT}
 ExecStartPre=/bin/sh -c 'for i in \$(seq 1 60); do timeout 2 bash -c ":</dev/tcp/127.0.0.1/19334" 2>/dev/null && exit 0; sleep 1; done; echo "pool JSON-RPC did not become ready" >&2; exit 1'
 ExecStart=${INSTALL_ROOT}/bin/merged-mine-proxy-go --config ${MMP_CONFIG}
-ExecStartPost=${MMP_READY_CHECK} 19335 5
+${MMP_READY_EXEC}
 StandardOutput=append:${LOG_POOL}/mergeminer.stdout
 StandardError=append:${LOG_POOL}/mergeminer.stderr
 Restart=always

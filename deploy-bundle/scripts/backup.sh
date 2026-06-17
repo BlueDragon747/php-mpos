@@ -162,6 +162,7 @@ echo "==> backing up wallets (RPC backupwallet)"
 mkdir -p "${WORK}/wallets"
 WALLETS=()
 WALLET_FAILURES=0
+MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
 declare -A DAEMON_BIN=(
     [blc]=blakecoin-cli
     [pho]=photon-cli
@@ -171,12 +172,12 @@ declare -A DAEMON_BIN=(
     [lit]=lithium-cli
 )
 declare -A DAEMON_DATADIR=(
-    [blc]=/root/.blakecoin
-    [pho]=/root/.photon
-    [bbtc]=/root/.blakebitcoin
-    [elt]=/root/.electron
-    [umo]=/root/.universalmolecule
-    [lit]=/root/.lithium
+    [blc]="${MPOS_DAEMON_DATA_ROOT%/}/.blakecoin"
+    [pho]="${MPOS_DAEMON_DATA_ROOT%/}/.photon"
+    [bbtc]="${MPOS_DAEMON_DATA_ROOT%/}/.blakebitcoin"
+    [elt]="${MPOS_DAEMON_DATA_ROOT%/}/.electron"
+    [umo]="${MPOS_DAEMON_DATA_ROOT%/}/.universalmolecule"
+    [lit]="${MPOS_DAEMON_DATA_ROOT%/}/.lithium"
 )
 declare -A DEPLOYED_CONF=(
     [blc]="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}/blakecoin/blakecoin.conf"

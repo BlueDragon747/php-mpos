@@ -58,12 +58,12 @@ Tunable via env vars:
                        (default: https://github.com/BlueDragon747/eloipool_Blakecoin.git)
   ELIOPOOL_BRANCH      branch to clone (default: 25.2-GO)
   MPOS_DOCKER_HUB      daemon image namespace (default: sidgrip)
-  MPOS_IMAGE_TAG       daemon image tag (default: 25.2)
+  MPOS_IMAGE_TAG       daemon image tag (default: latest)
   MPOS_PULL_DAEMON_IMAGES
-                       1 pulls daemon images; 0 clones upstream 0.25.2
+                       1 pulls daemon images; 0 clones upstream
                        daemon repos and builds binaries locally (default: 1)
   MPOS_DAEMON_SOURCE_REF
-                       daemon source branch/tag (default: 0.25.2)
+                       daemon source branch/tag (default: master)
   MPOS_DAEMON_BUILD_ROOT
                        upstream daemon clone/build root
                        (default: /root/blakestream-daemon-builds)
@@ -128,8 +128,7 @@ fi
 
 # Defaults exported to sub-scripts
 # Eliopool: prefer a caller-supplied local checkout; otherwise auto-clone
-# the published repo into a temp dir and clean it up on exit. Pre-live uses
-# 25.2-GO; switch ELIOPOOL_BRANCH to master after live cutover.
+# the published repo into a temp dir and clean it up on exit.
 ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
 ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
 ELIOPOOL_TMPROOT=""
@@ -153,10 +152,15 @@ export MPOS_HTTPS_PORT="${MPOS_HTTPS_PORT:-443}"
 export MPOS_STRATUM_PORT="${MPOS_STRATUM_PORT:-3334}"
 export MPOS_BASE_DIFFICULTY="${MPOS_BASE_DIFFICULTY:-32}"
 export MPOS_DIFFICULTY_BITS="${MPOS_DIFFICULTY_BITS:-21}"
-export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
 export MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
-export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
+if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
+    export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest-local}"
+else
+    export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
+fi
+export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
 export MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 export MPOS_LOCAL_DAEMON_REPO_ROOT="${MPOS_LOCAL_DAEMON_REPO_ROOT:-}"
 export MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"

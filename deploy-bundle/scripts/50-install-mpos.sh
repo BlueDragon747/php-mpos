@@ -12,6 +12,17 @@ say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 PHP_VER=$(cat "${MPOS_INSTALL_ROOT}/.php-version")
 HOST_IP=$(hostname -I | awk '{print $1}')
 
+load_baseline_schema() {
+    local schema="$1"
+    # The dump is named for the default `mpos` database. Strip dump-level
+    # CREATE/USE lines so operator-supplied MPOS_DB_NAME is honored.
+    awk '
+        /^CREATE DATABASE IF NOT EXISTS / { next }
+        /^USE `[^`]+`;$/ { next }
+        { print }
+    ' "$schema" | mariadb "${MPOS_DB_NAME}"
+}
+
 # ---- MariaDB DB + user --------------------------------------------------
 
 say "creating MariaDB database '${MPOS_DB_NAME}' and user '${MPOS_DB_USER}'"
@@ -28,7 +39,7 @@ SQL
 TABLES_PRESENT=$(mariadb -N -B -e "USE \`${MPOS_DB_NAME}\`; SHOW TABLES LIKE 'shares';" 2>/dev/null | wc -l)
 if [ "$TABLES_PRESENT" = "0" ]; then
     say "loading database_blank.sql"
-    mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO_ROOT}/sql/database_blank.sql"
+    load_baseline_schema "${MPOS_REPO_ROOT}/sql/database_blank.sql"
 else
     say "DB already populated; skipping schema import"
 fi
@@ -170,6 +181,36 @@ for slot, port in ports.items():
 open(path, "w").write(src)
 PY
 
+# Testnet deployments must accept testnet payout addresses. The production
+# default config stays mainnet-only, so rewrite the copied config here.
+python3 - <<'PY' "$GLOBAL"
+import re, sys
+path = sys.argv[1]
+src = open(path).read()
+replacements = {
+    r"\$config\['segwit_hrps'\]\s*=\s*array\([^;]*\);[^\n]*":
+        "$config['segwit_hrps']         = array('tblc');",
+    r"\$config\['address_versions'\]\s*=\s*array\([^;]*\);[^\n]*":
+        "$config['address_versions']    = array(142);       // testnet P2PKH",
+    r"\$config\['address_versions_p2sh'\]\s*=\s*array\([^;]*\);[^\n]*":
+        "$config['address_versions_p2sh'] = array(170);     // testnet P2SH",
+    r"\$config\['segwit_hrps_by_slot'\]\s*=\s*array\([^;]*?\n\);":
+        "$config['segwit_hrps_by_slot'] = array(\n"
+        "  ''    => array('tblc'),  // Blakecoin\n"
+        "  'mm'  => array('tpho'),  // Photon\n"
+        "  'mm1' => array('tbbtc'), // BlakeBitcoin\n"
+        "  'mm3' => array('telt'),  // Electron\n"
+        "  'mm4' => array('tumo'),  // Universalmolecule\n"
+        "  'mm5' => array('tlit'),  // Lithium\n"
+        ");",
+}
+for pattern, replacement in replacements.items():
+    src, count = re.subn(pattern, replacement, src, count=1, flags=re.S)
+    if count != 1:
+        raise SystemExit(f"failed to update address-format config for pattern: {pattern}")
+open(path, "w").write(src)
+PY
+
 chown "${MPOS_RUN_USER}:${MPOS_RUN_GROUP}" "$GLOBAL"
 chmod 640 "$GLOBAL"
 
@@ -178,6 +219,24 @@ SECURITY_CONF="${MPOS_WEB_ROOT}/include/config/security.inc.php"
 if [ -f "$SECURITY_CONF" ]; then
     sed -i "s|^\\\$config\\['mc_antidos'\\]\\['rate_limit_api'\\] = [0-9]*;|\\\$config['mc_antidos']['rate_limit_api'] = 6000;|" "$SECURITY_CONF"
     sed -i "s|^\\\$config\\['mc_antidos'\\]\\['rate_limit_site'\\] = [0-9]*;|\\\$config['mc_antidos']['rate_limit_site'] = 6000;|" "$SECURITY_CONF"
+    python3 - "$SECURITY_CONF" "$MPOS_LOG_ROOT" <<'PY'
+import sys
+path, log_root = sys.argv[1], sys.argv[2]
+src = open(path).read()
+line = "$config['logging']['path'] = %r;" % log_root
+needle = "$config['logging']['path']"
+out = []
+changed = False
+for item in src.splitlines():
+    if item.strip().startswith(needle):
+        out.append(line)
+        changed = True
+    else:
+        out.append(item)
+if not changed:
+    out.append(line)
+open(path, "w").write("\n".join(out) + "\n")
+PY
 fi
 
 # ---- Nginx vhost --------------------------------------------------------
@@ -232,6 +291,7 @@ ln -sf "$NGINX_VHOST" /etc/nginx/sites-enabled/blakestream-mpos
 rm -f /etc/nginx/sites-enabled/default
 
 mkdir -p "${MPOS_LOG_ROOT}"
+chown www-data:www-data "${MPOS_LOG_ROOT}"
 # Only chown the nginx log files — leave pool/ and daemons/ subdirs to
 # their respective service users. (40-install-pool already gave pool/
 # to blakestream-mpos; 30-init-daemons did the same for daemons/.)
