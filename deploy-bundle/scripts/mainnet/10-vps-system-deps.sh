@@ -13,6 +13,7 @@ if [ "${ID}" != "ubuntu" ]; then
     echo "warn: only tested on Ubuntu (found ${ID}); proceeding anyway" >&2
 fi
 PHP_VER="8.3"
+MPOS_PHP_VERSION_FILE="${MPOS_PHP_VERSION_FILE:-/opt/blakestream-mpos.php-version}"
 
 say "apt update"
 apt-get -qq update
@@ -119,7 +120,7 @@ ln -sf "$PHP_INI_CONF" /etc/php/${PHP_VER}/fpm/conf.d/30-blakestream-memcached.i
 systemctl restart php${PHP_VER}-fpm
 
 # Persist the PHP version we picked so subsequent steps can read it.
-echo "${PHP_VER}" > /opt/blakestream-mpos.php-version 2>/dev/null \
-    || { mkdir -p /opt && echo "${PHP_VER}" > /opt/blakestream-mpos.php-version; }
+mkdir -p "$(dirname "$MPOS_PHP_VERSION_FILE")"
+echo "${PHP_VER}" > "$MPOS_PHP_VERSION_FILE"
 
 say "step 10 done"

@@ -14,11 +14,14 @@ COLLECTOR="${WEB_ROOT}/include/tools/system_status_collector.php"
 [ -f "$COLLECTOR" ] || { echo "missing ${COLLECTOR}" >&2; exit 1; }
 [ -x "$PHP_BIN" ] || { echo "missing ${PHP_BIN}" >&2; exit 1; }
 
-mkdir -p "$LOG_ROOT"
-touch "${LOG_ROOT}/system-status-cache.stdout" "${LOG_ROOT}/system-status-cache.stderr"
+install -d -m 0755 -o "$RUN_USER" -g "$RUN_GROUP" "$LOG_ROOT"
+touch "${LOG_ROOT}/system-status-cache.stdout" \
+      "${LOG_ROOT}/system-status-cache.stderr" \
+      "${LOG_ROOT}/log_$(date +%F).txt"
 chown "${RUN_USER}:${RUN_GROUP}" \
     "${LOG_ROOT}/system-status-cache.stdout" \
-    "${LOG_ROOT}/system-status-cache.stderr"
+    "${LOG_ROOT}/system-status-cache.stderr" \
+    "${LOG_ROOT}/log_$(date +%F).txt"
 
 say "warming System Status cache once"
 sudo -u "$RUN_USER" "$PHP_BIN" "$COLLECTOR" --once >/dev/null

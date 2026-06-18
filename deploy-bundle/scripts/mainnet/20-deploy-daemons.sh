@@ -2,7 +2,7 @@
 # 20-deploy-daemons.sh — stage data folders, configs, and daemon images.
 #
 # Flow (with bootstrap rotation enabled, the default):
-#   1. Create /root/.<coin>/ datadirs for all six coins.
+#   1. Create <daemon-data-root>/.<coin>/ datadirs for all six coins.
 #   2. Render each <coin>.conf with peering OFF (listen=0, maxconnections=0)
 #      so the rotation in step 21 controls when daemons see peers.
 #   3. Pull (or confirm locally-built) daemon images.
@@ -10,7 +10,7 @@
 #      then starts each daemon one at a time for solo import + p2p catch-up.
 #
 # Containers are NOT started here. Step 21 stages bootstrap.dat and starts
-# each 25.2 daemon with -loadblock=<datadir>/bootstrap.dat for explicit import,
+# each daemon with -loadblock=<datadir>/bootstrap.dat for explicit import,
 # avoiding the start → stop → solo-restart dance.
 #
 # SKIP_BOOTSTRAP=1 path: step 21 is skipped by deploy-mainnet.sh, so this
@@ -21,10 +21,11 @@ say()  { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;31m!! %s\033[0m\n' "$*" >&2; }
 
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
+MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
 MPOS_EXPLORER_API_BASE="${MPOS_EXPLORER_API_BASE:-https://explorer.blakestream.io/api}"
 MPOS_DAEMON_STOP_TIMEOUT_S="${MPOS_DAEMON_STOP_TIMEOUT_S:-900}"
+MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
 
 COINS=(blc pho bbtc elt lit umo)
 
@@ -98,6 +99,11 @@ coin_image() {
     printf '%s/%s:%s' "$MPOS_DOCKER_HUB" "${COIN_IMAGE_NAME[$coin]}" "$MPOS_IMAGE_TAG"
 }
 
+coin_datadir() {
+    local coin="$1"
+    printf '%s/%s' "${MPOS_DAEMON_DATA_ROOT%/}" "${CONFIG_DIR[$coin]}"
+}
+
 fetch_peers() {
     local coin="$1"
     local peers_json
@@ -161,7 +167,8 @@ write_config() {
     local coin="$1"
     local name="${COIN_NAME[$coin]}"
     local conf="${CONFIG_FILE[$coin]}"
-    local datadir="/root/${CONFIG_DIR[$coin]}"
+    local datadir
+    datadir="$(coin_datadir "$coin")"
     local rpc_port="${RPC_PORT[$coin]}"
     local p2p_port="${P2P_PORT[$coin]}"
     local peers peer_count=0
@@ -214,7 +221,8 @@ EOF
 write_wrapper() {
     local coin="$1"
     local daemon="${DAEMON_NAME[$coin]}"
-    local config_dir="${CONFIG_DIR[$coin]}"
+    local datadir
+    datadir="$(coin_datadir "$coin")"
 
     mkdir -p /root/.local/bin
     cat > "/root/.local/bin/${daemon}" <<WRAPPER
@@ -223,7 +231,7 @@ CONTAINER='${coin}'
 if ! docker ps --format '{{.Names}}' | grep -qx "\${CONTAINER}"; then
     docker start "\${CONTAINER}" >/dev/null 2>&1
 fi
-docker exec "\${CONTAINER}" /usr/local/bin/${daemon} -datadir=/root/${config_dir} "\$@"
+docker exec "\${CONTAINER}" /usr/local/bin/${daemon} -datadir=${datadir} "\$@"
 WRAPPER
     chmod +x "/root/.local/bin/${daemon}"
 }
@@ -231,7 +239,8 @@ WRAPPER
 stop_existing_container() {
     local coin="$1"
     local cli="${CLI_NAME[$coin]}"
-    local config_dir="${CONFIG_DIR[$coin]}"
+    local datadir
+    datadir="$(coin_datadir "$coin")"
 
     if ! docker ps -a --format '{{.Names}}' | grep -qx "$coin"; then
         return 0
@@ -240,7 +249,7 @@ stop_existing_container() {
     say "stopping existing container ${coin}"
     docker update --restart=no "$coin" >/dev/null 2>&1 || true
     if docker ps --format '{{.Names}}' | grep -qx "$coin"; then
-        docker exec "$coin" "/usr/local/bin/${cli}" "-datadir=/root/${config_dir}" stop >/dev/null 2>&1 || true
+        docker exec "$coin" "/usr/local/bin/${cli}" "-datadir=${datadir}" stop >/dev/null 2>&1 || true
         local rpc_wait_iterations=$((MPOS_DAEMON_STOP_TIMEOUT_S / 5))
         [ "$rpc_wait_iterations" -ge 1 ] || rpc_wait_iterations=1
         for _ in $(seq 1 "$rpc_wait_iterations"); do
@@ -263,7 +272,7 @@ launch_coin() {
     image="$(coin_image "$coin")"
     daemon="${DAEMON_NAME[$coin]}"
     config_dir="${CONFIG_DIR[$coin]}"
-    datadir="/root/${config_dir}"
+    datadir="$(coin_datadir "$coin")"
 
     stop_existing_container "$coin"
     say "starting ${coin} from ${image}"
@@ -291,7 +300,7 @@ done
 # Phase 2: create every coin's data folder.
 say "phase 2: data folders"
 for coin in "${COINS[@]}"; do
-    datadir="/root/${CONFIG_DIR[$coin]}"
+    datadir="$(coin_datadir "$coin")"
     mkdir -p "$datadir"
     chmod 700 "$datadir"
     say "  ${coin}: ${datadir}"
@@ -316,7 +325,7 @@ if [ "${SKIP_BOOTSTRAP:-0}" = "1" ]; then
     printf 'NAMES\tIMAGE\tSTATUS\n'
     for coin in "${COINS[@]}"; do
         docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' \
-            | grep "^${coin} " || warn "${coin} container not running"
+            | grep -E "^${coin}[[:space:]]" || warn "${coin} container not running"
     done
 
     say "step 20 done — daemons starting (SKIP_BOOTSTRAP); step 30 will wait for RPC"

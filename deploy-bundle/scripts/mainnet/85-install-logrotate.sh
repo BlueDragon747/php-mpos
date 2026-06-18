@@ -4,12 +4,18 @@
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
-MPOS_REPO=/root/Blakestream-MPOS
+MPOS_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
+INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
+LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
 
 say "installing /etc/logrotate.d/blakestream-mpos"
-install -m 644 -o root -g root \
+sed \
+    -e "s#/var/log/blakestream-mpos#${LOG_ROOT%/}#g" \
+    -e "s#/opt/blakestream-mpos#${INSTALL_ROOT%/}#g" \
     "${MPOS_REPO}/deploy-bundle/logrotate/blakestream-mpos" \
-    /etc/logrotate.d/blakestream-mpos
+    > /tmp/blakestream-mpos.logrotate
+install -m 644 -o root -g root /tmp/blakestream-mpos.logrotate /etc/logrotate.d/blakestream-mpos
+rm -f /tmp/blakestream-mpos.logrotate
 
 # Validate via dry-run so a typo doesn't ship.
 say "validating with logrotate --debug"

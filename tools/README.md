@@ -7,6 +7,19 @@ not installed as cron jobs, dashboard actions, deploy hooks, or update hooks.
 Operator scripts print a BlakeStream banner when they start. Set
 `BLAKESTREAM_TOOL_BANNER=0` to suppress it in machine-parsed logs.
 
+## Tools in This Directory
+
+| Script | What it does |
+| --- | --- |
+| `wallet-maintenance.sh` | **Mainnet** tool. Two operations on the live `""` pool wallet: **Combine** (merge many UTXOs into fewer, in place — defragment) and **Rotate** (combine first, then reset `wallet.dat` to a small file while keeping the same keychain, tracker address, and MPOS payout endpoint — no pool repoint, no service reconfig). Finds each coin's daemon whether it runs in a Docker container or natively, and rotates/combines the selected coins concurrently (each on its own chain) with a live progress table. A bare run opens the live pool menu; also shows wallet UTXO health (`status`). |
+| `regnet-wallet-maintenance.sh` | **Regtest twin** of `wallet-maintenance.sh` — a copy with the **identical** menu, boxes, tracker before/after table, live sweep table, and Rotate/Combine/Rescan mechanic; only the network differs. On startup it spins up a throwaway `-regtest` daemon per coin (`rgw-<coin>`, from the `sidgrip/<coin>` image), seeds each with coinbase on a tracker address, runs the same operator flow against them, then tears them all down on exit. Never touches the live pool. Bare run = menu; `regnet-wallet-maintenance.sh rotate\|combine\|rescan --all` non-interactive. |
+| `regnet-mine-coins.sh` | Standalone regtest fixture builder: starts disposable regtest daemon containers, creates/reuses their datadirs, and mines spendable test outputs for ad-hoc regtest testing. Never touches live nodes. |
+| `pool-watch.sh` | Live pool dashboard mirroring the system-status pages: hashrate, workers, network height/difficulty, share rate/efficiency, **per-coin block finds** (merged mining), proxy chain health, process CPU/RSS, plus a stall verdict (the old "live process, stale work" detector). Interactive = live two-column table; redirected = line log. Read-only. |
+| `resource-io-watch.sh` | Live dashboard (interactive) / log (redirected) of CPU, memory, process RSS, disk usage/I/O, pool health, and recent kernel/service errors while miners stay connected. Read-only. |
+| `mpos-metrics-snapshot.sh` | Capture a system, disk-I/O, and MariaDB read/write snapshot at a checkpoint for before/after comparison. |
+
+`lib/tool-banner.sh` is a shared helper for the startup banner; it is not run directly.
+
 ## Local-Only Watchers
 
 The pool and resource watchers read local services, local MariaDB, and local
@@ -14,8 +27,8 @@ JSON-RPC ports.
 
 ```bash
 cd /path/to/php-mpos/tools
-INTERVAL_SECONDS=300 ./pool-stall-watch.sh
-INTERVAL_SECONDS=300 ./resource-io-watch.sh
+./pool-watch.sh            # live dashboard (INTERVAL_SECONDS=300 nohup ... >> log for a background line-log)
+./resource-io-watch.sh
 ```
 
 Optional settings:
@@ -45,136 +58,108 @@ DB_NAME=mpos
 MYSQL_CMD=mysql
 ```
 
-## Wallet UTXO Maintenance
+## Wallet UTXO Maintenance — Pool Wallet Rotation
 
-`wallet-utxo-maintenance.sh` is for manual pool-wallet inspection,
-rotation preparation, and consolidation.
+`wallet-maintenance.sh` resets the live `""` pool wallet's `wallet.dat` to a
+fresh, small file **without changing the keychain**. The pool's operational
+wallet is `""` on each daemon: coinbase lands on a fixed eloipool tracker address
+that is `ismine` on `""`, and MPOS pays out through `/wallet/` = `""`. So `""`
+carries every coinbase and payout forever and its file only grows — Core has no
+compact RPC and coin selection is not FIFO, so payouts never drain it in order.
 
-The default mode is a regtest smoke test against rollback-smoke containers. It
-must be run by the operator from a terminal. Live pool wallet work requires the
-explicit `--main` flag. The tool refuses to run `--main` against containers
-labeled as rollback-smoke test containers.
+A rotation, per coin:
 
-The regtest smoke path uses the shared fixture created by
-`mine-regtest-coins.sh`. If the fixture is missing or has too few spendable
-outputs, the wallet tool auto-starts the regtest containers and mines more
-blocks before it tests consolidation.
+1. sweeps `""`'s spendable funds to a temp wallet (this also **consolidates**
+   them — one output per batch),
+2. swaps the wallet file: unloads `""`, moves its `wallet.dat` aside in the host
+   data folder, creates a fresh blank `""`, and re-imports the saved descriptors
+   with a **scoped rescan** so the fresh `""` re-derives the same addresses (incl.
+   the tracker) and recovers the still-immature coinbase, without re-importing the
+   spent coinbase history that would re-bloat the file,
+3. sweeps the funds back into the fresh `""`.
 
-When no `--coin` or `--all` option is supplied in a terminal, the tool shows a
-numbered wallet-health selector. Type a number to toggle one coin, `0` to
-toggle all, then press Enter on a blank line to continue. Selected coins show
-`[*]`.
+The tracker address stays `ismine` on `""` and MPOS keeps paying from `/wallet/`
+= `""`. **eloipool and MPOS need zero changes** — no tracker repoint, no config
+edit. This one operation replaces both a standalone consolidate and a standalone
+sweep. The rescan depth is the coin's coinbase maturity + 100 blocks (ELT 560,
+others 200). See `sweep.md` for the full design and the manual procedure.
 
-It does not edit MPOS config, does not change pool payout addresses, and does
-not broadcast live consolidation transactions unless `--main --send` is
-supplied and the operator confirms the exact prompt.
+`wallet-maintenance.sh` is the **mainnet** (live pool) tool; the **regtest**
+validator is the separate `regnet-wallet-maintenance.sh` (isolated regtest daemons, never the
+live pool). It reaches each coin's daemon whether it runs in a **Docker container**
+or **natively** on the host (auto-detected per coin), and on testnet/regtest it
+locates the `""` wallet under the network subdir (e.g. `testnet3/wallets/`).
+(`--main` is still accepted as a harmless no-op for old commands.)
 
-Live container names default to the coin symbols `blc`, `pho`, `bbtc`, `elt`,
-`lit`, and `umo`. If an operator uses different Docker container names, set
-per-coin variables before running live tools, for example:
+When several coins are selected they rotate (or combine) **concurrently** — each
+coin is its own chain with its own mempool, so a slow chain never blocks the rest.
+A live per-coin table shows each coin's UTXOs total/left, transactions sent,
+current mempool, and state (combining / waiting / done) as the sweep runs.
 
-```bash
-export MPOS_CONTAINER_BLC=pool-blakecoin
-export MPOS_CONTAINER_PHO=pool-photon
-```
+A bare run scans the wallets once, then opens the picker (a blue-bordered box, the
+same look as the coin selector): press a coin's number to toggle it (no Enter;
+`0` = all). The Operation row carries: `A` Dry Run (independent toggle, on by
+default — preview the plan, move nothing); `B` Rotate / `C` Combine (pick one —
+Rotate is the default); and two value setters — `D` Mempool `[N]` (in-flight tx
+cap, default 10) and `E` Refill `[M]` (resume sending once the mempool drains to M,
+default 5); press the key, then type the number. A one-line description of the
+chosen operation shows between the box and the Operation row:
 
-Regtest consolidation smoke test:
+- **Combine** — merge many of `""`'s UTXOs into fewer outputs, in place
+  (defragment; the funds and the wallet's history stay put — `wallet.dat` does not
+  shrink).
+- **Rotate** — *combine first, then rotate*: consolidate the funds into a temp
+  wallet, swap `""` for a fresh blank wallet (scoped re-import), then move the
+  combined funds back. Resets `wallet.dat` to a small file, same keychain & tracker.
+  Mining is paused for the swap by default — one window for the whole batch
+  (eloipool drives the parent + merged aux, so it pauses all six); `--no-pause`
+  skips it (the scoped rescan covers the window either way).
 
-```bash
-sudo ./wallet-utxo-maintenance.sh
-```
-
-Status check:
-
-```bash
-sudo ./wallet-utxo-maintenance.sh --main status --all
-```
-
-Prepare a new payout address and dump key material:
-
-```bash
-sudo ./wallet-utxo-maintenance.sh --main rotate --coin blc --old-address CURRENT_POOL_ADDRESS
-```
-
-Dry-run consolidation:
-
-```bash
-sudo ./wallet-utxo-maintenance.sh --main consolidate --coin blc --batch-size 100
-```
-
-Broadcast consolidation:
-
-```bash
-sudo ./wallet-utxo-maintenance.sh --main consolidate --coin blc --batch-size 100 --send
-```
-
-Any operation that creates a replacement address or moves funds writes a
-root-only wallet backup and private key material under:
-
-```text
-/root/blakestream-wallet-key-dumps/
-```
-
-Legacy wallets use wallet dumps and address private-key files. Descriptor
-wallets use `listdescriptors true` private descriptor exports plus address-info
-files because `dumpwallet` and `dumpprivkey` are legacy-only RPCs.
-
-Override that location with `MPOS_WALLET_KEY_DUMP_DIR` if the pool operator
-stores key material somewhere else.
-
-Store those files offline before changing pool payout addresses or retiring an
-old wallet.
-
-## Chain Rollback
-
-`chain-rollback.sh` is a manual terminal tool for rollback smoke testing and
-coordinated chain-tip rollback across pool nodes. By default it runs a
-disposable regtest smoke test. Live-node rollback requires the explicit
-`--main` flag.
-
-The script clears the terminal and shows a numbered chain selector. Type a
-number to toggle one chain, `0` to toggle all, then press Enter on a blank line
-to continue. Selected chains show `[*]`. Mainnet plan mode shows each selected
-chain's current height and asks for the rollback target height. Regtest smoke
-mode does the same for the first/full rollback when run from an interactive
-terminal; noninteractive smoke tests use the configured default target heights.
-
-Run the regtest smoke test from the directory where you want result files
-written:
+Press Enter to run the chosen operation on the selected coins, `q` to quit.
 
 ```bash
-cd /mnt/ram-build
-sudo /path/to/php-mpos/tools/chain-rollback.sh
+# mainnet (live pool)
+sudo ./wallet-maintenance.sh                            # live menu
+sudo ./wallet-maintenance.sh status  --all              # wallet UTXO health
+sudo ./wallet-maintenance.sh rotate  --coin blc --dry-run    # preview, move nothing
+sudo ./wallet-maintenance.sh rotate  --coin blc              # rotate  (after typed YES)
+sudo ./wallet-maintenance.sh combine --coin blc --dry-run    # preview the combine
+sudo ./wallet-maintenance.sh combine --coin blc              # combine (after typed YES)
+
+# regtest twin (spins up throwaway regtest daemons, then the identical UI/mechanic)
+sudo ./regnet-wallet-maintenance.sh                       # menu (same as mainnet, on regtest)
+sudo ./regnet-wallet-maintenance.sh rotate  --all         # rotate every coin on regtest
+sudo ./regnet-wallet-maintenance.sh combine --coin blc    # combine one coin on regtest
+sudo ./regnet-wallet-maintenance.sh rescan  --all         # rescan every coin on regtest
 ```
 
-The smoke test starts disposable regtest daemon containers, mines test blocks,
-runs a full rollback for the selected chains, then runs a partial rollback to
-confirm other selected chains are not changed. Noninteractive runs default to
-all six chains. It writes `chain-rollback-regtest-*.json` plans in the current
-directory and writes run, verify, and apply logs under the matching
-`chainrollback-regtest-*/logs/` directory. It also copies the JSON plans into
-the matching work directory so the folder can be moved as a complete test
-record. It uses the same regtest fixture and wallets as the UTXO maintenance
-smoke test. It refuses to remove existing daemon containers unless they were
-created by the smoke test.
-
-By default the smoke containers remain available after a passing run so the
-wallet UTXO tool can reuse the same datadirs and wallets. Set
-`KEEP_ROLLBACK_TEST_CONTAINERS=0` to remove the smoke containers after success.
+Tuning: `--max-mempool N` (default 10) caps in-flight txs and `--mempool-resume N`
+(default 5) is the refill threshold (env: `MPOS_UTXO_MAX_MEMPOOL` /
+`MPOS_UTXO_MEMPOOL_RESUME`); `--batch-size N` (default 100) sets inputs per tx;
+`--rescan-depth N` overrides the depth and `MPOS_ROTATE_RESCAN_MARGIN` (default
+100) the margin past maturity; `--no-pause` skips the mining pause; `--temp-wallet
+NAME` overrides the temp wallet name; `MPOS_MINING_UNITS` sets the systemd units
+paused for the swap. For a coin whose daemon runs natively, `MPOS_NATIVE_CLI_<SYM>`
+and `MPOS_NATIVE_DATADIR_<SYM>` override the auto-detected cli path and datadir.
+The captured private descriptors (the keychain
+re-imported into the fresh `""`) are written root-only under
+`/root/blakestream-wallet-key-dumps/`; every live rotation is appended to
+`wallet-maintenance.log` there (override with `MPOS_WALLET_UTXO_LOG`). The old
+`wallet.dat` is kept under the datadir as `_rotated-<ts>/`, and the temp wallet is
+unloaded but its file retained — remove both only once payouts run cleanly.
 
 ## Regtest Mining Fixture
 
-`mine-regtest-coins.sh` is the shared regtest fixture builder used by the
-rollback and wallet UTXO tools. It starts rollback-smoke daemon containers,
-creates or reuses their datadirs, and mines spendable test outputs. It never
-uses live/mainnet mode.
+`regnet-mine-coins.sh` is a standalone regtest fixture builder. It starts
+disposable regtest daemon containers, creates or reuses their datadirs, and mines
+spendable test outputs. It never uses live/mainnet mode.
 It writes its JSON summary in the current directory and its run log under the
-selected `chainrollback-regtest-*/logs/` directory.
+selected work directory.
 
 Regtest containers default to names like `mpos-regtest-blc` so they do not
 collide with live pool containers. Override the prefix with
 `MPOS_REGTEST_CONTAINER_PREFIX` only when you need a separate fixture namespace.
-Images default to `${MPOS_DOCKER_HUB:-sidgrip}/<coin>:${MPOS_IMAGE_TAG:-25.2}`.
+Images default to `${MPOS_DOCKER_HUB:-sidgrip}/<coin>:${MPOS_IMAGE_TAG:-latest}`.
 Per-coin overrides use `MPOS_REGTEST_IMAGE_BLC`, `MPOS_REGTEST_IMAGE_PHO`, and
 so on. If no override is set, the miner can detect the image from an existing
 non-test live container named by `MPOS_CONTAINER_BLC` or
@@ -183,7 +168,7 @@ non-test live container named by `MPOS_CONTAINER_BLC` or
 Mine all six regtest chains into the latest or a new fixture:
 
 ```bash
-sudo ./mine-regtest-coins.sh
+sudo ./regnet-mine-coins.sh
 ```
 
 When run directly from a terminal, the script asks how many regtest blocks to
@@ -195,50 +180,14 @@ use the default without asking.
 Mine only when a fixture has fewer than five spendable outputs:
 
 ```bash
-sudo ./mine-regtest-coins.sh --ensure-utxos 5
+sudo ./regnet-mine-coins.sh --ensure-utxos 5
 ```
 
 Use a specific shared fixture folder:
 
 ```bash
-sudo MPOS_REGTEST_WORK_DIR=/mnt/ram-build/mpos-rollback-test/tools/chainrollback-regtest-shared ./mine-regtest-coins.sh
+sudo MPOS_REGTEST_WORK_DIR=/path/to/shared-fixture ./regnet-mine-coins.sh
 ```
 
-The rollback and wallet tools also honor `MPOS_REGTEST_WORK_DIR`, so set that
-variable when you want both tools to use one explicit test fixture.
-
-Create one live rollback plan on a synced node:
-
-```bash
-sudo ./chain-rollback.sh --main plan
-```
-
-The script asks which chains to include and the target height for each selected
-chain, then writes a JSON plan containing the exact target heights and block
-hashes. This plan is the source of truth for the rollback.
-
-Copy that JSON plan to every node that should roll back, then apply the same
-plan locally on each node:
-
-```bash
-sudo ./chain-rollback.sh --main apply --plan chain-rollback-plan.json
-```
-
-Check a node against a plan without applying it:
-
-```bash
-sudo ./chain-rollback.sh --main status --plan chain-rollback-plan.json
-```
-
-Using the same JSON plan on every node keeps all selected chains at the same
-rollback heights. The apply step verifies that each node has the same planned
-invalidate hash before it rolls back.
-
-The live rollback path does not edit block database files. It uses daemon RPC
-`invalidateblock` against the planned `target + 1` block. Plans and apply
-manifests are written to `tools/logs/` by default unless the operator explicitly
-sets `MPOS_LOG_ROOT`. When the tool is run with `sudo` by a normal user, the
-default log directory, generated plan JSON files, and apply manifests are
-chowned back to that invoking user and kept private. Files use mode `600`, so
-they are readable through SFTP/WinSCP as the operator account without making
-rollback details world-readable.
+The wallet maintenance regtest tools also honor `MPOS_REGTEST_WORK_DIR`, so set
+that variable when you want them to use one explicit test fixture.

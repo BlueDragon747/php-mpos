@@ -4,12 +4,24 @@
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
-INSTALL_ROOT=/opt/blakestream-mpos
-LOG_ROOT=/var/log/blakestream-mpos
-WEB_ROOT=/var/www/blakestream-mpos
-MPOS_REPO=/root/Blakestream-MPOS
-PHP_VER=$(cat /opt/blakestream-mpos.php-version)
+INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
+LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
+WEB_ROOT="${MPOS_WEB_ROOT:-/var/www/blakestream-mpos}"
+MPOS_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
+MPOS_PHP_VERSION_FILE="${MPOS_PHP_VERSION_FILE:-/opt/blakestream-mpos.php-version}"
+PHP_VER=$(cat "$MPOS_PHP_VERSION_FILE")
 HOST_IP=$(hostname -I | awk '{print $1}')
+
+load_baseline_schema() {
+    local schema="$1"
+    # The dump is named for the default `mpos` database. Strip dump-level
+    # CREATE/USE lines so operator-supplied MPOS_DB_NAME is honored.
+    awk '
+        /^CREATE DATABASE IF NOT EXISTS / { next }
+        /^USE `[^`]+`;$/ { next }
+        { print }
+    ' "$schema" | mariadb "${MPOS_DB_NAME}"
+}
 
 # ---- MariaDB ----
 say "creating database '${MPOS_DB_NAME}' and user '${MPOS_DB_USER}'"
@@ -24,7 +36,7 @@ SQL
 TABLES_PRESENT=$(mariadb -N -B -e "USE \`${MPOS_DB_NAME}\`; SHOW TABLES LIKE 'shares';" 2>/dev/null | wc -l)
 if [ "$TABLES_PRESENT" = "0" ]; then
     say "loading database_blank.sql"
-    mariadb "${MPOS_DB_NAME}" < "${MPOS_REPO}/sql/database_blank.sql"
+    load_baseline_schema "${MPOS_REPO}/sql/database_blank.sql"
 else
     say "DB already populated; skipping schema import"
 fi
@@ -110,7 +122,7 @@ install -o root -g root -m 0440 \
 visudo -cf /etc/sudoers.d/blakestream-mpos-disk-stats >/dev/null
 sudo -u www-data sudo -n /usr/local/sbin/blakestream-mpos-disk-stats >/dev/null
 
-# ---- /opt/blakestream-mpos/cronjobs symlink (PHP cron's BASEPATH=../public/) ----
+# ---- cronjobs symlink (PHP cron's BASEPATH=../public/) ----
 ln -sfn "${WEB_ROOT}" "${INSTALL_ROOT}/public"
 
 # ---- render global.inc.php with mainnet daemon RPC ports ----
@@ -204,6 +216,24 @@ SECURITY_CONF="${WEB_ROOT}/include/config/security.inc.php"
 if [ -f "$SECURITY_CONF" ]; then
     sed -i "s|^\\\$config\\['mc_antidos'\\]\\['rate_limit_api'\\] = [0-9]*;|\\\$config['mc_antidos']['rate_limit_api'] = 6000;|" "$SECURITY_CONF"
     sed -i "s|^\\\$config\\['mc_antidos'\\]\\['rate_limit_site'\\] = [0-9]*;|\\\$config['mc_antidos']['rate_limit_site'] = 6000;|" "$SECURITY_CONF"
+    python3 - "$SECURITY_CONF" "$LOG_ROOT" <<'PY'
+import sys
+path, log_root = sys.argv[1], sys.argv[2]
+src = open(path).read()
+line = "$config['logging']['path'] = %r;" % log_root
+needle = "$config['logging']['path']"
+out = []
+changed = False
+for item in src.splitlines():
+    if item.strip().startswith(needle):
+        out.append(line)
+        changed = True
+    else:
+        out.append(item)
+if not changed:
+    out.append(line)
+open(path, "w").write("\n".join(out) + "\n")
+PY
 fi
 
 # ---- nginx vhost ----
@@ -257,6 +287,7 @@ fi
 ln -sf "$NGINX_VHOST" /etc/nginx/sites-enabled/blakestream-mpos
 rm -f /etc/nginx/sites-enabled/default
 
+chown www-data:www-data "${LOG_ROOT}"
 touch "${LOG_ROOT}/nginx-access.log" "${LOG_ROOT}/nginx-error.log"
 chown www-data:www-data "${LOG_ROOT}/nginx-access.log" "${LOG_ROOT}/nginx-error.log"
 nginx -t

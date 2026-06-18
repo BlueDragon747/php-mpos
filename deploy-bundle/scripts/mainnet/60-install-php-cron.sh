@@ -6,7 +6,7 @@
 # Running both PHP cron and cronjobs-py against the same DB would race
 # on shares/transactions tables and double-send payouts.
 #
-# The PHP tree is staged under /opt/blakestream-mpos/cronjobs/ purely
+# The PHP tree is staged under ${MPOS_INSTALL_ROOT}/cronjobs/ purely
 # so an operator can run individual scripts ad-hoc for diagnostic
 # purposes (e.g. `php cronjobs/blockupdate.php` to refresh a stuck
 # block's confirmations). It is NOT scheduled.
@@ -21,8 +21,8 @@
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
-INSTALL_ROOT=/opt/blakestream-mpos
-MPOS_REPO=/root/Blakestream-MPOS
+INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
+MPOS_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
 
 mkdir -p "${INSTALL_ROOT}/cronjobs"
 say "rsync cronjobs/ → ${INSTALL_ROOT}/cronjobs/ (tree only — NOT scheduled)"

@@ -51,8 +51,6 @@ if [ -r "${SCRIPT_DIR}/scripts/lib/banner.sh" ]; then
 fi
 
 MPOS_REPO_URL="${MPOS_REPO_URL:-https://github.com/BlueDragon747/php-mpos.git}"
-# Pre-live: use 25.2-GO until the Go Eloipool cutover is live, then switch
-# ELIOPOOL_BRANCH to master once master carries these updates.
 ELIOPOOL_REPO_URL="${ELIOPOOL_REPO_URL:-https://github.com/BlueDragon747/eloipool_Blakecoin.git}"
 ELIOPOOL_BRANCH="${ELIOPOOL_BRANCH:-25.2-GO}"
 ELIOPOOL_TMPROOT=""
@@ -97,7 +95,7 @@ Source repos:
 Daemon images:
   The six coin daemons are pulled directly from Docker Hub by default:
 
-    \${MPOS_DOCKER_HUB:-sidgrip}/<coin>:\${MPOS_IMAGE_TAG:-25.2}
+    \${MPOS_DOCKER_HUB:-sidgrip}/<coin>:\${MPOS_IMAGE_TAG:-latest}
 
   To clone the coin repos and build local runtime images on the target
   server instead of pulling daemon images:
@@ -108,7 +106,7 @@ Tunables (env):
   MPOS_DOCKER_HUB     Docker Hub org/user for coin daemon images
                        (default: sidgrip when pulling, local when building).
   MPOS_IMAGE_TAG      Docker image tag for all daemon images
-                       (default: 25.2 when pulling, 25.2-local when building).
+                       (default: latest when pulling, latest-local when building).
   MPOS_DEPLOY_LOG     Full deploy transcript path. Defaults to
                        ./mpos-25.2-go-deploy-<utc>.log in the repo root.
                        Set to 0, off, or none to disable.
@@ -116,11 +114,15 @@ Tunables (env):
                        1 pulls daemon images; 0 clones coin repos and builds
                        local daemon images first (default: 1).
   MPOS_DAEMON_SOURCE_REF
-                       Branch/tag used for source builds (default: 0.25.2).
-                       Switch to master after live cutover.
+                       Branch/tag used for source builds (default: master).
   MPOS_DAEMON_BUILD_ROOT
                        Source-build working directory
                        (default: /root/blakestream-daemon-builds).
+  MPOS_ELIOPOOL_ROOT  Installed Eliopool source tree used by mainnet install
+                       and update scripts (default: /root/Blakestream-Eliopool).
+  MPOS_DAEMON_DATA_ROOT
+                       Parent directory for mainnet Docker daemon datadirs
+                       (default: /root; datadirs remain .blakecoin, etc.).
   MPOS_DAEMON_BUILD_JOBS
                        Parallel build jobs (default: CPU cores - 1).
   MPOS_DAEMON_BUILD_DOCKER_MODE
@@ -195,14 +197,14 @@ Tunables (env):
   SKIP_BOOTSTRAP       Skip sequential bootstrap.dat replay (rely on p2p sync)
 
 Daemon image examples:
-  # Default: pull sidgrip/<coin>:25.2
+  # Default: pull sidgrip/<coin>:latest
   $0
 
-  # Clone coin repos and build local/<coin>:25.2-local runtime images
+  # Clone coin repos and build local/<coin>:latest-local runtime images
   MPOS_PULL_DAEMON_IMAGES=0 $0
 
   # Use already-loaded custom images without pulling or building
-  MPOS_DOCKER_HUB=local MPOS_IMAGE_TAG=25.2-test \\
+  MPOS_DOCKER_HUB=local MPOS_IMAGE_TAG=latest-test \\
   MPOS_PULL_DAEMON_IMAGES=0 SKIP_DAEMON_IMAGE_BUILD=1 $0
 
 Source-build notes:
@@ -353,19 +355,23 @@ say "checking for prior deploy state on ${HOST}"
 # step 20 and step 99) the env's MPOS_NODE_RPC_PASS would not match
 # what the daemons authenticate against; reading from the conf is
 # always correct.
-DAEMON_RPC_USER="$(host_run 'grep -m1 ^rpcuser= /root/.blakecoin/blakecoin.conf 2>/dev/null | cut -d= -f2' || true)"
-DAEMON_RPC_PASS="$(host_run 'grep -m1 ^rpcpassword= /root/.blakecoin/blakecoin.conf 2>/dev/null | cut -d= -f2' || true)"
+export MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
+export MPOS_DEPLOY_ENV_FILE="${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env}"
+PRIOR_BLC_CONF="${MPOS_DAEMON_DATA_ROOT%/}/.blakecoin/blakecoin.conf"
+DAEMON_RPC_USER="$(host_run "grep -m1 ^rpcuser= '${PRIOR_BLC_CONF}' 2>/dev/null | cut -d= -f2" || true)"
+DAEMON_RPC_PASS="$(host_run "grep -m1 ^rpcpassword= '${PRIOR_BLC_CONF}' 2>/dev/null | cut -d= -f2" || true)"
 if [ -n "${DAEMON_RPC_USER}" ] && [ -n "${DAEMON_RPC_PASS}" ]; then
-    say "adopting RPC creds from /root/.blakecoin/blakecoin.conf"
+    say "adopting RPC creds from ${PRIOR_BLC_CONF}"
     : "${MPOS_NODE_RPC_USER:=${DAEMON_RPC_USER}}"
     : "${MPOS_NODE_RPC_PASS:=${DAEMON_RPC_PASS}}"
     export MPOS_NODE_RPC_USER MPOS_NODE_RPC_PASS
 fi
 
+PRIOR_INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
 LIVE_STRATUM_PORT="$(host_run "python3 - <<'PY' 2>/dev/null || true
 import re
 from pathlib import Path
-cfg = Path('/opt/blakestream-mpos/eloipool/config.py')
+cfg = Path('${PRIOR_INSTALL_ROOT}/eloipool/config.py')
 if cfg.is_file():
     m = re.search(r'StratumAddresses\\s*=\\s*\\(\\(\\s*[\\\"\\'][^\\\"\\']*[\\\"\\']\\s*,\\s*(\\d{2,5})', cfg.read_text(errors='ignore'))
     if m:
@@ -378,9 +384,9 @@ if [ -z "${MPOS_STRATUM_PORT+x}" ] && [[ "${LIVE_STRATUM_PORT}" =~ ^[1-9][0-9]{0
     export MPOS_STRATUM_PORT
 fi
 
-PRIOR_ENV="$(host_run 'cat /root/.mpos-deploy.env 2>/dev/null' || true)"
+PRIOR_ENV="$(host_run "cat '${MPOS_DEPLOY_ENV_FILE}' 2>/dev/null" || true)"
 if [ -n "${PRIOR_ENV}" ]; then
-    say "found prior /root/.mpos-deploy.env - adopting non-RPC values "
+    say "found prior ${MPOS_DEPLOY_ENV_FILE} - adopting non-RPC values "
     say "  for keys the operator hasn't overridden in this run"
     while IFS= read -r line; do
         # Skip blanks / comments / non-export lines.
@@ -415,6 +421,12 @@ fi
 export MPOS_INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
 export MPOS_WEB_ROOT="${MPOS_WEB_ROOT:-/var/www/blakestream-mpos}"
 export MPOS_LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
+export MPOS_DATA_ROOT="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}"
+export MPOS_BACKUP_ROOT="${MPOS_BACKUP_ROOT:-/var/backups/blakestream-mpos}"
+export MPOS_PHP_VERSION_FILE="${MPOS_PHP_VERSION_FILE:-/opt/blakestream-mpos.php-version}"
+export MPOS_UPDATE_REPO_ROOT="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
+export MPOS_ELIOPOOL_ROOT="${MPOS_ELIOPOOL_ROOT:-/root/Blakestream-Eliopool}"
+export MPOS_DEPLOY_ENV_FILE="${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env}"
 export MPOS_DOMAIN="${MPOS_DOMAIN:-_}"
 export MPOS_HTTP_PORT="${MPOS_HTTP_PORT:-80}"
 export MPOS_HTTPS_PORT="${MPOS_HTTPS_PORT:-443}"
@@ -442,19 +454,30 @@ export MPOS_NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-$(random_hex 24)}"
 export MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
 if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
     export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
-    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2-local}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest-local}"
 else
     export MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
+    export MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 fi
-# Pre-live: source-build daemons from the 0.25.2 wallet branches. Change to
-# master after live cutover once master carries the 25.2 wallet updates.
-export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
+export MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
 export MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 export MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
 export MPOS_DAEMON_BUILD_DOCKER_MODE="${MPOS_DAEMON_BUILD_DOCKER_MODE:-pull}"
+export MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
 export SKIP_DAEMON_IMAGE_BUILD="${SKIP_DAEMON_IMAGE_BUILD:-0}"
 export MPOS_EXPLORER_API_BASE="${MPOS_EXPLORER_API_BASE:-https://explorer.blakestream.io/api}"
+
+# Older generated deploy env files pinned pre-cutover daemon defaults.
+# Treat those generated values as stale so redeploys use the live network
+# defaults unless the operator supplies a custom tag/ref in this shell.
+if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
+    [ "$MPOS_DOCKER_HUB" != "sidgrip" ] || export MPOS_DOCKER_HUB=local
+    [ "$MPOS_IMAGE_TAG" != "25.2" ] || export MPOS_IMAGE_TAG=latest-local
+else
+    [ "$MPOS_IMAGE_TAG" != "25.2" ] || export MPOS_IMAGE_TAG=latest
+fi
+[ "$MPOS_DAEMON_SOURCE_REF" != "0.25.2" ] || export MPOS_DAEMON_SOURCE_REF=master
+
 export BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://bootstrap.blakestream.io}"
 export BOOTSTRAP_SERIES="${BOOTSTRAP_SERIES:-25.2}"
 export BOOTSTRAP_CANONICAL_HOST="${BOOTSTRAP_CANONICAL_HOST:-bootstrap.blakestream.io}"
@@ -482,6 +505,12 @@ require_pattern() {
 require_pattern MPOS_INSTALL_ROOT "${MPOS_INSTALL_ROOT}" '/[A-Za-z0-9._/-]+'
 require_pattern MPOS_WEB_ROOT     "${MPOS_WEB_ROOT}"     '/[A-Za-z0-9._/-]+'
 require_pattern MPOS_LOG_ROOT     "${MPOS_LOG_ROOT}"     '/[A-Za-z0-9._/-]+'
+require_pattern MPOS_DATA_ROOT    "${MPOS_DATA_ROOT}"    '/[A-Za-z0-9._/-]+'
+require_pattern MPOS_BACKUP_ROOT  "${MPOS_BACKUP_ROOT}"  '/[A-Za-z0-9._/-]+'
+require_pattern MPOS_PHP_VERSION_FILE "${MPOS_PHP_VERSION_FILE}" '/[A-Za-z0-9._/-]+'
+require_pattern MPOS_UPDATE_REPO_ROOT "${MPOS_UPDATE_REPO_ROOT}" '/[A-Za-z0-9._/-]+'
+require_pattern MPOS_ELIOPOOL_ROOT "${MPOS_ELIOPOOL_ROOT}" '/[A-Za-z0-9._/-]+'
+require_pattern MPOS_DEPLOY_ENV_FILE "${MPOS_DEPLOY_ENV_FILE}" '/[A-Za-z0-9._/-]+'
 require_pattern MPOS_DOMAIN       "${MPOS_DOMAIN}"       '([A-Za-z0-9._*_-]{1,253}|_)'
 require_pattern MPOS_HTTP_PORT    "${MPOS_HTTP_PORT}"    '[1-9][0-9]{0,4}'
 require_pattern MPOS_HTTPS_PORT   "${MPOS_HTTPS_PORT}"   '(0|[1-9][0-9]{0,4})'
@@ -515,6 +544,7 @@ require_pattern MPOS_DOCKER_HUB   "${MPOS_DOCKER_HUB}"   '[A-Za-z0-9._:/-]{1,253
 require_pattern MPOS_IMAGE_TAG    "${MPOS_IMAGE_TAG}"    '[A-Za-z0-9._-]{1,128}'
 require_pattern MPOS_PULL_DAEMON_IMAGES "${MPOS_PULL_DAEMON_IMAGES}" '[01]'
 require_pattern MPOS_DAEMON_SOURCE_REF "${MPOS_DAEMON_SOURCE_REF}" '[A-Za-z0-9._/-]{1,128}'
+require_pattern MPOS_DAEMON_DATA_ROOT "${MPOS_DAEMON_DATA_ROOT}" '/[A-Za-z0-9._/-]+'
 require_pattern MPOS_DAEMON_BUILD_ROOT "${MPOS_DAEMON_BUILD_ROOT}" '/[A-Za-z0-9._/-]+'
 if [ -n "$MPOS_DAEMON_BUILD_JOBS" ]; then
     require_pattern MPOS_DAEMON_BUILD_JOBS "${MPOS_DAEMON_BUILD_JOBS}" '[1-9][0-9]{0,2}'
@@ -555,6 +585,8 @@ ENVRC=$(mktemp)
 {
     echo "# generated by deploy-mainnet.sh on $(date -Iseconds)"
     for var in MPOS_INSTALL_ROOT MPOS_WEB_ROOT MPOS_LOG_ROOT \
+               MPOS_DATA_ROOT MPOS_BACKUP_ROOT MPOS_PHP_VERSION_FILE \
+               MPOS_UPDATE_REPO_ROOT MPOS_ELIOPOOL_ROOT MPOS_DEPLOY_ENV_FILE \
                MPOS_DOMAIN MPOS_HTTP_PORT MPOS_HTTPS_PORT MPOS_STRATUM_PORT MPOS_SSH_PORT \
                MPOS_BASE_DIFFICULTY MPOS_DIFFICULTY_BITS \
                MPOS_DB_NAME MPOS_DB_USER MPOS_DB_PASS MPOS_DB_HOST MPOS_DB_PORT \
@@ -566,6 +598,7 @@ ENVRC=$(mktemp)
                MPOS_DOCKER_HUB MPOS_IMAGE_TAG MPOS_PULL_DAEMON_IMAGES \
                MPOS_DAEMON_SOURCE_REF \
                MPOS_DAEMON_BUILD_ROOT MPOS_DAEMON_BUILD_JOBS \
+               MPOS_DAEMON_DATA_ROOT \
                MPOS_DAEMON_BUILD_DOCKER_MODE SKIP_DAEMON_IMAGE_BUILD \
                MPOS_SWAP_ACTION MPOS_SWAP_SIZE_MB MPOS_SWAP_FILE \
                MPOS_SWAP_PROMPT_TIMEOUT_S MPOS_SWAP_DISK_RESERVE_MB \
@@ -638,18 +671,19 @@ deploy_step() {
     local args_display="${args:+ ${args}}"
     if [ "${LOCAL_DEPLOY}" = "1" ]; then
         say "local: ${name}${args_display}"
-        install -o root -g root -m 0600 "$ENVRC" /root/.mpos-deploy.env
-        ( set -e; source /root/.mpos-deploy.env; bash "$script" $args )
+        install -D -o root -g root -m 0600 "$ENVRC" "$MPOS_DEPLOY_ENV_FILE"
+        ( set -e; source "$MPOS_DEPLOY_ENV_FILE"; bash "$script" $args )
     else
         say "remote: ${name}${args_display}"
-        scp -q "$ENVRC" "${HOST}:/root/.mpos-deploy.env"
+        ssh "${HOST}" "mkdir -p '$(dirname "$MPOS_DEPLOY_ENV_FILE")'"
+        scp -q "$ENVRC" "${HOST}:${MPOS_DEPLOY_ENV_FILE}"
         scp -q "$script" "${HOST}:/tmp/${name}"
         if [ -f "${SCRIPT_DIR}/scripts/configure-mariadb-pool.sh" ]; then
             scp -q "${SCRIPT_DIR}/scripts/configure-mariadb-pool.sh" \
                 "${HOST}:/tmp/configure-mariadb-pool.sh"
         fi
         # shellcheck disable=SC2029
-        ssh "${HOST}" "set -e; source /root/.mpos-deploy.env; bash /tmp/${name} ${args}"
+        ssh "${HOST}" "set -e; source '${MPOS_DEPLOY_ENV_FILE}'; bash /tmp/${name} ${args}"
     fi
 }
 
@@ -718,11 +752,15 @@ if [ "${SKIP_DAEMONS}" != "1" ]; then
                 fi
                 now=$(date +%s)
                 if [ "$((now - prev_announce))" -ge 30 ]; then
-                    for d in /root/.blakecoin /root/.photon /root/.blakebitcoin \
-                             /root/.electron /root/.lithium /root/.universalmolecule; do
+                    for d in "${MPOS_DAEMON_DATA_ROOT%/}/.blakecoin" \
+                             "${MPOS_DAEMON_DATA_ROOT%/}/.photon" \
+                             "${MPOS_DAEMON_DATA_ROOT%/}/.blakebitcoin" \
+                             "${MPOS_DAEMON_DATA_ROOT%/}/.electron" \
+                             "${MPOS_DAEMON_DATA_ROOT%/}/.lithium" \
+                             "${MPOS_DAEMON_DATA_ROOT%/}/.universalmolecule"; do
                         if [ -f "$d/bootstrap.dat.tmp" ]; then
                             size=$(du -h "$d/bootstrap.dat.tmp" 2>/dev/null | cut -f1)
-                            coin=${d#/root/.}
+                            coin=${d##*.}
                             printf '   [prefetch] downloading %-20s %s\n' "${coin}" "${size}"
                         fi
                     done
@@ -778,8 +816,8 @@ if [ -f "${REPO_ROOT}/frontend/package.json" ]; then
     ( cd "${REPO_ROOT}/frontend" && bun install --silent && bun run build:fast )
 fi
 
-push_tree "${REPO_ROOT}" "/root/Blakestream-MPOS"
-push_tree "${ELIOPOOL_TREE}" "/root/Blakestream-Eliopool"
+push_tree "${REPO_ROOT}" "${MPOS_UPDATE_REPO_ROOT}"
+push_tree "${ELIOPOOL_TREE}" "${MPOS_ELIOPOOL_ROOT}"
 deploy_step_timed "${SCRIPT_DIR}/scripts/mainnet/40-install-pool.sh"
 
 # ---------------------------------------------------------------
@@ -847,24 +885,24 @@ echo "  Web UI:        http://${VPS_IP}:${MPOS_HTTP_PORT}/"
 echo "  Stratum:       stratum+tcp://${VPS_IP}:${MPOS_STRATUM_PORT}"
 echo "  Admin user:    ${MPOS_ADMIN_USER}"
 echo "  Admin email:   ${MPOS_ADMIN_EMAIL}"
-echo "  Saved env:     /root/.mpos-deploy.env"
+echo "  Saved env:     ${MPOS_DEPLOY_ENV_FILE}"
 if [ "${LOCAL_DEPLOY}" = "1" ]; then
-    echo "  Secrets:       sudo sed -n \"1,80p\" /root/.mpos-deploy.env"
+    echo "  Secrets:       sudo sed -n \"1,80p\" ${MPOS_DEPLOY_ENV_FILE}"
 else
-    echo "  Secrets:       ssh ${HOST} 'sed -n \"1,80p\" /root/.mpos-deploy.env'"
+    echo "  Secrets:       ssh ${HOST} 'sed -n \"1,80p\" ${MPOS_DEPLOY_ENV_FILE}'"
 fi
 echo
 echo "  Logs:"
 if [ "${LOCAL_DEPLOY}" = "1" ]; then
     echo "    daemons:     docker ps; docker logs blc --tail 30"
     echo "    eloipool:    journalctl -u blakestream-mpos-eloipool -fn 50"
-    echo "    cronjobs-py: tail -f /var/log/blakestream-mpos/cronjobs.stdout"
-    echo "    shares:      tail -f /var/log/blakestream-mpos/sharelog-importer.stdout"
-    echo "    PHP ad-hoc:  ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true"
+    echo "    cronjobs-py: tail -f ${MPOS_LOG_ROOT}/cronjobs.stdout"
+    echo "    shares:      tail -f ${MPOS_LOG_ROOT}/sharelog-importer.stdout"
+    echo "    PHP ad-hoc:  ls ${MPOS_INSTALL_ROOT}/cronjobs/logs 2>/dev/null || true"
 else
     echo "    daemons:     ssh ${HOST} 'docker ps; docker logs blc --tail 30'"
     echo "    eloipool:    ssh ${HOST} 'journalctl -u blakestream-mpos-eloipool -fn 50'"
-    echo "    cronjobs-py: ssh ${HOST} 'tail -f /var/log/blakestream-mpos/cronjobs.stdout'"
-    echo "    shares:      ssh ${HOST} 'tail -f /var/log/blakestream-mpos/sharelog-importer.stdout'"
-    echo "    PHP ad-hoc:  ssh ${HOST} 'ls /opt/blakestream-mpos/cronjobs/logs 2>/dev/null || true'"
+    echo "    cronjobs-py: ssh ${HOST} 'tail -f ${MPOS_LOG_ROOT}/cronjobs.stdout'"
+    echo "    shares:      ssh ${HOST} 'tail -f ${MPOS_LOG_ROOT}/sharelog-importer.stdout'"
+    echo "    PHP ad-hoc:  ssh ${HOST} 'ls ${MPOS_INSTALL_ROOT}/cronjobs/logs 2>/dev/null || true'"
 fi

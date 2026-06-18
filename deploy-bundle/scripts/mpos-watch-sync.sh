@@ -12,15 +12,16 @@ set -u
 
 DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
 REFRESH_S="${REFRESH_S:-3}"
+MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
 
 COINS=(elt umo pho lit bbtc blc)
 declare -A COIN_DATADIR=(
-    [blc]="/root/.blakecoin"
-    [pho]="/root/.photon"
-    [bbtc]="/root/.blakebitcoin"
-    [elt]="/root/.electron"
-    [umo]="/root/.universalmolecule"
-    [lit]="/root/.lithium"
+    [blc]="${MPOS_DAEMON_DATA_ROOT%/}/.blakecoin"
+    [pho]="${MPOS_DAEMON_DATA_ROOT%/}/.photon"
+    [bbtc]="${MPOS_DAEMON_DATA_ROOT%/}/.blakebitcoin"
+    [elt]="${MPOS_DAEMON_DATA_ROOT%/}/.electron"
+    [umo]="${MPOS_DAEMON_DATA_ROOT%/}/.universalmolecule"
+    [lit]="${MPOS_DAEMON_DATA_ROOT%/}/.lithium"
 )
 N_ROWS=$((${#COINS[@]} + 2))   # banner + 6 coin rows + footer
 

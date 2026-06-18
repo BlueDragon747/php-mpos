@@ -16,24 +16,26 @@
 set -euo pipefail
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
-if [ ! -f /root/.mpos-deploy.env ]; then
-    echo "ERROR: /root/.mpos-deploy.env missing; deploy orchestrator did not provide environment" >&2
+DEPLOY_ENV="${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env}"
+if [ ! -f "$DEPLOY_ENV" ]; then
+    echo "ERROR: ${DEPLOY_ENV} missing; deploy orchestrator did not provide environment" >&2
     exit 1
 fi
 
 # shellcheck source=/dev/null
-. /root/.mpos-deploy.env
+. "$DEPLOY_ENV"
 
 INSTALL_ROOT="${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}"
 LOG_ROOT="${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}"
-MPOS_REPO="${MPOS_REPO:-/root/Blakestream-MPOS}"
+MPOS_BACKUP_ROOT="${MPOS_BACKUP_ROOT:-/var/backups/blakestream-mpos}"
+MPOS_REPO="${MPOS_REPO:-${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}}"
 
 mkdir -p "${INSTALL_ROOT}/bin"
 
 say "install deploy env -> ${INSTALL_ROOT}/.deploy.env"
 mkdir -p "${INSTALL_ROOT}"
 install -m 600 -o root -g root \
-    /root/.mpos-deploy.env \
+    "$DEPLOY_ENV" \
     "${INSTALL_ROOT}/.deploy.env"
 
 say "install backup.sh -> ${INSTALL_ROOT}/bin/backup.sh"
@@ -59,8 +61,8 @@ install -m 644 -o root -g root \
     "${MPOS_REPO}/deploy-bundle/systemd/blakestream-mpos-backup.timer" \
     /etc/systemd/system/blakestream-mpos-backup.timer
 
-mkdir -p /var/backups/blakestream-mpos
-chmod 700 /var/backups/blakestream-mpos
+mkdir -p "${MPOS_BACKUP_ROOT}"
+chmod 700 "${MPOS_BACKUP_ROOT}"
 mkdir -p "${LOG_ROOT}"
 chmod 755 "${LOG_ROOT}"
 
@@ -73,11 +75,11 @@ systemctl enable --now blakestream-mpos-backup.timer
 # directly so we can pass BACKUP_FORCE=1 into the process env (systemd
 # unit's Environment= doesn't easily plumb to a transient one-shot).
 say "running first backup synchronously (force, bypass schedule window)"
-BACKUP_FORCE=1 /opt/blakestream-mpos/bin/backup.sh /var/backups/blakestream-mpos \
+BACKUP_FORCE=1 "${INSTALL_ROOT}/bin/backup.sh" "${MPOS_BACKUP_ROOT}" \
     >>"${LOG_ROOT}/backup.log" 2>&1 \
     || say "  WARN: first backup exited non-zero — check ${LOG_ROOT}/backup.log"
 
 say "step 90 done — daily backup timer installed."
-say "  output:    /var/backups/blakestream-mpos/"
+say "  output:    ${MPOS_BACKUP_ROOT}/"
 say "  next run:  $(systemctl list-timers blakestream-mpos-backup.timer --no-pager | awk 'NR==2 {print $1, $2}')"
 say "  ad-hoc:    systemctl start blakestream-mpos-backup.service"

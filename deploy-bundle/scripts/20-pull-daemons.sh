@@ -2,8 +2,8 @@
 # Install the six configured daemon binaries into MPOS_INSTALL_ROOT/bin/.
 #
 # Default mode pulls prebuilt Docker images and extracts their binaries.
-# Set MPOS_PULL_DAEMON_IMAGES=0 to clone/fetch the upstream 0.25.2 daemon
-# repos on this host and build native Ubuntu 24 binaries instead. Test
+# Set MPOS_PULL_DAEMON_IMAGES=0 to clone/fetch the upstream daemon repos
+# on this host and build native Ubuntu 24 binaries instead. Test
 # installs can also set MPOS_LOCAL_DAEMON_REPO_ROOT to build from already
 # copied source repos.
 #
@@ -11,13 +11,20 @@
 set -euo pipefail
 
 say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/lib-apt.sh"
 
 INSTALL_BIN="${MPOS_INSTALL_ROOT}/bin"
 INSTALL_LIB="${MPOS_INSTALL_ROOT}/lib"
-MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
 MPOS_PULL_DAEMON_IMAGES="${MPOS_PULL_DAEMON_IMAGES:-1}"
-MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-0.25.2}"
+if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ]; then
+    MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-local}"
+    MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest-local}"
+else
+    MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
+    MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
+fi
+MPOS_DAEMON_SOURCE_REF="${MPOS_DAEMON_SOURCE_REF:-master}"
 MPOS_DAEMON_BUILD_ROOT="${MPOS_DAEMON_BUILD_ROOT:-/root/blakestream-daemon-builds}"
 MPOS_LOCAL_DAEMON_REPO_ROOT="${MPOS_LOCAL_DAEMON_REPO_ROOT:-}"
 MPOS_DAEMON_BUILD_JOBS="${MPOS_DAEMON_BUILD_JOBS:-}"
@@ -27,12 +34,12 @@ mkdir -p "$INSTALL_BIN" "$INSTALL_LIB"
 
 # (image_repo, source_dir, upstream_repo, daemon, cli, tx)
 COIN_TUPLES=(
-    "blakecoin|Blakecoin-0.25.2|https://github.com/BlueDragon747/Blakecoin.git|blakecoind|blakecoin-cli|blakecoin-tx"
-    "blakebitcoin|BlakeBitcoin-0.25.2|https://github.com/BlakeBitcoin/BlakeBitcoin.git|blakebitcoind|blakebitcoin-cli|blakebitcoin-tx"
-    "electron|Electron-ELT-0.25.2|https://github.com/BlueDragon747/Electron-ELT.git|electrond|electron-cli|electron-tx"
-    "lithium|lithium-0.25.2|https://github.com/BlueDragon747/lithium.git|lithiumd|lithium-cli|lithium-tx"
-    "photon|Photon-0.25.2|https://github.com/BlueDragon747/photon.git|photond|photon-cli|photon-tx"
-    "universalmolecule|universalmolecule-0.25.2|https://github.com/BlueDragon747/universalmol.git|universalmoleculed|universalmolecule-cli|universalmolecule-tx"
+    "blakecoin|Blakecoin|https://github.com/BlueDragon747/Blakecoin.git|blakecoind|blakecoin-cli|blakecoin-tx"
+    "blakebitcoin|BlakeBitcoin|https://github.com/BlakeBitcoin/BlakeBitcoin.git|blakebitcoind|blakebitcoin-cli|blakebitcoin-tx"
+    "electron|Electron-ELT|https://github.com/BlueDragon747/Electron-ELT.git|electrond|electron-cli|electron-tx"
+    "lithium|lithium|https://github.com/BlueDragon747/lithium.git|lithiumd|lithium-cli|lithium-tx"
+    "photon|photon|https://github.com/BlueDragon747/photon.git|photond|photon-cli|photon-tx"
+    "universalmolecule|universalmol|https://github.com/BlueDragon747/universalmol.git|universalmoleculed|universalmolecule-cli|universalmolecule-tx"
 )
 
 default_build_concurrency() {
@@ -46,6 +53,24 @@ default_build_concurrency() {
         concurrency="$max"
     fi
     printf '%s' "$concurrency"
+}
+
+install_native_daemon_build_deps() {
+    export DEBIAN_FRONTEND=noninteractive
+    local pkgs=(
+        git ca-certificates curl
+        build-essential pkg-config bsdextrautils
+        autoconf automake autoconf-archive autotools-dev libtool libtool-bin
+        libssl-dev libevent-dev libprotobuf-dev protobuf-compiler
+        libboost-all-dev libsqlite3-dev libzmq3-dev python3-zmq
+        systemtap-sdt-dev
+    )
+
+    say "installing native daemon build prerequisites"
+    wait_for_apt_locks
+    apt-get update -qq
+    wait_for_apt_locks
+    apt-get install -y -qq --no-install-recommends "${pkgs[@]}"
 }
 
 sync_upstream_repo() {
@@ -121,6 +146,7 @@ if [ "$MPOS_PULL_DAEMON_IMAGES" = "0" ] || [ -n "$MPOS_LOCAL_DAEMON_REPO_ROOT" ]
     else
         say "building daemons from ${source_root}"
     fi
+    install_native_daemon_build_deps
 
     build_one_tuple() {
         local row="$1"

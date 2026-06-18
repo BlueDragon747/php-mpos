@@ -7,7 +7,7 @@ say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 INSTALL_ROOT=${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}
 LOG_ROOT=${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}
 BIN_DIR="${INSTALL_ROOT}/bin"
-STATE_DIR=/var/lib/blakestream-mpos
+STATE_DIR="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}"
 CRON_DEST="${INSTALL_ROOT}/cronjobs-py"
 VENV="${CRON_DEST}/.venv"
 IMPORTER_SRC="${MPOS_REPO_ROOT}/deploy-bundle/scripts/go-share-log-importer.py"

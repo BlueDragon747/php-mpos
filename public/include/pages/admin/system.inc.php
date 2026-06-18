@@ -1053,9 +1053,18 @@ function _system_auxpow_health_chip() {
 }
 
 function _system_importer_health_chip() {
-  $log_path = '/var/log/blakestream-eliopool-25.2-go/shares.log';
+  $log_path = null;
+  foreach (array(
+    '/var/log/blakestream-mpos/pool/shares.log',
+    '/var/log/blakestream-eliopool-25.2-go/shares.log',
+  ) as $candidate) {
+    if (is_file($candidate) && is_readable($candidate)) {
+      $log_path = $candidate;
+      break;
+    }
+  }
   $state_path = '/var/lib/blakestream-mpos/go-share-log-importer.state';
-  if (!is_file($log_path) || !is_readable($log_path)) {
+  if ($log_path === null) {
     return _system_health_chip('Importer', 'no log', 'warn', 'Share log is not readable.');
   }
   if (!is_file($state_path) || !is_readable($state_path)) {
@@ -1877,9 +1886,12 @@ $wallet_slot_globals = array(
   'LIT'  => array('mm5', isset($bitcoin_mm5) ? $bitcoin_mm5 : null, isset($transaction_mm5) ? $transaction_mm5 : null, isset($block_mm5) ? $block_mm5 : null, 'transactions_mm5', 'blocks_mm5'),
 );
 $wallet_panel_rows = array();
-$wallet_fee_confirmations = isset($config['confirmations']) ? max(0, (int)$config['confirmations']) : 0;
 foreach ($wallet_slot_globals as $sym => $tuple) {
   list($slot, $btc, $txn, $blk, $tx_table, $block_table) = $tuple;
+  $fee_confs_key = $slot === '' ? 'confirmations' : ('confirmations_' . $slot);
+  $wallet_fee_confirmations = isset($config[$fee_confs_key])
+    ? max(0, (int)$config[$fee_confs_key])
+    : (isset($config['confirmations']) ? max(0, (int)$config['confirmations']) : 0);
   $wallet_confs_key = $slot === '' ? 'network_confirmations' : ('network_confirmations_' . $slot);
   $wallet_confs = empty($config[$wallet_confs_key]) ? 120 : (int)$config[$wallet_confs_key];
   $balance = null; $locked = null; $pool_fee = null; $donation = null; $send_fee = null; $unconfirmed = null;

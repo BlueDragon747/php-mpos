@@ -80,6 +80,30 @@ const containerEl = ref<HTMLDivElement | null>(null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let gauge: any = null;
 
+function syncGaugeText(id: string, attrs: Record<string, unknown>) {
+  const el = gauge?.canvas?.getById?.(`${containerId}-${id}`);
+  if (el && typeof el.attr === 'function') el.attr(attrs);
+}
+
+function refreshGauge() {
+  if (!gauge || typeof gauge.refresh !== 'function') return;
+  if (gauge.config) {
+    gauge.config.min = props.min;
+    gauge.config.max = props.max;
+    gauge.config.title = props.title;
+    gauge.config.label = props.unit;
+    gauge.config.labelFontColor = props.labelFontColor;
+    gauge.config.valueFontColor = pickValueFontColor();
+    gauge.config.titleFontColor = pickTitleColor();
+  }
+  syncGaugeText('txttitle', { text: props.title, fill: pickTitleColor() });
+  syncGaugeText('txtlabel', { text: props.unit, fill: props.labelFontColor });
+  syncGaugeText('txtmin', { text: props.min, fill: props.labelFontColor });
+  syncGaugeText('txtmax', { text: props.max, fill: props.labelFontColor });
+  syncGaugeText('txtvalue', { fill: pickValueFontColor() });
+  gauge.refresh(fmt(props.value));
+}
+
 function buildGauge() {
   if (!containerEl.value) return;
   containerEl.value.innerHTML = '';
@@ -119,10 +143,20 @@ onMounted(async () => {
 });
 
 watch(() => props.value, (v) => {
-  if (gauge && typeof gauge.refresh === 'function') {
-    gauge.refresh(fmt(v));
-  }
+  if (gauge && typeof gauge.refresh === 'function') gauge.refresh(fmt(v));
 });
+
+watch(
+  () => [
+    props.min,
+    props.max,
+    props.title,
+    props.unit,
+    props.labelFontColor,
+    props.decimals,
+  ],
+  refreshGauge
+);
 
 onBeforeUnmount(() => {
   // Raphael leaves SVG nodes inside the container; clear them so a

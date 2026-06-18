@@ -7,6 +7,7 @@ set -euo pipefail
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
+MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
 
 if [ "$#" -ne 0 ]; then
     echo "usage: $(basename "$0")" >&2
@@ -50,12 +51,12 @@ run_du() {
 run_daemon_total() {
     local total=0 found=0 path="" mb=""
     for path in \
-        /root/.blakecoin \
-        /root/.blakebitcoin \
-        /root/.electron \
-        /root/.lithium \
-        /root/.photon \
-        /root/.universalmolecule
+        "${MPOS_DAEMON_DATA_ROOT%/}/.blakecoin" \
+        "${MPOS_DAEMON_DATA_ROOT%/}/.blakebitcoin" \
+        "${MPOS_DAEMON_DATA_ROOT%/}/.electron" \
+        "${MPOS_DAEMON_DATA_ROOT%/}/.lithium" \
+        "${MPOS_DAEMON_DATA_ROOT%/}/.photon" \
+        "${MPOS_DAEMON_DATA_ROOT%/}/.universalmolecule"
     do
         mb="$(du_mb "$path")"
         if [[ "$mb" =~ ^[0-9]+$ ]]; then

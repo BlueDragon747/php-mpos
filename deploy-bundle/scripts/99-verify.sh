@@ -10,6 +10,7 @@ say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
 NODE_RPC_USER="${MPOS_NODE_RPC_USER:-blakestream}"
 NODE_RPC_PASS="${MPOS_NODE_RPC_PASS:-blakestream-testnet}"
+STRATUM_PORT="${MPOS_STRATUM_PORT:-3334}"
 
 wait_unit_active() {
     local unit="$1" deadline=$(( $(date +%s) + 180 ))
@@ -69,7 +70,7 @@ else
 fi
 
 say "ports"
-for entry in "stratum:3334" "mmproxy:19335" "pool-jsonrpc:19334" "http:${MPOS_HTTP_PORT}"; do
+for entry in "stratum:${STRATUM_PORT}" "mmproxy:19335" "pool-jsonrpc:19334" "http:${MPOS_HTTP_PORT}"; do
     name=${entry%:*}; port=${entry#*:}
     if wait_port_listening "$port"; then
         pass "${name} listening on :${port}"

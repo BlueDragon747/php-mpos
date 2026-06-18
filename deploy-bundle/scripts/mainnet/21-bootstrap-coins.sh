@@ -81,14 +81,16 @@ say()  { printf '\033[1;33m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;31m!!\033[0m %s\n' "$*" >&2; }
 ok()   { printf '\033[1;32m✓\033[0m  %s\n' "$*"; }
 
+MPOS_DAEMON_DATA_ROOT="${MPOS_DAEMON_DATA_ROOT:-/root}"
+
 # Per-coin metadata: container_name|datadir|conf|daemon_binary
 declare -A COIN_DATADIR=(
-    [blc]="/root/.blakecoin"
-    [pho]="/root/.photon"
-    [bbtc]="/root/.blakebitcoin"
-    [elt]="/root/.electron"
-    [umo]="/root/.universalmolecule"
-    [lit]="/root/.lithium"
+    [blc]="${MPOS_DAEMON_DATA_ROOT%/}/.blakecoin"
+    [pho]="${MPOS_DAEMON_DATA_ROOT%/}/.photon"
+    [bbtc]="${MPOS_DAEMON_DATA_ROOT%/}/.blakebitcoin"
+    [elt]="${MPOS_DAEMON_DATA_ROOT%/}/.electron"
+    [umo]="${MPOS_DAEMON_DATA_ROOT%/}/.universalmolecule"
+    [lit]="${MPOS_DAEMON_DATA_ROOT%/}/.lithium"
 )
 declare -A COIN_CONF=(
     [blc]="blakecoin.conf"
@@ -197,7 +199,7 @@ START_AFTER="${START_AFTER:-1}"
 STEADY_START_RPC_TIMEOUT_S="${STEADY_START_RPC_TIMEOUT_S:-900}"
 STEADY_START_SETTLE_S="${STEADY_START_SETTLE_S:-15}"
 MPOS_DOCKER_HUB="${MPOS_DOCKER_HUB:-sidgrip}"
-MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-25.2}"
+MPOS_IMAGE_TAG="${MPOS_IMAGE_TAG:-latest}"
 DASHBOARD_STATUS_DIR="${DASHBOARD_STATUS_DIR:-/var/run/mpos-sync}"
 DASHBOARD_SNAPSHOT_INTERVAL_S="${DASHBOARD_SNAPSHOT_INTERVAL_S:-60}"
 

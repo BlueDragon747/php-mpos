@@ -5,9 +5,10 @@ say() { printf '\033[1;33m   %s\033[0m\n' "$*"; }
 
 INSTALL_ROOT=${MPOS_INSTALL_ROOT:-/opt/blakestream-mpos}
 LOG_ROOT=${MPOS_LOG_ROOT:-/var/log/blakestream-mpos}
-MPOS_REPO=/root/Blakestream-MPOS
+MPOS_REPO="${MPOS_UPDATE_REPO_ROOT:-/root/Blakestream-MPOS}"
+DEPLOY_ENV="${MPOS_DEPLOY_ENV_FILE:-/root/.mpos-deploy.env}"
 BIN_DIR="${INSTALL_ROOT}/bin"
-STATE_DIR=/var/lib/blakestream-mpos
+STATE_DIR="${MPOS_DATA_ROOT:-/var/lib/blakestream-mpos}"
 CRON_DEST="${INSTALL_ROOT}/cronjobs-py"
 VENV="${CRON_DEST}/.venv"
 IMPORTER_SRC="${MPOS_REPO}/deploy-bundle/scripts/go-share-log-importer.py"
@@ -30,7 +31,7 @@ install -d -m 0755 -o blakestream-mpos -g blakestream-mpos "${LOG_ROOT}"
 install -d -m 0755 -o blakestream-mpos -g blakestream-mpos "$(dirname "$SHARE_LOG_PATH")"
 touch "$SHARE_LOG_PATH"
 chown blakestream-mpos:blakestream-mpos "$SHARE_LOG_PATH"
-sed -n 's/^export //p' /root/.mpos-deploy.env > "$SYSTEMD_ENV"
+sed -n 's/^export //p' "$DEPLOY_ENV" > "$SYSTEMD_ENV"
 chown root:blakestream-mpos "$SYSTEMD_ENV"
 chmod 640 "$SYSTEMD_ENV"
 

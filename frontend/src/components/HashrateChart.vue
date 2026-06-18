@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { ensureJqplot } from '../composables/useJqplot';
+import { autoScaleHashrate } from '../composables/useHashrateUnit';
 
 // Vue wrapper around the legacy jqplot trend chart. Mirrors the
 // `jqPlotOverviewOptions` block in templates/mpos/dashboard/js_api.tpl
@@ -25,9 +26,25 @@ const props = withDefaults(defineProps<{
 const containerEl = ref<HTMLDivElement | null>(null);
 const containerId = `bsx-hashrate-chart-${Math.random().toString(36).slice(2, 10)}`;
 let plot: any = null;
+let hashrateUnit = 'KH/s';
+
+function hashrateScale() {
+  const maxKhs = Math.max(
+    0,
+    ...props.personal.map(([, y]) => y),
+    ...props.pool.map(([, y]) => y)
+  );
+  return autoScaleHashrate(maxKhs);
+}
+
+function scaledHashratePoints(points: Point[], multiplier: number): Point[] {
+  return points.map(([x, y]) => [x, y * multiplier]);
+}
 
 function buildOptions(): any {
   const $ = window.$;
+  const scale = hashrateScale();
+  hashrateUnit = scale.unit;
   return {
     highlighter: { show: true },
     grid: { drawBorder: false, background: 'transparent', shadow: false },
@@ -58,7 +75,7 @@ function buildOptions(): any {
       yaxis: {
         min: 0,
         pad: 1.25,
-        label: 'Hashrate',
+        label: `Hashrate (${scale.unit})`,
         labelRenderer: $.jqplot.CanvasAxisLabelRenderer,
       },
       y3axis: {
@@ -83,25 +100,44 @@ function dataArray(): Point[][] {
   // jqplot needs at least one point per series at init; if a series is
   // empty, give it a placeholder so the plot can render.
   const placeholder: Point = [Date.now(), 0];
+  const scale = hashrateScale();
   return [
-    props.personal.length > 0 ? props.personal : [placeholder],
-    props.pool.length > 0 ? props.pool : [placeholder],
+    props.personal.length > 0 ? scaledHashratePoints(props.personal, scale.multiplier) : [placeholder],
+    props.pool.length > 0 ? scaledHashratePoints(props.pool, scale.multiplier) : [placeholder],
     props.sharerate.length > 0 ? props.sharerate : [placeholder],
   ];
 }
 
+function destroyPlot() {
+  if (plot) {
+    try { plot.destroy(); } catch { /* ignore */ }
+    plot = null;
+  }
+  if (containerEl.value) containerEl.value.innerHTML = '';
+}
+
+function buildPlot() {
+  if (!containerEl.value) return;
+  destroyPlot();
+  plot = window.$.jqplot(containerId, dataArray(), buildOptions());
+}
+
 onMounted(async () => {
   await ensureJqplot();
-  if (!containerEl.value) return;
-  plot = window.$.jqplot(containerId, dataArray(), buildOptions());
+  buildPlot();
 });
 
 watch(
   () => [props.personal, props.pool, props.sharerate],
   () => {
     if (!plot) return;
-    plot.series[0].data = props.personal;
-    plot.series[1].data = props.pool;
+    const scale = hashrateScale();
+    if (scale.unit !== hashrateUnit) {
+      buildPlot();
+      return;
+    }
+    plot.series[0].data = scaledHashratePoints(props.personal, scale.multiplier);
+    plot.series[1].data = scaledHashratePoints(props.pool, scale.multiplier);
     plot.series[2].data = props.sharerate;
     plot.replot({ resetAxes: true });
   },
@@ -109,11 +145,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  if (plot) {
-    try { plot.destroy(); } catch { /* ignore */ }
-    plot = null;
-  }
-  if (containerEl.value) containerEl.value.innerHTML = '';
+  destroyPlot();
 });
 </script>
 
